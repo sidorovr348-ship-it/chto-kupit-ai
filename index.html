@@ -1188,7 +1188,11 @@ async function uploadFiles(files){
 async function analyzeImages(
   files,
   mode
-){
+){  if (!puter.auth.isSignedIn()) {
+    await puter.auth.signIn({
+      attempt_temp_user_creation: true
+    });
+  }
 
   const paths =
     await uploadFiles(files);
