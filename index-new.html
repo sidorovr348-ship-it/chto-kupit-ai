@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ЧтоКупить AI</title>
+
+<script src="https://js.puter.com/v2/"></script>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  padding:18px;
+  padding-bottom:40px;
+  background:#080808;
+  color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+
+h1{
+  margin:4px 0 6px;
+  font-size:30px;
+  text-align:center;
+}
+
+.sub{
+  text-align:center;
+  color:#aaa;
+  margin-bottom:20px;
+}
+
+.card{
+  background:#151515;
+  border:1px solid #292929;
+  border-radius:18px;
+  padding:16px;
+  margin-bottom:16px;
+}
+
+button{
+  width:100%;
+  border:0;
+  border-radius:14px;
+  padding:15px;
+  margin-top:10px;
+  font-size:17px;
+  font-weight:600;
+  background:#fff;
+  color:#000;
+}
+
+button.secondary{
+  background:#252525;
+  color:#fff;
+}
+
+button:disabled{
+  opacity:.45;
+}
+
+input[type=file]{
+  display:none;
+}
+
+.file-label{
+  display:block;
+  text-align:center;
+  padding:16px;
+  border-radius:14px;
+  background:#252525;
+  font-size:17px;
+  cursor:pointer;
+}
+
+.preview{
+  width:100%;
+  max-height:330px;
+  object-fit:contain;
+  border-radius:14px;
+  margin-top:15px;
+  background:#000;
+  display:none;
+}
+
+.status{
+  color:#aaa;
+  text-align:center;
+  margin-top:12px;
+  min-height:24px;
+}
+
+.result{
+  white-space:pre-wrap;
+  line-height:1.55;
+  font-size:16px;
+}
+
+.error{
+  color:#ff7070;
+}
+
+.small{
+  color:#888;
+  font-size:13px;
+  line-height:1.45;
+}
+</style>
+</head>
+
+<body>
+
+<h1>ЧтоКупить AI</h1>
+<div class="sub">Сфотографируй товар — AI попробует определить, что это.</div>
+
+<div class="card">
+
+  <label class="file-label" for="photo">
+    📷 Сделать фото или выбрать из галереи
+  </label>
+
+  <input
+    id="photo"
+    type="file"
+    accept="image/*"
+    capture="environment"
+  >
+
+  <img id="preview" class="preview" alt="Фото товара">
+
+  <button id="analyze" disabled>
+    🤖 Определить товар
+  </button>
+
+  <button id="clear" class="secondary">
+    Очистить
+  </button>
+
+  <div id="status" class="status"></div>
+
+</div>
+
+<div id="resultCard" class="card" style="display:none">
+  <div style="font-size:20px;font-weight:700;margin-bottom:10px">
+    Результат
+  </div>
+  <div id="result" class="result"></div>
+</div>
+
+<div class="card small">
+  AI-анализ выполняется через Puter. Собственный API-ключ не требуется.
+</div>
+
+<script>
+const photoInput = document.getElementById("photo");
+const preview = document.getElementById("preview");
+const analyzeButton = document.getElementById("analyze");
+const clearButton = document.getElementById("clear");
+const statusBox = document.getElementById("status");
+const resultCard = document.getElementById("resultCard");
+const resultBox = document.getElementById("result");
+
+let selectedFile = null;
+
+photoInput.addEventListener("change", () => {
+  const file = photoInput.files && photoInput.files[0];
+
+  if (!file) {
+    selectedFile = null;
+    analyzeButton.disabled = true;
+    preview.style.display = "none";
+    return;
+  }
+
+  selectedFile = file;
+
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.style.display = "block";
+
+  analyzeButton.disabled = false;
+  statusBox.textContent = "Фото готово к анализу.";
+  resultCard.style.display = "none";
+});
+
+clearButton.addEventListener("click", () => {
+  selectedFile = null;
+  photoInput.value = "";
+  preview.src = "";
+  preview.style.display = "none";
+  analyzeButton.disabled = true;
+  resultCard.style.display = "none";
+  resultBox.textContent = "";
+  statusBox.textContent = "";
+});
+
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+
+    reader.readAsDataURL(file);
+  });
+}
+
+analyzeButton.addEventListener("click", async () => {
+
+  if (!selectedFile) return;
+
+  analyzeButton.disabled = true;
+  statusBox.textContent = "🤖 AI анализирует фотографию...";
+  resultCard.style.display = "block";
+  resultBox.textContent = "";
+
+  try {
+
+    const imageData = await fileToDataURL(selectedFile);
+
+    const prompt = `
+Ты помощник приложения «ЧтоКупить AI».
+
+Проанализируй фотографию товара.
+
+Определи:
+1. Что это за товар.
+2. Производителя или бренд, если его можно определить.
+3. Модель, артикул или название, если видны на упаковке.
+4. Основные характеристики, которые можно определить по фотографии.
+5. Насколько ты уверен в определении.
+
+Отвечай на русском языке.
+
+Если точную модель определить невозможно, честно скажи об этом.
+Не выдумывай характеристики.
+
+Формат ответа:
+
+ТОВАР:
+БРЕНД:
+МОДЕЛЬ:
+ХАРАКТЕРИСТИКИ:
+УВЕРЕННОСТЬ:
+КОММЕНТАРИЙ:
+`;
+
+    const response = await puter.ai.chat(
+      prompt,
+      imageData,
+      {
+        model: "gpt-5.6-luna"
+      }
+    );
+
+    let text = "";
+
+    if (typeof response === "string") {
+      text = response;
+    } else if (response && response.message) {
+      if (typeof response.message === "string") {
+        text = response.message;
+      } else if (response.message.content) {
+        text = response.message.content;
+      }
+    }
+
+    if (!text) {
+      text = JSON.stringify(response, null, 2);
+    }
+
+    resultBox.textContent = text;
+    statusBox.textContent = "Готово.";
+
+  } catch (error) {
+
+    console.error(error);
+
+    resultBox.innerHTML =
+      '<span class="error">Не удалось выполнить AI-анализ.</span>';
+
+    statusBox.textContent =
+      "Проверь интернет-соединение и доступ Puter.";
+
+  } finally {
+
+    analyzeButton.disabled = false;
+
+  }
+
+});
+</script>
+
+</body>
+</html>
