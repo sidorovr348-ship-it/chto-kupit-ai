@@ -110,6 +110,73 @@ app.post('/analyze', async (req, res) => {
   }
 });
 
+
+app.post('/search', async (req, res) => {
+  try {
+    const { query } = req.body;
+
+    if (!query) {
+      return res.status(400).json({
+        ok: false,
+        error: 'query is required'
+      });
+    }
+
+    if (!process.env.SERPER_API_KEY) {
+      return res.status(500).json({
+        ok: false,
+        error: 'SERPER_API_KEY is not configured'
+      });
+    }
+
+    const response = await fetch(
+      'https://google.serper.dev/search',
+      {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': process.env.SERPER_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          q: query,
+          num: 10
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('SERPER ERROR:', JSON.stringify(data));
+      return res.status(response.status).json({
+        ok: false,
+        error: data
+      });
+    }
+
+    const results = Array.isArray(data.organic)
+      ? data.organic.map(item => ({
+          title: item.title || '',
+          url: item.link || '',
+          content: item.snippet || ''
+        }))
+      : [];
+
+    res.json({
+      ok: true,
+      results
+    });
+
+  } catch (error) {
+    console.error('SEARCH ERROR:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Search request failed'
+    });
+  }
+});
+
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`ЧтоКупить AI API запущен на 127.0.0.1:${PORT}`);
 });
