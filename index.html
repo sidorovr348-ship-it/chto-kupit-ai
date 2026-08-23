@@ -2156,20 +2156,37 @@ AliExpress.
   try{
 
     const response =
-      await puter.ai.chat(
-        query,
+      await fetch(
+        "https://must-hitachi-engage-accommodations.trycloudflare.com/search",
         {
-          model:"gpt-5.6-luna",
-          tools:[
-            {
-              type:"web_search"
-            }
-          ]
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            query:query
+          })
         }
       );
 
+    const data = await response.json();
+
+    if(!response.ok || !data.ok){
+      throw new Error(
+        data.error
+          ? JSON.stringify(data.error)
+          : "Ошибка веб-поиска."
+      );
+    }
+
     const text =
-      extractAIText(response);
+      (data.results || [])
+        .map((item, i) =>
+          `${i + 1}. ${item.title || "Без названия"}\n` +
+          `Цена/информация: ${item.content || "не указано"}\n` +
+          `Ссылка: ${item.url || "не указано"}`
+        )
+        .join("\n\n");
 
     shoppingResult.innerHTML =
       formatShoppingResult(text);
