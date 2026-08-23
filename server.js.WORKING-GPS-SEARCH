@@ -1,0 +1,251 @@
+require('dotenv').config({ path: '/root/chto-kupit-ai.env' });
+
+const express = require('express');
+
+const app = express();
+const PORT = 3000;
+
+app.use(express.json({ limit: '15mb' }));
+
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'chto-kupit-ai-api',
+    ai_token: Boolean(process.env.HF_TOKEN)
+  });
+});
+
+app.post('/analyze', async (req, res) => {
+  try {
+    const { prompt, image, images } = req.body;
+
+    const inputImages = Array.isArray(images)
+      ? images
+      : (image ? [image] : []);
+
+    if (!prompt && inputImages.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'prompt or image/images is required'
+      });
+    }
+
+    const content = [];
+
+    if (prompt) {
+      content.push({
+        type: 'text',
+        text: prompt
+      });
+    }
+
+    for (const item of inputImages) {
+      const imageData = item.startsWith('data:')
+        ? item
+        : `data:image/jpeg;base64,${item}`;
+
+      content.push({
+        type: 'image_url',
+        image_url: {
+          url: imageData
+        }
+      });
+    }
+
+    const response = await fetch(
+      'https://router.huggingface.co/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'Qwen/Qwen2.5-VL-72B-Instruct',
+          messages: [
+            {
+              role: 'user',
+              content
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('HF ERROR:', JSON.stringify(data));
+      return res.status(response.status).json({
+        ok: false,
+        error: data
+      });
+    }
+
+    res.json({
+      ok: true,
+      result: data.choices?.[0]?.message?.content || ''
+    });
+
+  } catch (error) {
+    console.error('AI ERROR:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'AI request failed'
+    });
+  }
+});
+
+
+app.post('/search', async (req, res) => {
+  try {
+    const {
+      query,
+      mode = 'find',
+      location = '',
+      latitude = null,
+      longitude = null
+    } = req.body;
+
+    let actualLocation = location || 'Россия';
+
+    if (latitude !== null && longitude !== null) {
+      try {
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=10&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'chto-kupit-ai/1.0'
+            }
+          }
+        );
+
+        if (geoResponse.ok) {
+          const geo = await geoResponse.json();
+          const a = geo.address || {};
+          const city =
+            a.city ||
+            a.town ||
+            a.village ||
+            a.municipality ||
+            a.county ||
+            '';
+          const region = a.state || a.region || '';
+
+          if (city) {
+            actualLocation =
+              `${city}${region ? ', ' + region : ''}, Россия`;
+          }
+        }
+      } catch (e) {
+        console.error('GEOLOCATION ERROR:', e);
+      }
+    }
+    if (!query) {
+      return res.status(400).json({
+        ok: false,
+        error: 'query is required'
+      });
+    }
+
+    if (!process.env.SERPER_API_KEY) {
+      return res.status(500).json({
+        ok: false,
+        error: 'SERPER_API_KEY is not configured'
+      });
+    }
+
+    let searchQuery;
+
+    if (mode === 'cheaper') {
+      searchQuery =
+        `${query} аналог дешевле ${actualLocation}`;
+    } else {
+      searchQuery =
+        `${query} купить ${actualLocation}`;
+    }
+
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        q: searchQuery,
+        gl: 'ru',
+        hl: 'ru',
+        num: 20
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('SERPER ERROR:', JSON.stringify(data));
+      return res.status(response.status).json({
+        ok: false,
+        error: data
+      });
+    }
+
+    const allowed = [
+      'ozon.ru',
+      'wildberries.ru',
+      'market.yandex.ru',
+      'dns-shop.ru',
+      'mvideo.ru',
+      'citilink.ru'
+    ];
+
+    const results = Array.isArray(data.organic)
+      ? data.organic
+          .map(item => ({
+            title: item.title || '',
+            url: item.link || '',
+            content: item.snippet || ''
+          }))
+          .filter(item => {
+            const u = item.url.toLowerCase();
+            return !u.includes('instagram.com') &&
+                   !u.includes('facebook.com') &&
+                   !u.includes('vk.com') &&
+                   !u.includes('scribd.com');
+          })
+          .slice(0, 10)
+      : [];
+
+    res.json({
+      ok: true,
+      mode,
+      location: actualLocation,
+      results
+    });
+
+  } catch (error) {
+    console.error('SEARCH ERROR:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Search request failed'
+    });
+  }
+});
+
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`ЧтоКупить AI API запущен на 127.0.0.1:${PORT}`);
+});

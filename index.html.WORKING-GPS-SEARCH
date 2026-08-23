@@ -1,0 +1,2685 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ЧтоКупить AI</title>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  padding:16px;
+  background:#080808;
+  color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+h1{
+  margin:4px 0 8px;
+  font-size:27px;
+}
+
+#status{
+  color:#aaa;
+  margin:10px 0 14px;
+  white-space:pre-line;
+  line-height:1.45;
+}
+
+video{
+  width:100%;
+  height:50vh;
+  object-fit:cover;
+  border-radius:20px;
+  background:#181818;
+  display:none;
+}
+
+button{
+  width:100%;
+  padding:16px;
+  margin:6px 0;
+  border:0;
+  border-radius:16px;
+  font-size:17px;
+  font-weight:700;
+}
+
+button:disabled{
+  opacity:.45;
+}
+
+.primary{
+  background:#fff;
+  color:#111;
+}
+
+.secondary{
+  background:#292929;
+  color:#fff;
+}
+
+.danger{
+  background:#4a1818;
+  color:#fff;
+}
+
+.blue{
+  background:#17304a;
+  color:#fff;
+}
+
+.gold{
+  background:#403800;
+  color:#fff;
+}
+
+.green{
+  background:#173d25;
+  color:#fff;
+}
+
+.purple{
+  background:#34204d;
+  color:#fff;
+}
+
+.hidden{
+  display:none !important;
+}
+
+#counter{
+  text-align:center;
+  font-size:18px;
+  margin:10px 0;
+}
+
+#photos{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:12px;
+}
+
+.photoBox{
+  position:relative;
+  display:none;
+}
+
+.photoBox img{
+  width:100%;
+  border-radius:12px;
+  display:block;
+}
+
+.photoNumber{
+  position:absolute;
+  left:8px;
+  top:8px;
+  background:#000;
+  padding:5px 9px;
+  border-radius:10px;
+  font-weight:700;
+  z-index:2;
+}
+
+#galleryPreview{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:10px;
+}
+
+.galleryBox{
+  display:none;
+  position:relative;
+}
+
+.galleryBox img{
+  width:100%;
+  border-radius:12px;
+  display:block;
+}
+
+.galleryLabel{
+  position:absolute;
+  left:6px;
+  bottom:6px;
+  background:#000;
+  padding:4px 7px;
+  border-radius:8px;
+  font-size:12px;
+}
+
+#videoArea{
+  display:none;
+  margin-top:15px;
+  padding:14px;
+  background:#181818;
+  border-radius:18px;
+}
+
+#videoStatus{
+  text-align:center;
+  font-size:17px;
+  margin-bottom:12px;
+}
+
+#videoShots{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:7px;
+}
+
+.videoShot{
+  display:none;
+  position:relative;
+}
+
+.videoShot img{
+  width:100%;
+  border-radius:10px;
+  display:block;
+}
+
+.videoLabel{
+  position:absolute;
+  left:5px;
+  bottom:5px;
+  background:#000;
+  padding:4px 7px;
+  border-radius:8px;
+  font-size:13px;
+}
+
+#aiBox{
+  display:none;
+  margin-top:15px;
+  padding:22px 15px;
+  background:#181818;
+  border-radius:20px;
+  text-align:center;
+}
+
+#aiTitle{
+  font-size:21px;
+  font-weight:700;
+}
+
+#aiDots{
+  height:48px;
+  line-height:48px;
+  font-size:30px;
+  letter-spacing:7px;
+}
+
+.dot{
+  display:inline-block;
+  opacity:.2;
+  animation:pulse 1.2s infinite;
+}
+
+.dot:nth-child(2){
+  animation-delay:.2s;
+}
+
+.dot:nth-child(3){
+  animation-delay:.4s;
+}
+
+@keyframes pulse{
+  0%,100%{
+    opacity:.2;
+    transform:scale(.8);
+  }
+  50%{
+    opacity:1;
+    transform:scale(1.15);
+  }
+}
+
+#aiTime{
+  font-size:19px;
+  color:#aaa;
+  margin-top:5px;
+}
+
+#aiMessage{
+  margin-top:12px;
+  color:#aaa;
+  min-height:24px;
+}
+
+#aiWarning{
+  display:none;
+  margin-top:14px;
+  padding:10px;
+  border-radius:12px;
+  background:#302600;
+  color:#ffd95a;
+  font-size:14px;
+}
+
+#result{
+  margin-top:15px;
+  padding:17px;
+  background:#181818;
+  border-radius:17px;
+  white-space:pre-wrap;
+  word-break:break-word;
+  line-height:1.5;
+}
+
+#shopping{
+  display:none;
+  margin-top:15px;
+  padding:17px;
+  background:#181818;
+  border-radius:17px;
+  line-height:1.5;
+}
+
+#shoppingTitle{
+  font-size:21px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+
+#shoppingResult{
+  color:#eee;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
+.offer{
+  margin:10px 0;
+  padding:13px;
+  border-radius:14px;
+  background:#222;
+}
+
+.store{
+  display:inline-block;
+  padding:5px 9px;
+  border-radius:8px;
+  color:#fff;
+  font-weight:800;
+  margin-bottom:7px;
+}
+
+.price{
+  font-size:22px;
+  font-weight:800;
+  margin:4px 0;
+}
+
+.price.best{
+  color:#36df72;
+}
+
+.price.medium{
+  color:#ffd23f;
+}
+
+.price.high{
+  color:#ff5555;
+}
+
+.bestBox{
+  margin-top:14px;
+  padding:14px;
+  border-radius:14px;
+  background:#12301d;
+  border:1px solid #2c9d50;
+}
+
+.similarBox{
+  margin-top:14px;
+  padding:14px;
+  border-radius:14px;
+  background:#252039;
+  border:1px solid #7659b8;
+}
+
+#searchMode{
+  text-align:center;
+  color:#aaa;
+  font-size:13px;
+  margin:8px 0;
+}
+
+#speechBox{
+  margin-top:10px;
+}
+
+.small{
+  font-size:13px;
+  color:#888;
+  text-align:center;
+  margin-top:5px;
+}
+
+#galleryInput{
+  display:none;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📷 ЧтоКупить AI</h1>
+
+<div id="status">Готов.</div>
+
+<button id="startCamera" class="primary">
+📷 ВКЛЮЧИТЬ КАМЕРУ
+</button>
+
+<button id="stopCamera" class="danger hidden">
+⏹ ВЫКЛЮЧИТЬ КАМЕРУ
+</button>
+
+<video
+  id="video"
+  autoplay
+  muted
+  playsinline
+  webkit-playsinline>
+</video>
+
+<div id="counter" class="hidden">
+Фото: 0 / 4
+</div>
+
+<button id="takePhoto" class="primary hidden">
+📸 СДЕЛАТЬ ФОТО
+</button>
+
+<button id="retake" class="secondary hidden">
+↩️ УДАЛИТЬ ПОСЛЕДНЕЕ ФОТО
+</button>
+
+<button id="finishPhoto" class="primary hidden">
+🧠 АНАЛИЗИРОВАТЬ ФОТО
+</button>
+
+<button id="videoButton" class="blue hidden">
+🎥 ПОИСК ПО ВИДЕО 4 / 7 / 10 СЕК
+</button>
+
+<!-- НОВОЕ: ГАЛЕРЕЯ -->
+
+<input
+  id="galleryInput"
+  type="file"
+  accept="image/*"
+  multiple>
+
+<button id="galleryButton" class="purple">
+🖼️ НАЙТИ ТОВАР ПО ФОТО ИЗ ГАЛЕРЕИ
+</button>
+
+<div id="galleryPreview"></div>
+
+<div id="photos">
+
+  <div class="photoBox" id="box1">
+    <span class="photoNumber">1</span>
+    <img id="photo1">
+  </div>
+
+  <div class="photoBox" id="box2">
+    <span class="photoNumber">2</span>
+    <img id="photo2">
+  </div>
+
+  <div class="photoBox" id="box3">
+    <span class="photoNumber">3</span>
+    <img id="photo3">
+  </div>
+
+  <div class="photoBox" id="box4">
+    <span class="photoNumber">4</span>
+    <img id="photo4">
+  </div>
+
+</div>
+
+<div id="videoArea">
+
+  <div id="videoStatus">
+    🎥 Готово
+  </div>
+
+  <div id="videoShots">
+
+    <div class="videoShot" id="shot4">
+      <img id="shotImg4">
+      <span class="videoLabel">4 сек</span>
+    </div>
+
+    <div class="videoShot" id="shot7">
+      <img id="shotImg7">
+      <span class="videoLabel">7 сек</span>
+    </div>
+
+    <div class="videoShot" id="shot10">
+      <img id="shotImg10">
+      <span class="videoLabel">10 сек</span>
+    </div>
+
+  </div>
+
+</div>
+
+<div id="aiBox">
+
+  <div id="aiTitle">
+    🧠 AI анализирует товар
+  </div>
+
+  <div id="aiDots">
+    <span class="dot">●</span>
+    <span class="dot">●</span>
+    <span class="dot">●</span>
+  </div>
+
+  <div id="aiTime">
+    Прошло: 0 сек
+  </div>
+
+  <div id="aiMessage">
+    Подготавливаю фотографии…
+  </div>
+
+  <div id="aiWarning">
+    ⏳ Анализ идёт дольше обычного. AI всё ещё работает…
+  </div>
+
+</div>
+
+<div id="result"></div>
+
+<div id="searchMode"></div>
+
+<!-- ДВА РАЗНЫХ ПОИСКА -->
+
+<button id="searchButton" class="green hidden">
+🛒 НАЙТИ ТОВАР И ЛУЧШУЮ ЦЕНУ
+</button>
+
+<button id="similarButton" class="blue hidden">
+🔎 НАЙТИ ПОХОЖИЕ И ДЕШЕВЛЕ
+</button>
+
+<div id="shopping">
+
+  <div id="shoppingTitle">
+    🛒 Найденные предложения
+  </div>
+
+  <div id="shoppingResult"></div>
+
+</div>
+
+<div id="speechBox">
+
+<button id="speakResult" class="gold hidden">
+🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ
+</button>
+
+<button id="stopSpeech" class="danger hidden">
+⏹ ОСТАНОВИТЬ ОЗВУЧИВАНИЕ
+</button>
+
+</div>
+
+<div class="small">
+Голос читает только краткий результат.
+</div>
+
+<button id="reset" class="danger hidden">
+↻ НАЧАТЬ ЗАНОВО
+</button>
+
+<canvas id="canvas" hidden></canvas>
+
+<script src="https://js.puter.com/v2/"></script>
+
+<script>
+window.__userLatitude = null;
+window.__userLongitude = null;
+window.__userLocation = "";
+
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    function(position) {
+      window.__userLatitude = position.coords.latitude;
+      window.__userLongitude = position.coords.longitude;
+      console.log("🟢 GPS:", window.__userLatitude, window.__userLongitude);
+    },
+    function(error) {
+      console.log("🟡 Геолокация недоступна:", error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
+    }
+  );
+}
+
+
+/* =====================================================
+   ELEMENTS
+===================================================== */
+
+const video =
+  document.getElementById("video");
+
+const canvas =
+  document.getElementById("canvas");
+
+const startCamera =
+  document.getElementById("startCamera");
+
+const stopCamera =
+  document.getElementById("stopCamera");
+
+const takePhoto =
+  document.getElementById("takePhoto");
+
+const retake =
+  document.getElementById("retake");
+
+const finishPhoto =
+  document.getElementById("finishPhoto");
+
+const videoButton =
+  document.getElementById("videoButton");
+
+const videoArea =
+  document.getElementById("videoArea");
+
+const videoStatus =
+  document.getElementById("videoStatus");
+
+const status =
+  document.getElementById("status");
+
+const counter =
+  document.getElementById("counter");
+
+const result =
+  document.getElementById("result");
+
+const searchButton =
+  document.getElementById("searchButton");
+
+const similarButton =
+  document.getElementById("similarButton");
+
+const shopping =
+  document.getElementById("shopping");
+
+const shoppingResult =
+  document.getElementById("shoppingResult");
+
+const shoppingTitle =
+  document.getElementById("shoppingTitle");
+
+const aiBox =
+  document.getElementById("aiBox");
+
+const aiTime =
+  document.getElementById("aiTime");
+
+const aiMessage =
+  document.getElementById("aiMessage");
+
+const aiWarning =
+  document.getElementById("aiWarning");
+
+const speakResult =
+  document.getElementById("speakResult");
+
+const stopSpeech =
+  document.getElementById("stopSpeech");
+
+const reset =
+  document.getElementById("reset");
+
+const galleryButton =
+  document.getElementById("galleryButton");
+
+const galleryInput =
+  document.getElementById("galleryInput");
+
+const galleryPreview =
+  document.getElementById("galleryPreview");
+
+const searchMode =
+  document.getElementById("searchMode");
+
+
+/* =====================================================
+   VARIABLES
+===================================================== */
+
+let stream = null;
+
+let photos = [];
+
+let videoPhotos = [];
+
+let galleryPhotos = [];
+
+let busy = false;
+
+let aiTimer = null;
+
+let aiStarted = 0;
+
+let currentAudio = null;
+
+let lastAIText = "";
+
+let productInfo = {
+  type:"",
+  brand:"",
+  model:"",
+  confidence:"",
+  search:""
+};
+
+
+/* =====================================================
+   CAMERA
+===================================================== */
+
+startCamera.onclick = async function(){
+
+  startCamera.disabled = true;
+
+  status.textContent =
+    "📷 Запрашиваю камеру…";
+
+  try{
+
+    stream =
+      await navigator.mediaDevices.getUserMedia({
+
+        audio:false,
+
+        video:{
+          facingMode:{
+            ideal:"environment"
+          },
+
+          width:{
+            ideal:1280
+          },
+
+          height:{
+            ideal:720
+          }
+        }
+
+      });
+
+    video.srcObject =
+      stream;
+
+    video.style.display =
+      "block";
+
+    await video.play();
+
+    startCamera.classList.add("hidden");
+
+    stopCamera.classList.remove("hidden");
+
+    takePhoto.classList.remove("hidden");
+
+    counter.classList.remove("hidden");
+
+    retake.classList.remove("hidden");
+
+    videoButton.classList.remove("hidden");
+
+    reset.classList.remove("hidden");
+
+    updateInterface();
+
+    status.textContent =
+      "Камера готова.\n"+
+      "Наведи на нужную сторону товара.";
+
+  }
+
+  catch(error){
+
+    status.textContent =
+      "❌ Ошибка камеры:\n"+
+      (error?.name || "")+
+      "\n"+
+      (error?.message || "");
+
+    startCamera.disabled =
+      false;
+
+  }
+
+};
+
+
+/* =====================================================
+   STOP CAMERA
+===================================================== */
+
+stopCamera.onclick =
+function(){
+
+  stopCameraNow();
+
+};
+
+function stopCameraNow(){
+
+  if(stream){
+
+    stream
+      .getTracks()
+      .forEach(function(track){
+
+        track.stop();
+
+      });
+
+  }
+
+  stream = null;
+
+  video.srcObject = null;
+
+  video.style.display = "none";
+
+  stopCamera.classList.add("hidden");
+
+  startCamera.classList.remove("hidden");
+
+  startCamera.disabled = false;
+
+  takePhoto.classList.add("hidden");
+
+  videoButton.classList.add("hidden");
+
+  status.textContent =
+    "⏹ Камера выключена.";
+
+}
+
+
+/* =====================================================
+   CAPTURE PHOTO
+===================================================== */
+
+takePhoto.onclick =
+async function(){
+
+  if(
+    photos.length >= 4 ||
+    busy ||
+    !stream
+  ){
+    return;
+  }
+
+  try{
+
+    const file =
+      await captureFrame();
+
+    photos.push(file);
+
+    showPhoto(
+      photos.length,
+      file
+    );
+
+    updateInterface();
+
+    status.textContent =
+      "✅ Фото "+
+      photos.length+
+      " сохранено.";
+
+  }
+
+  catch(error){
+
+    status.textContent =
+      "❌ Не удалось сделать фото.";
+
+  }
+
+};
+
+
+/* =====================================================
+   CAPTURE FRAME
+===================================================== */
+
+async function captureFrame(){
+
+  if(!video.videoWidth){
+
+    throw new Error(
+      "Камера ещё не готова."
+    );
+
+  }
+
+  let width =
+    video.videoWidth;
+
+  let height =
+    video.videoHeight;
+
+  const maxWidth = 900;
+
+  if(width > maxWidth){
+
+    const ratio =
+      maxWidth / width;
+
+    width = maxWidth;
+
+    height =
+      Math.round(
+        height * ratio
+      );
+
+  }
+
+  canvas.width = width;
+
+  canvas.height = height;
+
+  const ctx =
+    canvas.getContext("2d");
+
+  ctx.drawImage(
+    video,
+    0,
+    0,
+    width,
+    height
+  );
+
+  const blob =
+    await new Promise(function(resolve){
+
+      canvas.toBlob(
+        resolve,
+        "image/jpeg",
+        0.65
+      );
+
+    });
+
+  if(!blob){
+
+    throw new Error(
+      "Не удалось создать JPEG."
+    );
+
+  }
+
+  return new File(
+    [blob],
+    "product-"+Date.now()+".jpg",
+    {
+      type:"image/jpeg"
+    }
+  );
+
+}
+
+
+/* =====================================================
+   SHOW PHOTO
+===================================================== */
+
+function showPhoto(
+  number,
+  file
+){
+
+  const box =
+    document.getElementById(
+      "box"+number
+    );
+
+  const img =
+    document.getElementById(
+      "photo"+number
+    );
+
+  img.src =
+    URL.createObjectURL(file);
+
+  box.style.display =
+    "block";
+
+}
+
+
+/* =====================================================
+   UPDATE INTERFACE
+===================================================== */
+
+function updateInterface(){
+
+  counter.textContent =
+    "Фото: "+
+    photos.length+
+    " / 4";
+
+  if(photos.length > 0){
+
+    finishPhoto.classList.remove(
+      "hidden"
+    );
+
+    retake.classList.remove(
+      "hidden"
+    );
+
+  }
+  else{
+
+    finishPhoto.classList.add(
+      "hidden"
+    );
+
+    retake.classList.add(
+      "hidden"
+    );
+
+  }
+
+  if(photos.length >= 4){
+
+    takePhoto.classList.add(
+      "hidden"
+    );
+
+  }
+  else{
+
+    takePhoto.classList.remove(
+      "hidden"
+    );
+
+  }
+
+}
+
+
+/* =====================================================
+   DELETE LAST PHOTO
+===================================================== */
+
+retake.onclick =
+function(){
+
+  if(
+    photos.length === 0 ||
+    busy
+  ){
+    return;
+  }
+
+  const number =
+    photos.length;
+
+  const img =
+    document.getElementById(
+      "photo"+number
+    );
+
+  const box =
+    document.getElementById(
+      "box"+number
+    );
+
+  if(img.src){
+
+    try{
+      URL.revokeObjectURL(img.src);
+    }
+    catch(e){}
+
+  }
+
+  img.removeAttribute("src");
+
+  box.style.display =
+    "none";
+
+  photos.pop();
+
+  updateInterface();
+
+  status.textContent =
+    "Последнее фото удалено.";
+
+};
+
+
+/* =====================================================
+   AI ANIMATION
+===================================================== */
+
+function startAIAnimation(){
+
+  aiBox.style.display =
+    "block";
+
+  aiWarning.style.display =
+    "none";
+
+  aiStarted =
+    Date.now();
+
+  aiTime.textContent =
+    "Прошло: 0 сек";
+
+  aiMessage.textContent =
+    "Подготавливаю фотографии…";
+
+  aiTimer =
+    setInterval(function(){
+
+      const seconds =
+        Math.floor(
+          (Date.now()-aiStarted)/1000
+        );
+
+      aiTime.textContent =
+        "Прошло: "+
+        seconds+
+        " сек";
+
+      if(seconds < 3){
+
+        aiMessage.textContent =
+          "📸 Подготавливаю фотографии…";
+
+      }
+      else if(seconds < 8){
+
+        aiMessage.textContent =
+          "📤 Передаю фотографии AI…";
+
+      }
+      else if(seconds < 15){
+
+        aiMessage.textContent =
+          "🔍 Рассматриваю товар…";
+
+      }
+      else{
+
+        aiMessage.textContent =
+          "🧠 Определяю бренд и модель…";
+
+        aiWarning.style.display =
+          "block";
+
+      }
+
+    },500);
+
+}
+
+
+/* =====================================================
+   STOP AI ANIMATION
+===================================================== */
+
+function stopAIAnimation(){
+
+  if(aiTimer){
+
+    clearInterval(aiTimer);
+
+    aiTimer = null;
+
+  }
+
+  aiBox.style.display =
+    "none";
+
+}
+
+
+/* =====================================================
+   UPLOAD FILES
+===================================================== */
+
+async function uploadFiles(files){
+
+  const uploaded =
+    await puter.fs.upload(files);
+
+  const list =
+    Array.isArray(uploaded)
+      ? uploaded
+      : [uploaded];
+
+  const paths =
+    list
+      .map(function(item){
+
+        return item?.path || null;
+
+      })
+      .filter(Boolean);
+
+  if(paths.length !== files.length){
+
+    throw new Error(
+      "Не все фотографии были загружены."
+    );
+
+  }
+
+  return paths;
+
+}
+
+
+/* =====================================================
+   AI IMAGE ANALYSIS
+===================================================== */
+
+async function analyzeImages(
+  files,
+  mode
+){
+
+  const apiURL =
+    "https://must-hitachi-engage-accommodations.trycloudflare.com/analyze";
+
+  function fileToDataURL(file){
+    return new Promise(function(resolve, reject){
+
+      const reader =
+        new FileReader();
+
+      reader.onload =
+        function(){
+          resolve(reader.result);
+        };
+
+      reader.onerror =
+        function(){
+          reject(
+            new Error("Не удалось прочитать фотографию.")
+          );
+        };
+
+      reader.readAsDataURL(file);
+
+    });
+  }
+
+  const images = [];
+
+  for(const file of files){
+    images.push(
+      await fileToDataURL(file)
+    );
+  }
+
+  let prompt;
+
+  if(mode === "video"){
+
+    prompt = `
+Определи товар по ${images.length} изображениям одного товара.
+
+Используй ВСЕ изображения.
+
+В первую очередь прочитай:
+бренд, модель, Model No, артикул,
+надписи, цифры и маркировку.
+
+Не придумывай модель.
+Если модель невозможно уверенно определить,
+напиши: не определена.
+
+Ответ только:
+
+ТИП:
+БРЕНД:
+МОДЕЛЬ:
+УВЕРЕННОСТЬ:
+ПОИСК:
+`;
+
+  }
+  else{
+
+    prompt = `
+Определи товар по фотографиям.
+
+Внимательно прочитай все надписи,
+логотипы, модель, Model No, артикулы,
+цифры и маркировку.
+
+Если модель написана на корпусе или наклейке,
+используй именно её.
+
+Не придумывай модель.
+Если модель невозможно уверенно определить,
+напиши: не определена.
+
+Ответ только:
+
+ТИП:
+БРЕНД:
+МОДЕЛЬ:
+УВЕРЕННОСТЬ:
+ПОИСК:
+`;
+
+  }
+
+  const response =
+    await fetch(
+      apiURL,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          prompt:prompt,
+          images:images
+        })
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if(!response.ok){
+
+    throw new Error(
+      typeof data.error === "string"
+        ? data.error
+        : JSON.stringify(data.error || data)
+    );
+
+  }
+
+  if(!data.ok){
+
+    throw new Error(
+      data.error ||
+      "API анализа вернул ошибку."
+    );
+
+  }
+
+  return data.result || "";
+
+}
+
+
+/* =====================================================/* =====================================================
+   EXTRACT TEXT
+===================================================== */
+
+function extractAIText(response){
+
+  if(
+    typeof response === "string"
+  ){
+    return response;
+  }
+
+  if(
+    response?.message &&
+    typeof response.message.content === "string"
+  ){
+    return response.message.content;
+  }
+
+  if(
+    typeof response?.content === "string"
+  ){
+    return response.content;
+  }
+
+  return JSON.stringify(
+    response,
+    null,
+    2
+  );
+
+}
+
+
+/* =====================================================
+   PARSE PRODUCT
+===================================================== */
+
+function parseProduct(text){
+
+  function find(label){
+
+    const re =
+      new RegExp(
+        label+
+        "\\s*:\\s*(.+)",
+        "i"
+      );
+
+    const match =
+      text.match(re);
+
+    return match
+      ? match[1].trim()
+      : "";
+
+  }
+
+  productInfo.type =
+    find("ТИП");
+
+  productInfo.brand =
+    find("БРЕНД");
+
+  productInfo.model =
+    find("МОДЕЛЬ");
+
+  productInfo.confidence =
+    find("УВЕРЕННОСТЬ");
+
+  productInfo.search =
+    find("ПОИСК");
+
+}
+
+
+/* =====================================================
+   SHOW RESULT
+===================================================== */
+
+function showAIResult(
+  text,
+  elapsed,
+  totalKB,
+  count
+){
+
+  parseProduct(text);
+
+  lastAIText = text;
+
+  stopAIAnimation();
+
+  result.textContent =
+    "📷 Фотографий: "+
+    count+
+    "\n📦 Размер: "+
+    totalKB+
+    " КБ"+
+    "\n🤖 AI: GPT-5.4 nano"+
+    "\n⚡ Время: "+
+    elapsed.toFixed(1)+
+    " сек.\n\n"+
+    text;
+
+  searchButton.classList.remove(
+    "hidden"
+  );
+
+  similarButton.classList.remove(
+    "hidden"
+  );
+
+  speakResult.classList.remove(
+    "hidden"
+  );
+
+}
+
+
+/* =====================================================
+   PHOTO ANALYSIS
+===================================================== */
+
+finishPhoto.onclick =
+async function(){
+
+  if(
+    photos.length === 0 ||
+    busy
+  ){
+    return;
+  }
+
+  busy = true;
+
+  takePhoto.disabled = true;
+  finishPhoto.disabled = true;
+  retake.disabled = true;
+  videoButton.disabled = true;
+
+  searchButton.classList.add("hidden");
+  similarButton.classList.add("hidden");
+
+  shopping.style.display = "none";
+
+  result.textContent = "";
+
+  startAIAnimation();
+
+  status.textContent =
+    "🧠 Запускаю анализ…";
+
+  const started =
+    performance.now();
+
+  try{
+
+    const response =
+      await analyzeImages(
+        photos,
+        "photo"
+      );
+
+    const text =
+      extractAIText(response);
+
+    const totalKB =
+      photos.reduce(
+        function(sum,file){
+          return sum +
+            Math.round(file.size/1024);
+        },
+        0
+      );
+
+    const elapsed =
+      (
+        performance.now() -
+        started
+      ) / 1000;
+
+    showAIResult(
+      text,
+      elapsed,
+      totalKB,
+      photos.length
+    );
+
+    status.textContent =
+      "🎉 Анализ завершён.";
+
+  }
+  catch(error){
+
+    stopAIAnimation();
+
+    status.textContent =
+      "❌ AI не смог обработать запрос.";
+
+    result.textContent =
+      error?.message ||
+      String(error);
+
+  }
+  finally{
+
+    busy = false;
+
+    takePhoto.disabled = false;
+    finishPhoto.disabled = false;
+    retake.disabled = false;
+    videoButton.disabled = false;
+
+  }
+
+};
+
+
+/* =====================================================
+   GALLERY
+===================================================== */
+
+galleryButton.onclick =
+function(){
+
+  if(busy){
+    return;
+  }
+
+  galleryInput.click();
+
+};
+
+
+galleryInput.onchange =
+async function(){
+
+  const files =
+    Array.from(
+      galleryInput.files || []
+    );
+
+  if(!files.length){
+    return;
+  }
+
+  const selected =
+    files.slice(0,4);
+
+  galleryPhotos = selected;
+
+  galleryPreview.innerHTML = "";
+
+  selected.forEach(
+    function(file,index){
+
+      const box =
+        document.createElement("div");
+
+      box.className =
+        "galleryBox";
+
+      box.style.display =
+        "block";
+
+      const img =
+        document.createElement("img");
+
+      img.src =
+        URL.createObjectURL(file);
+
+      const label =
+        document.createElement("span");
+
+      label.className =
+        "galleryLabel";
+
+      label.textContent =
+        "Фото "+(index+1);
+
+      box.appendChild(img);
+      box.appendChild(label);
+
+      galleryPreview.appendChild(box);
+
+    }
+  );
+
+  status.textContent =
+    "🖼️ Выбрано фотографий: "+
+    selected.length+
+    ". Запускаю распознавание…";
+
+  await analyzeGallery(
+    selected
+  );
+
+  galleryInput.value = "";
+
+};
+
+
+/* =====================================================
+   ANALYZE GALLERY
+===================================================== */
+
+async function analyzeGallery(files){
+
+  if(busy){
+    return;
+  }
+
+  busy = true;
+
+  galleryButton.disabled = true;
+
+  searchButton.classList.add("hidden");
+  similarButton.classList.add("hidden");
+
+  shopping.style.display =
+    "none";
+
+  result.textContent = "";
+
+  startAIAnimation();
+
+  const started =
+    performance.now();
+
+  try{
+
+    const response =
+      await analyzeImages(
+        files,
+        "photo"
+      );
+
+    const text =
+      extractAIText(response);
+
+    const totalKB =
+      files.reduce(
+        function(sum,file){
+          return sum +
+            Math.round(file.size/1024);
+        },
+        0
+      );
+
+    const elapsed =
+      (
+        performance.now() -
+        started
+      ) / 1000;
+
+    showAIResult(
+      text,
+      elapsed,
+      totalKB,
+      files.length
+    );
+
+    status.textContent =
+      "🎉 Товар по фото из галереи определён.";
+
+  }
+  catch(error){
+
+    stopAIAnimation();
+
+    status.textContent =
+      "❌ Ошибка анализа галереи.";
+
+    result.textContent =
+      error?.message ||
+      String(error);
+
+  }
+  finally{
+
+    busy = false;
+
+    galleryButton.disabled = false;
+
+  }
+
+}
+
+
+/* =====================================================
+   VIDEO 4 / 7 / 10
+===================================================== */
+
+videoButton.onclick =
+async function(){
+
+  if(
+    busy ||
+    !stream
+  ){
+
+    if(!stream){
+      status.textContent =
+        "❌ Сначала включи камеру.";
+    }
+
+    return;
+  }
+
+  busy = true;
+
+  videoButton.disabled = true;
+  takePhoto.disabled = true;
+  finishPhoto.disabled = true;
+  retake.disabled = true;
+
+  videoArea.style.display =
+    "block";
+
+  clearVideoShots();
+
+  videoPhotos = [];
+
+  try{
+
+    videoStatus.textContent =
+      "🎥 Ждём 4 секунды…";
+
+    status.textContent =
+      "🎥 Кадр 4 секунды…";
+
+    await waitSeconds(4);
+
+    let frame =
+      await captureFrame();
+
+    videoPhotos.push(frame);
+
+    showVideoShot(
+      4,
+      frame
+    );
+
+
+    videoStatus.textContent =
+      "🎥 Ждём 7 секунд…";
+
+    status.textContent =
+      "🎥 Кадр 7 секунд…";
+
+    await waitSeconds(3);
+
+    frame =
+      await captureFrame();
+
+    videoPhotos.push(frame);
+
+    showVideoShot(
+      7,
+      frame
+    );
+
+
+    videoStatus.textContent =
+      "🎥 Ждём 10 секунд…";
+
+    status.textContent =
+      "🎥 Кадр 10 секунд…";
+
+    await waitSeconds(3);
+
+    frame =
+      await captureFrame();
+
+    videoPhotos.push(frame);
+
+    showVideoShot(
+      10,
+      frame
+    );
+
+
+    videoStatus.textContent =
+      "🧠 Анализирую кадры…";
+
+    status.textContent =
+      "🧠 AI анализирует 4 / 7 / 10 сек…";
+
+    startAIAnimation();
+
+    const started =
+      performance.now();
+
+    const response =
+      await analyzeImages(
+        videoPhotos,
+        "video"
+      );
+
+    const text =
+      extractAIText(response);
+
+    const totalKB =
+      videoPhotos.reduce(
+        function(sum,file){
+          return sum +
+            Math.round(file.size/1024);
+        },
+        0
+      );
+
+    const elapsed =
+      (
+        performance.now() -
+        started
+      ) / 1000;
+
+    showAIResult(
+      text,
+      elapsed,
+      totalKB,
+      3
+    );
+
+    result.textContent =
+      "🎥 Кадры: 4 / 7 / 10 сек"+
+      "\n📦 Размер: "+
+      totalKB+
+      " КБ"+
+      "\n🤖 AI: GPT-5.4 nano"+
+      "\n⚡ Время AI: "+
+      elapsed.toFixed(1)+
+      " сек.\n\n"+
+      text;
+
+    status.textContent =
+      "🎉 Видео-анализ завершён.";
+
+  }
+  catch(error){
+
+    stopAIAnimation();
+
+    status.textContent =
+      "❌ Ошибка видео-анализа.";
+
+    result.textContent =
+      error?.message ||
+      String(error);
+
+  }
+  finally{
+
+    busy = false;
+
+    videoButton.disabled = false;
+    takePhoto.disabled = false;
+    finishPhoto.disabled = false;
+    retake.disabled = false;
+
+  }
+
+};
+
+
+/* =====================================================
+   WAIT
+===================================================== */
+
+function waitSeconds(seconds){
+
+  return new Promise(
+    function(resolve){
+      setTimeout(
+        resolve,
+        seconds*1000
+      );
+    }
+  );
+
+}
+
+
+/* =====================================================
+   VIDEO SHOTS
+===================================================== */
+
+function showVideoShot(
+  second,
+  file
+){
+
+  const box =
+    document.getElementById(
+      "shot"+second
+    );
+
+  const img =
+    document.getElementById(
+      "shotImg"+second
+    );
+
+  img.src =
+    URL.createObjectURL(file);
+
+  box.style.display =
+    "block";
+
+}
+
+
+function clearVideoShots(){
+
+  [4,7,10].forEach(
+    function(second){
+
+      const box =
+        document.getElementById(
+          "shot"+second
+        );
+
+      const img =
+        document.getElementById(
+          "shotImg"+second
+        );
+
+      if(img.src){
+
+        try{
+          URL.revokeObjectURL(img.src);
+        }
+        catch(e){}
+
+      }
+
+      img.removeAttribute("src");
+
+      box.style.display =
+        "none";
+
+    }
+  );
+
+}
+
+
+/* =====================================================
+   SEARCH PRODUCT
+===================================================== */
+
+searchButton.onclick =
+function(){
+
+  performShoppingSearch(
+    "exact"
+  );
+
+};
+
+
+/* =====================================================
+   SEARCH SIMILAR
+===================================================== */
+
+similarButton.onclick =
+function(){
+
+  performShoppingSearch(
+    "similar"
+  );
+
+};
+
+
+/* =====================================================
+   FAST SHOPPING SEARCH
+===================================================== */
+
+async function performShoppingSearch(mode){
+
+  if(busy){
+    return;
+  }
+
+  if(
+    !productInfo.brand &&
+    !productInfo.model &&
+    !productInfo.search
+  ){
+
+    status.textContent =
+      "❌ Сначала нужно определить товар.";
+
+    return;
+  }
+
+  busy = true;
+
+  searchButton.disabled = true;
+  similarButton.disabled = true;
+
+  shopping.style.display =
+    "block";
+
+  if(mode === "similar"){
+
+    shoppingTitle.textContent =
+      "🔎 Похожие товары";
+
+    searchMode.textContent =
+      "Поиск похожих вариантов и более выгодных цен";
+
+    shoppingResult.textContent =
+      "⚡ Быстро ищу похожие предложения…";
+
+  }
+  else{
+
+    shoppingTitle.textContent =
+      "🛒 Найденные предложения";
+
+    searchMode.textContent =
+      "Сравниваю реальные предложения";
+
+    shoppingResult.textContent =
+      "⚡ Быстро ищу цены…";
+
+  }
+
+  status.textContent =
+    mode === "similar"
+      ? "🔎 Ищу похожие товары…"
+      : "🛒 Ищу товар и лучшую цену…";
+
+
+  const brand =
+    productInfo.brand || "";
+
+  const model =
+    productInfo.model || "";
+
+  const type =
+    productInfo.type || "";
+
+  const search =
+    productInfo.search || "";
+
+
+  let query;
+
+
+  if(mode === "similar"){
+
+    query = `
+
+Найди 5 похожих товаров на:
+
+${brand} ${model}
+${type}
+${search}
+
+Ищи в:
+Ozon,
+Wildberries,
+Яндекс Маркет,
+AliExpress,
+других магазинах.
+
+Цель: найти максимально похожие товары,
+особенно более дешёвые.
+
+Ответ коротко:
+
+🛍 МАГАЗИН:
+ТОВАР:
+💰 ЦЕНА:
+🚚 ДОСТАВКА:
+🔗 ССЫЛКА:
+
+В конце:
+🏆 ЛУЧШИЙ ВАРИАНТ:
+
+Не выдумывай цены и ссылки.
+Если данных нет — напиши "не указано".
+`;
+
+  }
+  else{
+
+    query = `
+
+Найди актуальные предложения:
+
+${brand} ${model}
+${type}
+${search}
+
+Проверь прежде всего:
+Ozon,
+Wildberries,
+Яндекс Маркет,
+AliExpress.
+
+Можно добавить другие магазины,
+если там есть реальная карточка товара.
+
+Найди до 5 лучших предложений.
+
+Для каждого:
+
+🛍 МАГАЗИН:
+ТОВАР:
+💰 ЦЕНА:
+🚚 ДОСТАВКА:
+💵 ИТОГО:
+🔗 ССЫЛКА:
+
+В конце:
+🏆 САМАЯ ВЫГОДНАЯ ЦЕНА:
+
+Учитывай доставку.
+
+Не придумывай цены.
+Не придумывай ссылки.
+Если данные неизвестны — "не указано".
+
+Ответ кратко, без длинных объяснений.
+`;
+
+  }
+
+
+  try{
+
+    const response =
+      await fetch(
+        "https://must-hitachi-engage-accommodations.trycloudflare.com/search",
+        {
+          method:"POST",
+          headers:{
+            "Content-Type":"application/json"
+          },
+          body:JSON.stringify({
+            query:query,
+            mode: typeof mode !== "undefined" ? mode : "find",
+            latitude: window.__userLatitude || null,
+            longitude: window.__userLongitude || null,
+            location: window.__userLocation || ""
+          })
+        }
+      );
+
+    const data = await response.json();
+
+    if(!response.ok || !data.ok){
+      throw new Error(
+        data.error
+          ? JSON.stringify(data.error)
+          : "Ошибка веб-поиска."
+      );
+    }
+
+    const text =
+      (data.results || [])
+        .map((item, i) =>
+          `${i + 1}. ${item.title || "Без названия"}\n` +
+          `Цена/информация: ${item.content || "не указано"}\n` +
+          `Ссылка: ${item.url || "не указано"}`
+        )
+        .join("\n\n");
+
+    shoppingResult.innerHTML =
+      formatShoppingResult(text);
+
+    status.textContent =
+      "🎉 Поиск завершён.";
+
+  }
+  catch(error){
+
+    shoppingResult.textContent =
+      "❌ Не удалось выполнить поиск.\n\n"+
+      (
+        error?.message ||
+        String(error)
+      );
+
+    status.textContent =
+      "❌ Ошибка поиска.";
+
+  }
+  finally{
+
+    busy = false;
+
+    searchButton.disabled = false;
+    similarButton.disabled = false;
+
+  }
+
+}
+
+
+/* =====================================================
+   SHOPPING VISUAL FORMAT
+===================================================== */
+
+function formatShoppingResult(text){
+
+  let safe =
+    escapeHTML(text);
+
+  /*
+    Сохраняем нормальный текст,
+    но визуально выделяем цены.
+  */
+
+  safe =
+    safe.replace(
+      /(₽|руб\.?|RUB|\$|USD|€|EUR)\s?([\d\s.,]+)/gi,
+      '<span class="price medium">$1 $2</span>'
+    );
+
+  safe =
+    safe.replace(
+      /(МАГАЗИН|🛍\s*МАГАЗИН)\s*:/gi,
+      '<strong>🛍 МАГАЗИН:</strong>'
+    );
+
+  safe =
+    safe.replace(
+      /(САМАЯ ВЫГОДНАЯ ЦЕНА|ЛУЧШИЙ ВАРИАНТ)/gi,
+      '<div class="bestBox"><strong>🏆 $1</strong>'
+    );
+
+  safe =
+    safe.replace(
+      /(https?:\/\/[^\s<]+)/gi,
+      '<br><span style="color:#65b7ff">$1</span>'
+    );
+
+  return safe;
+
+}
+
+
+function escapeHTML(text){
+
+  return String(text)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;");
+
+}
+
+
+/* =====================================================
+   TTS
+===================================================== */
+
+speakResult.onclick =
+async function(){
+
+  if(!lastAIText){
+
+    status.textContent =
+      "❌ Нет результата для озвучивания.";
+
+    return;
+
+  }
+
+  stopCurrentSpeech();
+
+  const shortText =
+    buildSpeechText();
+
+  speakResult.disabled =
+    true;
+
+  speakResult.textContent =
+    "🎙️ ГОТОВЛЮ ГОЛОС…";
+
+  status.textContent =
+    "🎙️ Создаю естественное озвучивание…";
+
+  try{
+
+    currentAudio =
+      await puter.ai.txt2speech(
+        shortText,
+        {
+          provider:"openai",
+          model:"gpt-4o-mini-tts",
+          voice:"nova",
+          response_format:"mp3",
+          instructions:
+            "Говори естественно по-русски. "+
+            "Живой дружелюбный человеческий голос. "+
+            "Не говори монотонно. "+
+            "Используй естественные паузы. "+
+            "Читай только текст результата, "+
+            "не произноси названия технических полей, "+
+            "символы и служебную информацию."
+        }
+      );
+
+    if(!currentAudio){
+
+      throw new Error(
+        "TTS не вернул аудио."
+      );
+
+    }
+
+    stopSpeech.classList.remove(
+      "hidden"
+    );
+
+    speakResult.textContent =
+      "🎙️ ОЗВУЧИВАЕТСЯ…";
+
+    status.textContent =
+      "🔊 Идёт озвучивание.";
+
+    currentAudio.onended =
+      function(){
+
+        speakResult.disabled =
+          false;
+
+        speakResult.textContent =
+          "🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ";
+
+        stopSpeech.classList.add(
+          "hidden"
+        );
+
+        currentAudio = null;
+
+        status.textContent =
+          "🔊 Озвучивание завершено.";
+
+      };
+
+    currentAudio.onerror =
+      function(){
+
+        speakResult.disabled =
+          false;
+
+        speakResult.textContent =
+          "🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ";
+
+        stopSpeech.classList.add(
+          "hidden"
+        );
+
+        currentAudio = null;
+
+        status.textContent =
+          "❌ Ошибка воспроизведения.";
+
+      };
+
+    await currentAudio.play();
+
+  }
+  catch(error){
+
+    speakResult.disabled =
+      false;
+
+    speakResult.textContent =
+      "🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ";
+
+    stopSpeech.classList.add(
+      "hidden"
+    );
+
+    currentAudio = null;
+
+    status.textContent =
+      "❌ Ошибка голосового AI.";
+
+  }
+
+};
+
+
+/* =====================================================
+   SHORT SPEECH
+===================================================== */
+
+function buildSpeechText(){
+
+  let text = "";
+
+  if(productInfo.brand){
+    text += productInfo.brand;
+  }
+
+  if(
+    productInfo.model &&
+    !/не определена|not determined/i.test(
+      productInfo.model
+    )
+  ){
+
+    text +=
+      " "+
+      productInfo.model;
+
+  }
+
+  if(productInfo.type){
+
+    text +=
+      ". "+
+      productInfo.type;
+
+  }
+
+  if(!text){
+
+    text =
+      "Товар определён. Подробный результат находится на экране.";
+
+  }
+
+  return text + ".";
+
+}
+
+
+/* =====================================================
+   STOP SPEECH
+===================================================== */
+
+stopSpeech.onclick =
+function(){
+
+  stopCurrentSpeech();
+
+  speakResult.disabled =
+    false;
+
+  speakResult.textContent =
+    "🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ";
+
+  stopSpeech.classList.add(
+    "hidden"
+  );
+
+  status.textContent =
+    "⏹ Озвучивание остановлено.";
+
+};
+
+
+function stopCurrentSpeech(){
+
+  if(currentAudio){
+
+    try{
+      currentAudio.pause();
+    }
+    catch(e){}
+
+    try{
+      currentAudio.currentTime = 0;
+    }
+    catch(e){}
+
+    currentAudio = null;
+
+  }
+
+}
+
+
+/* =====================================================
+   RESET
+===================================================== */
+
+reset.onclick =
+function(){
+
+  stopCurrentSpeech();
+
+  stopAIAnimation();
+
+  if(stream){
+
+    stream
+      .getTracks()
+      .forEach(function(track){
+        track.stop();
+      });
+
+  }
+
+  stream = null;
+
+  video.srcObject = null;
+
+  video.style.display =
+    "none";
+
+
+  for(
+    let i=1;
+    i<=4;
+    i++
+  ){
+
+    const box =
+      document.getElementById(
+        "box"+i
+      );
+
+    const img =
+      document.getElementById(
+        "photo"+i
+      );
+
+    if(img.src){
+
+      try{
+        URL.revokeObjectURL(img.src);
+      }
+      catch(e){}
+
+    }
+
+    img.removeAttribute("src");
+
+    box.style.display =
+      "none";
+
+  }
+
+
+  clearVideoShots();
+
+  galleryPreview.innerHTML = "";
+
+  photos = [];
+
+  videoPhotos = [];
+
+  galleryPhotos = [];
+
+  busy = false;
+
+  lastAIText = "";
+
+  productInfo = {
+    type:"",
+    brand:"",
+    model:"",
+    confidence:"",
+    search:""
+  };
+
+
+  startCamera.classList.remove(
+    "hidden"
+  );
+
+  startCamera.disabled =
+    false;
+
+  stopCamera.classList.add(
+    "hidden"
+  );
+
+  takePhoto.classList.add(
+    "hidden"
+  );
+
+  retake.classList.add(
+    "hidden"
+  );
+
+  finishPhoto.classList.add(
+    "hidden"
+  );
+
+  videoButton.classList.add(
+    "hidden"
+  );
+
+  counter.classList.add(
+    "hidden"
+  );
+
+  searchButton.classList.add(
+    "hidden"
+  );
+
+  similarButton.classList.add(
+    "hidden"
+  );
+
+  speakResult.classList.add(
+    "hidden"
+  );
+
+  speakResult.disabled =
+    false;
+
+  speakResult.textContent =
+    "🎙️ ОЗВУЧИТЬ РЕЗУЛЬТАТ";
+
+  stopSpeech.classList.add(
+    "hidden"
+  );
+
+  shopping.style.display =
+    "none";
+
+  result.textContent =
+    "";
+
+  shoppingResult.textContent =
+    "";
+
+  searchMode.textContent =
+    "";
+
+  status.textContent =
+    "Готов.";
+
+};
+
+</script>
+
+</body>
+</html>
