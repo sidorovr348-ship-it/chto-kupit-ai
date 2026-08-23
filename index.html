@@ -549,6 +549,28 @@ button:disabled{
 <script src="https://js.puter.com/v2/"></script>
 
 <script>
+window.__userLatitude = null;
+window.__userLongitude = null;
+window.__userLocation = "";
+
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    function(position) {
+      window.__userLatitude = position.coords.latitude;
+      window.__userLongitude = position.coords.longitude;
+      console.log("🟢 GPS:", window.__userLatitude, window.__userLongitude);
+    },
+    function(error) {
+      console.log("🟡 Геолокация недоступна:", error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
+    }
+  );
+}
+
 
 /* =====================================================
    ELEMENTS
@@ -2164,7 +2186,11 @@ AliExpress.
             "Content-Type":"application/json"
           },
           body:JSON.stringify({
-            query:query
+            query:query,
+            mode: typeof mode !== "undefined" ? mode : "find",
+            latitude: window.__userLatitude || null,
+            longitude: window.__userLongitude || null,
+            location: window.__userLocation || ""
           })
         }
       );

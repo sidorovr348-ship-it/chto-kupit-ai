@@ -113,7 +113,11 @@ app.post('/analyze', async (req, res) => {
 
 app.post('/search', async (req, res) => {
   try {
-    const { query } = req.body;
+    const {
+      query,
+      mode = 'find',
+      location = 'Находка, Приморский край, Россия'
+    } = req.body;
 
     if (!query) {
       return res.status(400).json({
@@ -129,20 +133,29 @@ app.post('/search', async (req, res) => {
       });
     }
 
-    const response = await fetch(
-      'https://google.serper.dev/search',
-      {
-        method: 'POST',
-        headers: {
-          'X-API-KEY': process.env.SERPER_API_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          q: query,
-          num: 10
-        })
-      }
-    );
+    let searchQuery;
+
+    if (mode === 'cheaper') {
+      searchQuery =
+        `${query} похожий аналог дешевле цена купить ${actualLocation}`;
+    } else {
+      searchQuery =
+        `${query} купить цена ${actualLocation}`;
+    }
+
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': process.env.SERPER_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        q: searchQuery,
+        gl: 'ru',
+        hl: 'ru',
+        num: 20
+      })
+    });
 
     const data = await response.json();
 
@@ -154,16 +167,46 @@ app.post('/search', async (req, res) => {
       });
     }
 
+    const allowed = [
+      'ozon.ru',
+      'wildberries.ru',
+      'market.yandex.ru',
+      'dns-shop.ru',
+      'mvideo.ru',
+      'citilink.ru'
+    ];
+
     const results = Array.isArray(data.organic)
-      ? data.organic.map(item => ({
-          title: item.title || '',
-          url: item.link || '',
-          content: item.snippet || ''
-        }))
+      ? data.organic
+          .filter(item => {
+            const url = String(item.link || '').toLowerCase();
+
+            if (!allowed.some(domain => url.includes(domain))) {
+              return false;
+            }
+
+            if (
+              url.includes('global.wildberries.ru') ||
+              url.includes('/usa') ||
+              url.includes('/us/')
+            ) {
+              return false;
+            }
+
+            return true;
+          })
+          .map(item => ({
+            title: item.title || '',
+            url: item.link || '',
+            content: item.snippet || ''
+          }))
+          .slice(0, 10)
       : [];
 
     res.json({
       ok: true,
+      mode,
+      location: actualLocation,
       results
     });
 
