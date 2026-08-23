@@ -116,9 +116,45 @@ app.post('/search', async (req, res) => {
     const {
       query,
       mode = 'find',
-      location = 'Находка, Приморский край, Россия'
+      location = '',
+      latitude = null,
+      longitude = null
     } = req.body;
 
+    let actualLocation = location || 'Россия';
+
+    if (latitude !== null && longitude !== null) {
+      try {
+        const geoResponse = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=10&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'chto-kupit-ai/1.0'
+            }
+          }
+        );
+
+        if (geoResponse.ok) {
+          const geo = await geoResponse.json();
+          const a = geo.address || {};
+          const city =
+            a.city ||
+            a.town ||
+            a.village ||
+            a.municipality ||
+            a.county ||
+            '';
+          const region = a.state || a.region || '';
+
+          if (city) {
+            actualLocation =
+              `${city}${region ? ', ' + region : ''}, Россия`;
+          }
+        }
+      } catch (e) {
+        console.error('GEOLOCATION ERROR:', e);
+      }
+    }
     if (!query) {
       return res.status(400).json({
         ok: false,
@@ -137,10 +173,10 @@ app.post('/search', async (req, res) => {
 
     if (mode === 'cheaper') {
       searchQuery =
-        `${query} похожий аналог дешевле цена купить ${actualLocation}`;
+        `${query} аналог дешевле ${actualLocation}`;
     } else {
       searchQuery =
-        `${query} купить цена ${actualLocation}`;
+        `${query} купить ${actualLocation}`;
     }
 
     const response = await fetch('https://google.serper.dev/search', {
