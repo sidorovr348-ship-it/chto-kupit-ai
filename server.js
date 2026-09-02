@@ -152,8 +152,9 @@ app.post('/shopping', async (req, res) => {
   }
 });
 
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/')) return next();
+// SPA fallback without Express 5 wildcard syntax.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
   res.sendFile(require('path').join(__dirname, 'index.html'));
 });
 
