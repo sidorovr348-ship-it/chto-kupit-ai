@@ -1,183 +1,147 @@
-require('dotenv').config({ path: '/root/chto-kupit-ai.env' });
+require('dotenv').config({ path: process.env.ENV_FILE || '/root/chto-kupit-ai.env' });
 
 const express = require('express');
+const cors = require('cors');
+const { dispatch, getCapability } = require('./src/dispatcher');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3020);
+const PARALON_BASE_URL = process.env.PARALON_BASE_URL || 'https://paraloncloud.com/v1';
+const PARALON_MODEL = process.env.PARALON_MODEL || 'qwen3.8-27b';
 
-app.use(express.json({ limit: '15mb' }));
+app.use(cors());
+app.use(express.json({ limit: '25mb' }));
 
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function configured(name) {
+  if (name === 'paralon') return Boolean(process.env.PARALON_API_KEY);
+  if (name === 'serper') return Boolean(process.env.SERPER_API_KEY);
+  return false;
+}
 
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
+async function callParalon(messages) {
+  if (!configured('paralon')) {
+    const error = new Error('PARALON_API_KEY is not configured');
+    error.status = 503;
+    throw error;
   }
 
-  next();
-});
+  const response = await fetch(`${PARALON_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.PARALON_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ model: PARALON_MODEL, messages })
+  });
 
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error('Paralon request failed');
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+  return data.choices?.[0]?.message?.content || '';
+}
 
 app.get('/health', (req, res) => {
   res.json({
     ok: true,
-    service: 'chto-kupit-ai-api',
-    ai_token: Boolean(process.env.HF_TOKEN)
+    service: 'my-ai-unified',
+    dispatcher: true,
+    adapters: {
+      paralon: configured('paralon'),
+      serper: configured('serper')
+    },
+    capabilities: Object.keys({
+      chat: getCapability('chat'),
+      vision: getCapability('vision'),
+      image_generation: getCapability('image_generation'),
+      video: getCapability('video'),
+      web_search: getCapability('web_search'),
+      documents: getCapability('documents'),
+      tables: getCapability('tables'),
+      shopping: getCapability('shopping'),
+      voice: getCapability('voice'),
+      code: getCapability('code'),
+      verification: getCapability('verification')
+    })
   });
 });
 
-app.post('/analyze', async (req, res) => {
+app.post('/chat', async (req, res) => {
   try {
-    const { prompt, image, images } = req.body;
+    const { prompt = '', messages, hasImage = false, hasFile = false, hasVideo = false } = req.body || {};
+    if (!prompt && !Array.isArray(messages)) {
+      return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
+    }
 
-    const inputImages = Array.isArray(images)
-      ? images
-      : (image ? [image] : []);
+    const route = dispatch({ prompt, hasImage, hasFile, hasVideo });
+    const chatMessages = Array.isArray(messages) && messages.length
+      ? messages
+      : [{ role: 'user', content: prompt }];
 
-    if (!prompt && inputImages.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        error: 'prompt or image/images is required'
+    if (route !== 'chat') {
+      return res.json({
+        ok: true,
+        route,
+        status: 'routed',
+        message: `Задача передана модулю: ${route}. Реальный специализированный адаптер будет подключён следующим этапом.`
       });
     }
 
-    const content = [];
-
-    if (prompt) {
-      content.push({
-        type: 'text',
-        text: prompt
-      });
-    }
-
-    for (const item of inputImages) {
-      const imageData = item.startsWith('data:')
-        ? item
-        : `data:image/jpeg;base64,${item}`;
-
-      content.push({
-        type: 'image_url',
-        image_url: {
-          url: imageData
-        }
-      });
-    }
-
-    const response = await fetch(
-      'https://router.huggingface.co/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'Qwen/Qwen2.5-VL-72B-Instruct',
-          messages: [
-            {
-              role: 'user',
-              content
-            }
-          ]
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('HF ERROR:', JSON.stringify(data));
-      return res.status(response.status).json({
-        ok: false,
-        error: data
-      });
-    }
-
-    res.json({
-      ok: true,
-      result: data.choices?.[0]?.message?.content || ''
-    });
-
+    const result = await callParalon(chatMessages);
+    res.json({ ok: true, route, result, model: PARALON_MODEL });
   } catch (error) {
-    console.error('AI ERROR:', error);
-
-    res.status(500).json({
+    console.error('CHAT ERROR:', error);
+    res.status(error.status || 500).json({
       ok: false,
-      error: 'AI request failed'
+      error: error.message || 'AI request failed',
+      details: error.details || undefined
     });
   }
 });
 
-
-app.post('/search', async (req, res) => {
+app.post('/photo', async (req, res) => {
   try {
-    const {
-      query,
-      mode = 'find',
-      location = '',
-      latitude = null,
-      longitude = null
-    } = req.body;
+    const { prompt = 'Опиши изображение подробно.', image, images } = req.body || {};
+    const inputImages = Array.isArray(images) ? images : (image ? [image] : []);
+    if (!inputImages.length) return res.status(400).json({ ok: false, error: 'image or images is required' });
 
-    let actualLocation = location || 'Россия';
-
-    if (latitude !== null && longitude !== null) {
-      try {
-        const geoResponse = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=10&addressdetails=1`,
-          {
-            headers: {
-              'User-Agent': 'chto-kupit-ai/1.0'
-            }
-          }
-        );
-
-        if (geoResponse.ok) {
-          const geo = await geoResponse.json();
-          const a = geo.address || {};
-          const city =
-            a.city ||
-            a.town ||
-            a.village ||
-            a.municipality ||
-            a.county ||
-            '';
-          const region = a.state || a.region || '';
-
-          if (city) {
-            actualLocation =
-              `${city}${region ? ', ' + region : ''}, Россия`;
-          }
-        }
-      } catch (e) {
-        console.error('GEOLOCATION ERROR:', e);
-      }
-    }
-    if (!query) {
-      return res.status(400).json({
-        ok: false,
-        error: 'query is required'
-      });
+    const content = [{ type: 'text', text: prompt }];
+    for (const item of inputImages) {
+      const imageData = String(item).startsWith('data:') ? item : `data:image/jpeg;base64,${item}`;
+      content.push({ type: 'image_url', image_url: { url: imageData } });
     }
 
-    if (!process.env.SERPER_API_KEY) {
-      return res.status(500).json({
-        ok: false,
-        error: 'SERPER_API_KEY is not configured'
-      });
+    const result = await callParalon([{ role: 'user', content }]);
+    res.json({ ok: true, route: 'vision', result, model: PARALON_MODEL });
+  } catch (error) {
+    console.error('PHOTO ERROR:', error);
+    res.status(error.status || 500).json({ ok: false, error: error.message || 'Vision request failed' });
+  }
+});
+
+app.post('/video', async (req, res) => {
+  res.status(501).json({
+    ok: false,
+    route: 'video',
+    error: 'Video adapter is not connected yet',
+    next: 'Connect FFmpeg frame extraction and the vision adapter.'
+  });
+});
+
+app.post('/shopping', async (req, res) => {
+  try {
+    const { query, location = 'Россия', mode = 'find' } = req.body || {};
+    if (!query) return res.status(400).json({ ok: false, error: 'query is required' });
+    if (!configured('serper')) {
+      return res.status(503).json({ ok: false, error: 'SERPER_API_KEY is not configured' });
     }
 
-    let searchQuery;
-
-    if (mode === 'cheaper') {
-      searchQuery =
-        `${query} аналог дешевле ${actualLocation}`;
-    } else {
-      searchQuery =
-        `${query} купить ${actualLocation}`;
-    }
+    const q = mode === 'cheaper'
+      ? `${query} аналог дешевле ${location}`
+      : `${query} купить ${location}`;
 
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
@@ -185,77 +149,25 @@ app.post('/search', async (req, res) => {
         'X-API-KEY': process.env.SERPER_API_KEY,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        q: searchQuery,
-        gl: 'ru',
-        hl: 'ru',
-        num: 20
-      })
+      body: JSON.stringify({ q, gl: 'ru', hl: 'ru', num: 20 })
     });
-
     const data = await response.json();
+    if (!response.ok) return res.status(response.status).json({ ok: false, error: data });
 
-    if (!response.ok) {
-      console.error('SERPER ERROR:', JSON.stringify(data));
-      return res.status(response.status).json({
-        ok: false,
-        error: data
-      });
-    }
-
-    const allowed = [
-      'ozon.ru',
-      'wildberries.ru',
-      'market.yandex.ru',
-      'dns-shop.ru',
-      'mvideo.ru',
-      'citilink.ru'
-    ];
-
+    const allowed = ['ozon.ru', 'wildberries.ru', 'market.yandex.ru', 'dns-shop.ru', 'mvideo.ru', 'citilink.ru'];
     const results = Array.isArray(data.organic)
-      ? data.organic
-          .filter(item => {
-            const url = String(item.link || '').toLowerCase();
-
-            if (!allowed.some(domain => url.includes(domain))) {
-              return false;
-            }
-
-            if (
-              url.includes('global.wildberries.ru') ||
-              url.includes('/usa') ||
-              url.includes('/us/')
-            ) {
-              return false;
-            }
-
-            return true;
-          })
-          .map(item => ({
-            title: item.title || '',
-            url: item.link || '',
-            content: item.snippet || ''
-          }))
+      ? data.organic.filter(item => allowed.some(domain => String(item.link || '').toLowerCase().includes(domain)))
           .slice(0, 10)
+          .map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' }))
       : [];
 
-    res.json({
-      ok: true,
-      mode,
-      location: actualLocation,
-      results
-    });
-
+    res.json({ ok: true, route: 'shopping', mode, location, results });
   } catch (error) {
-    console.error('SEARCH ERROR:', error);
-
-    res.status(500).json({
-      ok: false,
-      error: 'Search request failed'
-    });
+    console.error('SHOPPING ERROR:', error);
+    res.status(500).json({ ok: false, error: 'Shopping request failed' });
   }
 });
 
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`ЧтоКупить AI API запущен на 127.0.0.1:${PORT}`);
+  console.log(`My AI Unified API started on 127.0.0.1:${PORT}`);
 });
