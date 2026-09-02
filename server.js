@@ -201,3 +201,5 @@ if (!process.env.VERCEL) {
 }
 
 module.exports = app;
+
+// Vercel redeploy checkpoint: environment variables are configured in the project.
