@@ -2,12 +2,19 @@ require('dotenv').config({ path: process.env.ENV_FILE || '/root/chto-kupit-ai.en
 
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
 const { dispatch, getCapability } = require('./src/dispatcher');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3020);
 const PARALON_BASE_URL = process.env.PARALON_BASE_URL || 'https://paraloncloud.com/v1';
 const PARALON_MODEL = process.env.PARALON_MODEL || 'qwen3.8-27b';
+const MEDIA_ROOT = path.join(__dirname, 'media');
+const INPUT_DIR = path.join(MEDIA_ROOT, 'input');
+const TEMP_DIR = path.join(MEDIA_ROOT, 'temp');
+for (const dir of [INPUT_DIR, TEMP_DIR]) fs.mkdirSync(dir, { recursive: true });
 
 app.use(cors());
 app.use(express.json({ limit: '25mb' }));
@@ -87,8 +94,42 @@ async function searchShopping(query, location = 'Россия', mode = 'find') {
     : [];
 }
 
+function runFfmpeg(args) {
+  return new Promise((resolve, reject) => {
+    execFile('ffmpeg', args, { timeout: 30000 }, (error, stdout, stderr) => {
+      if (error) reject(Object.assign(error, { stderr }));
+      else resolve({ stdout, stderr });
+    });
+  });
+}
+
+async function extractVideoFrames(inputFile) {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const frameFiles = [
+    path.join(TEMP_DIR, `frame-${stamp}-1.jpg`),
+    path.join(TEMP_DIR, `frame-${stamp}-2.jpg`)
+  ];
+  await Promise.all([
+    runFfmpeg(['-y', '-ss', '0.6', '-i', inputFile, '-frames:v', '1', '-vf', 'scale=320:180', '-q:v', '6', frameFiles[0]]),
+    runFfmpeg(['-y', '-ss', '5.4', '-i', inputFile, '-frames:v', '1', '-vf', 'scale=320:180', '-q:v', '6', frameFiles[1]])
+  ]);
+  return frameFiles.filter(file => fs.existsSync(file));
+}
+
+async function analyzeVideo(images) {
+  const content = [{ type: 'text', text: 'Проанализируй видео по выбранным кадрам. Опиши, что происходит, какие объекты и действия видны, и укажи важные детали.' }];
+  for (const image of images) content.push({ type: 'image_url', image_url: { url: image } });
+  return callParalon([{ role: 'user', content }]);
+}
+
 app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), serper: configured('serper') }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') }) });
+  res.json({
+    ok: true,
+    service: 'my-ai-unified',
+    dispatcher: true,
+    adapters: { paralon: configured('paralon'), serper: configured('serper'), video: true },
+    capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') })
+  });
 });
 
 app.post('/chat', async (req, res) => {
@@ -110,6 +151,8 @@ app.post('/chat', async (req, res) => {
       const result = await callParalon(chatMessages);
       return res.json({ ok: true, route, result, model: PARALON_MODEL });
     }
+    if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
+    if (route === 'documents') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю документов.' });
     if (route !== 'chat') return res.json({ ok: true, route, status: 'routed', message: `Задача передана модулю: ${route}.` });
 
     const result = await callParalon(chatMessages);
@@ -138,7 +181,28 @@ app.post('/photo', async (req, res) => {
   }
 });
 
-app.post('/video', async (req, res) => res.status(501).json({ ok: false, route: 'video', error: 'Video adapter is not connected yet', next: 'Connect FFmpeg frame extraction and the vision adapter.' }));
+app.post('/video', async (req, res) => {
+  let inputFile = null;
+  let frameFiles = [];
+  try {
+    const raw = String(req.body?.video || req.body?.data || '');
+    if (!raw) return res.status(400).json({ ok: false, error: 'video or data is required' });
+    const base64 = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw;
+    inputFile = path.join(TEMP_DIR, `video-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
+    fs.writeFileSync(inputFile, Buffer.from(base64, 'base64'));
+    frameFiles = await extractVideoFrames(inputFile);
+    if (!frameFiles.length) return res.status(502).json({ ok: false, error: 'Не удалось извлечь кадры видео' });
+    const images = frameFiles.map(file => `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`);
+    const result = await analyzeVideo(images);
+    res.json({ ok: true, route: 'video', result, frames: images.length, model: PARALON_MODEL });
+  } catch (error) {
+    console.error('VIDEO ERROR:', error);
+    res.status(error.status || 502).json({ ok: false, error: error.message || 'Ошибка обработки видео' });
+  } finally {
+    if (inputFile) { try { fs.unlinkSync(inputFile); } catch {} }
+    for (const file of frameFiles) { try { fs.unlinkSync(file); } catch {} }
+  }
+});
 
 app.post('/shopping', async (req, res) => {
   try {
@@ -152,10 +216,9 @@ app.post('/shopping', async (req, res) => {
   }
 });
 
-// SPA fallback without Express 5 wildcard syntax.
 app.use((req, res, next) => {
   if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-  res.sendFile(require('path').join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified API started on 127.0.0.1:${PORT}`));
