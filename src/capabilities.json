@@ -1,0 +1,13 @@
+{
+  "chat": {"description": "Обычный диалог и рассуждение", "inputs": ["text"], "outputs": ["text"]},
+  "vision": {"description": "Анализ изображений и фото", "inputs": ["image", "text"], "outputs": ["text"]},
+  "image_generation": {"description": "Создание и редактирование изображений", "inputs": ["text", "image"], "outputs": ["image"]},
+  "video": {"description": "Анализ и обработка видео", "inputs": ["video", "text"], "outputs": ["text", "video"]},
+  "web_search": {"description": "Поиск актуальной информации в интернете", "inputs": ["text"], "outputs": ["text", "sources"]},
+  "documents": {"description": "Работа с PDF и документами", "inputs": ["file", "text"], "outputs": ["text", "file"]},
+  "tables": {"description": "Анализ таблиц и данных", "inputs": ["file", "text"], "outputs": ["text", "file"]},
+  "shopping": {"description": "Поиск товаров и цен", "inputs": ["text", "image"], "outputs": ["text", "sources"]},
+  "voice": {"description": "Голосовой ввод и вывод", "inputs": ["audio", "text"], "outputs": ["text", "audio"]},
+  "code": {"description": "Написание и анализ программного кода", "inputs": ["text", "file"], "outputs": ["text", "file"]},
+  "verification": {"description": "Проверка результата и поиск ошибок", "inputs": ["text", "sources"], "outputs": ["text"]}
+}
