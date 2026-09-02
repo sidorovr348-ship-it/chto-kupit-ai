@@ -1,5 +1,4 @@
 require('dotenv').config({ path: process.env.ENV_FILE || '/root/chto-kupit-ai.env' });
-
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -11,7 +10,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3020);
 const PARALON_BASE_URL = process.env.PARALON_BASE_URL || 'https://paraloncloud.com/v1';
 const PARALON_MODEL = process.env.PARALON_MODEL || 'qwen3.8-27b';
-const MEDIA_ROOT = path.join(__dirname, 'media');
+const MEDIA_ROOT = process.env.VERCEL ? '/tmp/my-ai-unified-media' : path.join(__dirname, 'media');
 const INPUT_DIR = path.join(MEDIA_ROOT, 'input');
 const TEMP_DIR = path.join(MEDIA_ROOT, 'temp');
 for (const dir of [INPUT_DIR, TEMP_DIR]) fs.mkdirSync(dir, { recursive: true });
@@ -105,10 +104,7 @@ function runFfmpeg(args) {
 
 async function extractVideoFrames(inputFile) {
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const frameFiles = [
-    path.join(TEMP_DIR, `frame-${stamp}-1.jpg`),
-    path.join(TEMP_DIR, `frame-${stamp}-2.jpg`)
-  ];
+  const frameFiles = [path.join(TEMP_DIR, `frame-${stamp}-1.jpg`), path.join(TEMP_DIR, `frame-${stamp}-2.jpg`)];
   await Promise.all([
     runFfmpeg(['-y', '-ss', '0.6', '-i', inputFile, '-frames:v', '1', '-vf', 'scale=320:180', '-q:v', '6', frameFiles[0]]),
     runFfmpeg(['-y', '-ss', '5.4', '-i', inputFile, '-frames:v', '1', '-vf', 'scale=320:180', '-q:v', '6', frameFiles[1]])
@@ -123,13 +119,7 @@ async function analyzeVideo(images) {
 }
 
 app.get('/health', (req, res) => {
-  res.json({
-    ok: true,
-    service: 'my-ai-unified',
-    dispatcher: true,
-    adapters: { paralon: configured('paralon'), serper: configured('serper'), video: true },
-    capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') })
-  });
+  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), serper: configured('serper'), video: true }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') }) });
 });
 
 app.post('/chat', async (req, res) => {
@@ -138,25 +128,13 @@ app.post('/chat', async (req, res) => {
     if (!prompt && !Array.isArray(messages)) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
     const route = dispatch({ prompt, hasImage, hasFile, hasVideo });
     const chatMessages = Array.isArray(messages) && messages.length ? messages : [{ role: 'user', content: prompt }];
-
-    if (route === 'shopping') {
-      const results = await searchShopping(prompt, location, 'find');
-      return res.json({ ok: true, route, results });
-    }
-    if (route === 'web_search') {
-      const results = await searchWeb(prompt, location);
-      return res.json({ ok: true, route, results });
-    }
-    if (route === 'code') {
-      const result = await callParalon(chatMessages);
-      return res.json({ ok: true, route, result, model: PARALON_MODEL });
-    }
+    if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(prompt, location, 'find') });
+    if (route === 'web_search') return res.json({ ok: true, route, results: await searchWeb(prompt, location) });
+    if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
     if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
     if (route === 'documents') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю документов.' });
     if (route !== 'chat') return res.json({ ok: true, route, status: 'routed', message: `Задача передана модулю: ${route}.` });
-
-    const result = await callParalon(chatMessages);
-    res.json({ ok: true, route, result, model: PARALON_MODEL });
+    res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
   } catch (error) {
     console.error('CHAT ERROR:', error);
     res.status(error.status || 500).json({ ok: false, error: error.message || 'AI request failed', details: error.details || undefined });
@@ -173,8 +151,7 @@ app.post('/photo', async (req, res) => {
       const imageData = String(item).startsWith('data:') ? item : `data:image/jpeg;base64,${item}`;
       content.push({ type: 'image_url', image_url: { url: imageData } });
     }
-    const result = await callParalon([{ role: 'user', content }]);
-    res.json({ ok: true, route: 'vision', result, model: PARALON_MODEL });
+    res.json({ ok: true, route: 'vision', result: await callParalon([{ role: 'user', content }]), model: PARALON_MODEL });
   } catch (error) {
     console.error('PHOTO ERROR:', error);
     res.status(error.status || 500).json({ ok: false, error: error.message || 'Vision request failed' });
@@ -193,8 +170,7 @@ app.post('/video', async (req, res) => {
     frameFiles = await extractVideoFrames(inputFile);
     if (!frameFiles.length) return res.status(502).json({ ok: false, error: 'Не удалось извлечь кадры видео' });
     const images = frameFiles.map(file => `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`);
-    const result = await analyzeVideo(images);
-    res.json({ ok: true, route: 'video', result, frames: images.length, model: PARALON_MODEL });
+    res.json({ ok: true, route: 'video', result: await analyzeVideo(images), frames: images.length, model: PARALON_MODEL });
   } catch (error) {
     console.error('VIDEO ERROR:', error);
     res.status(error.status || 502).json({ ok: false, error: error.message || 'Ошибка обработки видео' });
@@ -208,8 +184,7 @@ app.post('/shopping', async (req, res) => {
   try {
     const { query, location = 'Россия', mode = 'find' } = req.body || {};
     if (!query) return res.status(400).json({ ok: false, error: 'query is required' });
-    const results = await searchShopping(query, location, mode);
-    res.json({ ok: true, route: 'shopping', mode, location, results });
+    res.json({ ok: true, route: 'shopping', mode, location, results: await searchShopping(query, location, mode) });
   } catch (error) {
     console.error('SHOPPING ERROR:', error);
     res.status(error.status || 500).json({ ok: false, error: error.message || 'Shopping request failed', details: error.details || undefined });
@@ -221,4 +196,8 @@ app.use((req, res, next) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified API started on 127.0.0.1:${PORT}`));
+if (!process.env.VERCEL) {
+  app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified API started on 127.0.0.1:${PORT}`));
+}
+
+module.exports = app;
