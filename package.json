@@ -1,0 +1,19 @@
+{
+  "name": "my-ai-unified",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Universal AI dispatcher and multi-tool assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
