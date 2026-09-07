@@ -157,11 +157,12 @@ app.get('/health', (req, res) => {
 app.post('/chat', async (req, res) => {
   try {
     const { prompt = '', messages, hasImage = false, hasFile = false, hasVideo = false, location = 'Россия' } = req.body || {};
-    if (!prompt && !Array.isArray(messages)) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
-    const route = dispatch({ prompt, hasImage, hasFile, hasVideo });
-    const chatMessages = Array.isArray(messages) && messages.length ? messages : [{ role: 'user', content: prompt }];
-    if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(prompt, location, 'find') });
-    if (route === 'web_search') return res.json({ ok: true, route, results: await searchWeb(prompt, location) });
+    const chatMessages = Array.isArray(messages) && messages.length ? messages : (prompt ? [{ role: 'user', content: prompt }] : []);
+    const userPrompt = String(prompt || textFromMessages(chatMessages)).trim();
+    if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
+    const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
+    if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(userPrompt, location, 'find') });
+    if (route === 'web_search') return res.json({ ok: true, route, results: await searchWeb(userPrompt, location) });
     if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
     if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
     if (route === 'documents') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю документов.' });
