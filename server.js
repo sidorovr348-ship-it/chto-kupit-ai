@@ -99,6 +99,17 @@ async function searchWeb(query, location = 'Россия') {
   return Array.isArray(data.organic) ? data.organic.slice(0, 10).map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' })) : [];
 }
 
+async function answerFromSearch(query, results, location = 'Россия') {
+  const compact = (Array.isArray(results) ? results : []).slice(0, 8).map((item, index) =>
+    `[${index + 1}] ${item.title}\nURL: ${item.url}\nФрагмент: ${item.content}`
+  ).join('\n\n');
+  if (!compact) return 'Поиск не вернул подходящих результатов.';
+
+  const prompt = `Ты — My AI Unified. Пользователь попросил найти актуальную информацию в интернете. Ниже переданы результаты поиска. Сформируй нормальный человеческий ответ на русском языке, а не технический JSON. Используй только информацию из переданных результатов и не выдумывай факты. Если источники противоречат друг другу или данных недостаточно, прямо скажи об этом. Для важных утверждений указывай номер источника в квадратных скобках, например [1]. В конце добавь короткий раздел «Источники» со списком использованных источников в формате [1] Название — URL. Не говори, что ты сам открыл сайты или проверил то, чего нет в результатах поиска.\n\nЗапрос пользователя: ${query}\nРегион: ${location}\n\nРезультаты поиска:\n${compact}`;
+
+  return callParalon([{ role: 'user', content: prompt }]);
+}
+
 async function searchShopping(query, location = 'Россия', mode = 'find') {
   if (!configured('serper')) {
     const error = new Error('SERPER_API_KEY is not configured');
@@ -162,7 +173,11 @@ app.post('/chat', async (req, res) => {
     if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
     if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(userPrompt, location, 'find') });
-    if (route === 'web_search') return res.json({ ok: true, route, results: await searchWeb(userPrompt, location) });
+    if (route === 'web_search') {
+      const results = await searchWeb(userPrompt, location);
+      const result = await answerFromSearch(userPrompt, results, location);
+      return res.json({ ok: true, route, result, sources: results.slice(0, 8).map(item => ({ title: item.title, url: item.url })) , model: PARALON_MODEL });
+    }
     if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
     if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
     if (route === 'documents') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю документов.' });
