@@ -25,11 +25,35 @@ function configured(name) {
   return false;
 }
 
+function textFromMessages(messages) {
+  const last = [...messages].reverse().find(m => m && m.role === 'user');
+  if (!last) return '';
+  if (typeof last.content === 'string') return last.content;
+  if (Array.isArray(last.content)) {
+    return last.content.filter(x => x?.type === 'text').map(x => x.text || '').join('\n');
+  }
+  return String(last.content || '');
+}
+
+async function callEmergencyTextFallback(messages) {
+  const prompt = textFromMessages(messages);
+  if (!prompt) throw Object.assign(new Error('Пустой запрос'), { status: 400 });
+  const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai`;
+  const response = await fetch(url, { method: 'GET', headers: { Accept: 'text/plain' } });
+  const text = await response.text();
+  if (!response.ok || !text.trim()) {
+    const error = new Error('Emergency AI fallback failed');
+    error.status = response.status || 502;
+    error.details = text.slice(0, 500);
+    throw error;
+  }
+  return text.trim();
+}
+
 async function callParalon(messages) {
   if (!configured('paralon')) {
-    const error = new Error('PARALON_API_KEY is not configured');
-    error.status = 503;
-    throw error;
+    console.warn('PARALON_API_KEY missing; using emergency text AI fallback');
+    return callEmergencyTextFallback(messages);
   }
   const response = await fetch(`${PARALON_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -119,7 +143,7 @@ async function analyzeVideo(images) {
 }
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), serper: configured('serper'), video: true }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') }) });
+  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), paralon_fallback: true, serper: configured('serper'), video: true }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') }) });
 });
 
 app.post('/chat', async (req, res) => {
@@ -134,7 +158,7 @@ app.post('/chat', async (req, res) => {
     if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
     if (route === 'documents') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю документов.' });
     if (route !== 'chat') return res.json({ ok: true, route, status: 'routed', message: `Задача передана модулю: ${route}.` });
-    res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
+    res.json({ ok: true, route, result: await callParalon(chatMessages), model: configured('paralon') ? PARALON_MODEL : 'emergency-text-fallback' });
   } catch (error) {
     console.error('CHAT ERROR:', error);
     res.status(error.status || 500).json({ ok: false, error: error.message || 'AI request failed', details: error.details || undefined });
@@ -146,6 +170,7 @@ app.post('/photo', async (req, res) => {
     const { prompt = 'Опиши изображение подробно.', image, images } = req.body || {};
     const inputImages = Array.isArray(images) ? images : (image ? [image] : []);
     if (!inputImages.length) return res.status(400).json({ ok: false, error: 'image or images is required' });
+    if (!configured('paralon')) return res.status(503).json({ ok: false, error: 'Для анализа фото сейчас нужен основной AI-ключ Paralon; аварийный текстовый режим работает для обычного чата.' });
     const content = [{ type: 'text', text: prompt }];
     for (const item of inputImages) {
       const imageData = String(item).startsWith('data:') ? item : `data:image/jpeg;base64,${item}`;
@@ -202,4 +227,4 @@ if (!process.env.VERCEL) {
 
 module.exports = app;
 
-// Vercel redeploy checkpoint: environment variables are configured in the project.
+// Vercel redeploy checkpoint: emergency text fallback added while Paralon env access is repaired.
