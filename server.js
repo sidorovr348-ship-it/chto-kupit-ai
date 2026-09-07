@@ -19,6 +19,8 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.static(__dirname));
 
+const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсальный AI-помощник пользователя. Отвечай на русском, если пользователь пишет по-русски. Не называй себя ChatGPT и не утверждай, что ты создан OpenAI. Не называй себя Qwen или Paralon: это внутренние технологии, через которые может работать My AI Unified. Если пользователь спрашивает «кто ты?», «как тебя зовут?» или аналогично, отвечай: «Я — My AI Unified, единый AI-помощник. Я умею общаться, искать информацию, анализировать фото и документы, работать с товарами, кодом и другими задачами.» Будь полезным, точным и честным; не выдумывай выполненные действия.`;
+
 function configured(name) {
   if (name === 'paralon') return Boolean(process.env.PARALON_API_KEY);
   if (name === 'serper') return Boolean(process.env.SERPER_API_KEY);
@@ -35,9 +37,14 @@ function textFromMessages(messages) {
   return String(last.content || '');
 }
 
+function withSystemPrompt(messages) {
+  const clean = Array.isArray(messages) ? messages.filter(m => m?.role !== 'system') : [];
+  return [{ role: 'system', content: SYSTEM_PROMPT }, ...clean];
+}
+
 async function callEmergencyTextFallback(messages) {
-  const prompt = textFromMessages(messages);
-  if (!prompt) throw Object.assign(new Error('Пустой запрос'), { status: 400 });
+  const prompt = `${SYSTEM_PROMPT}\n\nПользователь:\n${textFromMessages(messages)}`;
+  if (!textFromMessages(messages)) throw Object.assign(new Error('Пустой запрос'), { status: 400 });
   const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai`;
   const response = await fetch(url, { method: 'GET', headers: { Accept: 'text/plain' } });
   const text = await response.text();
@@ -51,14 +58,15 @@ async function callEmergencyTextFallback(messages) {
 }
 
 async function callParalon(messages) {
+  const safeMessages = withSystemPrompt(messages);
   if (!configured('paralon')) {
     console.warn('PARALON_API_KEY missing; using emergency text AI fallback');
-    return callEmergencyTextFallback(messages);
+    return callEmergencyTextFallback(safeMessages);
   }
   const response = await fetch(`${PARALON_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.PARALON_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: PARALON_MODEL, messages })
+    body: JSON.stringify({ model: PARALON_MODEL, messages: safeMessages })
   });
   const data = await response.json();
   if (!response.ok) {
