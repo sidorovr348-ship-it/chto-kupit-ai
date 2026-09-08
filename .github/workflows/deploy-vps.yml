@@ -30,6 +30,18 @@ jobs:
           git fetch origin main
           cp server.js "server.js.before-github-deploy-$(date +%Y%m%d-%H%M%S).bak"
           git checkout origin/main -- server.js src/dispatcher.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server.js')
+          s = p.read_text()
+          if "app.post('/shopping'" not in s:
+              marker = "app.post('/chat',async(req,res)=>"
+              route = "app.post('/shopping',async(req,res)=>{try{const {query='',location='Россия',mode='find'}=req.body||{};if(!String(query).trim())return res.status(400).json({ok:false,error:'query is required'});return res.json({ok:true,route:'shopping',results:await searchShopping(query,location,mode)});}catch(error){console.error('SHOPPING ERROR:',error);res.status(error.status||500).json({ok:false,error:error.message||'Shopping request failed',details:error.details||undefined});}});\n"
+              if marker not in s:
+                  raise SystemExit('CHAT route marker not found')
+              s = s.replace(marker, route + marker, 1)
+              p.write_text(s)
+          PY
           node --check server.js
           npm test
           systemctl restart my-ai-unified.service
