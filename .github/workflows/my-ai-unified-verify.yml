@@ -1,33 +1,11 @@
-name: My AI Unified live verification
+name: My AI Unified live verification (disabled)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  verify-live:
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Verify public API health
-        run: |
-          set -e
-          curl --fail --silent --show-error --max-time 30 https://ai.aliceq.ru/health
-      - name: Verify ordinary chat
-        run: |
-          set -e
-          body='{"prompt":"Ответь одним словом: работает"}'
-          curl --fail --silent --show-error --max-time 90 \
-            -X POST https://ai.aliceq.ru/chat \
-            -H 'Content-Type: application/json' \
-            --data-raw "$body" | tee /tmp/chat.json
-          grep -q '"ok":true' /tmp/chat.json
-      - name: Verify shopping routing
-        run: |
-          set -e
-          body='{"prompt":"Найди iPhone 18 Pro бордовый в Москве, где дешевле и есть в наличии"}'
-          curl --fail --silent --show-error --max-time 90 \
-            -X POST https://ai.aliceq.ru/chat \
-            -H 'Content-Type: application/json' \
-            --data-raw "$body" | tee /tmp/shopping.json
-          grep -q '"route":"shopping"' /tmp/shopping.json
+      - run: echo 'Disabled: public verification is performed only by the canonical full-chain repair workflow.'
