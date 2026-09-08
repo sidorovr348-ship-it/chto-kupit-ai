@@ -14,9 +14,6 @@ permissions:
   pages: write
   id-token: write
 
-environment:
-  name: github-pages
-
 jobs:
   repair:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Update verified Quick Tunnel locator'
