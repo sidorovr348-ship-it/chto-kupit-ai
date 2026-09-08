@@ -1,6 +1,6 @@
 # My AI Unified — GLOBAL PROJECT STATE
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ## Purpose
 Mobile-first unified AI assistant. Frontend on GitHub Pages; backend on VPS. Target capabilities: chat, vision/photo, image generation, video, web search, documents, tables, shopping, voice, code, verification. Quality and reliability in Russia are priorities.
@@ -32,35 +32,53 @@ Before tunnel restart: truncate the log so an old hostname cannot be reused.
 Named tunnel alice-ai / ai.aliceq.ru exists, but Safari previously reported an HTTPS trust/secure-connection problem. Do NOT make it the user-facing API unless TLS is independently verified fixed.
 
 ## Frontend stabilization
-app-fixed.html is the resilient frontend version (2026-09-08-6).
-It includes local commands for greetings, identity, Moscow time/date and UI commands. Moscow time MUST be computed locally with Intl.DateTimeFormat using Europe/Moscow and MUST NOT depend on the API.
+app-fixed.html is the resilient frontend version, upgraded in the autonomous release.
+It now sends normal text tasks through the central /chat Dispatcher instead of duplicating shopping/web routing in the browser.
+It supports chat, voice input, photo, video, text/PDF/DOCX/CSV/TSV/XLSX file input, image-generation responses and shopping result rendering.
 API discovery uses ./api.json?t=Date.now() with no-cache and a validated trycloudflare.com URL; fallback is the last verified Quick Tunnel URL.
-GET health timeout: 15s. POST timeout: 90s.
-Current frontend routes: /chat, /shopping, /photo.
-PDF is still explicitly not connected; do not claim full document support until implemented.
+GET health timeout: 15s. POST timeout: 90s; video/document operations use a longer client timeout.
+Moscow time MUST be computed locally with Intl.DateTimeFormat using Europe/Moscow and MUST NOT depend on the API.
 
-## Known historical regressions found and fixed
-1. Moscow-time local fallback was lost/regressed. Historical fix commit: a5852a974d3ff49d241d22e400cedb2d1c7f87d0.
-2. Frontend timeout was increased 30s -> 75s in historical fix 76bc630bb9913a82a6cfbd8a97c4eda708d3a2a; later regressed to 30s. app-fixed uses 90s.
-3. API fallback chain existed in cba2243ed30234438ed4cdc00fa9162f3aae5b73. Current app uses dynamic api.json + verified tunnel fallback; broader fallback may still be worth restoring after verifying candidates.
-4. Duplicate deployment workflows could race. pages.yml was disabled. deploy-vps.yml was changed to manual-only.
-5. Canonical repair workflow was rewritten with concurrency protection and retry logic.
-6. Cloudflare Quick Tunnel public health previously hit HTTP 429; canonical workflow now retries aggressively.
+## Autonomous release 2026-09-09
+The project was independently hardened and merged to main.
 
-## Canonical workflow
-.github/workflows/repair-my-ai-tunnel.yml is the intended single owner of public chain repair/deployment.
-Canonical rewrite commit: de04f954aa49da69c8119f64755a4156d2c2a3f7.
-It has concurrency group my-ai-unified-canonical with cancel-in-progress=true; checks local backend, local chat/shopping/CORS, rebuilds Quick Tunnel, discovers fresh hostname, retries public health/chat/shopping, writes api.json, points index.html to app-fixed.html, commits the verified locator, deploys Pages, then verifies Pages.
-Generated commit message: Update verified Quick Tunnel locator.
-Do not claim this workflow completed unless its generated commit or workflow run is actually verified.
+Implemented:
+- Central Dispatcher routing for vision, image_generation, documents, tables, video, shopping, web_search, code, verification and chat.
+- Fixed image-generation routing priority so «сделай картинку» does not get misclassified as vision.
+- Added local document/table extraction helpers for TXT/MD/JSON/XML/HTML/CSV/TSV/PDF/DOCX/XLSX.
+- Added /document, /table and /image backend endpoints.
+- Improved video frame extraction using ffprobe-derived duration and three proportional frames instead of fixed timestamps.
+- Improved shopping price parsing and cheaper-mode sorting.
+- Added dispatcher and document extraction regression tests.
+- Added controlled backend deployment workflow: .github/workflows/deploy-unified-backend.yml.
+- Backend deployment workflow successfully restarted my-ai-unified.service and passed health verification on VPS.
+- Canonical tunnel workflow successfully rebuilt Quick Tunnel, verified local/public chat and shopping, deployed GitHub Pages, and verified the public Pages artifact.
+- Pages deployment now publishes only frontend files (index.html, app-fixed.html, api.json and optional favicon/manifest), not backend source or repository backups.
+
+Current verified public API locator in api.json at the time of this checkpoint:
+https://financing-craft-foundations-referral.trycloudflare.com
+
+Verification evidence:
+- CI run for autonomous release: success.
+- Backend deployment run #2: success.
+- Canonical Verify My AI Unified tunnel run #40: success, including Deploy GitHub Pages and Verify Pages deployment.
+
+## Known limitations after this release
+- The public Quick Tunnel hostname remains temporary/dynamic and can change after restart; api.json is therefore generated by the canonical workflow.
+- PDF/DOCX/XLSX extraction is implemented and deployed, but these new document/table endpoints have not yet had dedicated public end-to-end test cases in the canonical workflow. Do not call them fully verified until such tests are added and passed.
+- Vision/video still depend on the configured multimodal Paralon path; the emergency text fallback is intentionally not advertised as a vision fallback.
+- Image generation currently returns a Pollinations image URL; the external generator itself is not part of the VPS health check.
+- Alice/«Мой AI» integration remains separate and intentionally untouched by this release.
 
 ## Disabled/controlled workflows
 pages.yml: disabled duplicate.
-deploy-vps.yml: manual-only; no longer auto-runs on every push.
+deploy-vps.yml: manual-only.
 repair-quick-tunnel.yml: disabled duplicate.
 repair-cloudflare.yml: disabled duplicate.
 my-ai-unified-verify.yml: disabled duplicate.
 ci.yml remains normal CI and is not a deployment owner.
+repair-my-ai-tunnel.yml is the canonical public-chain owner.
+deploy-unified-backend.yml is the canonical backend-code deployment owner.
 
 ## Critical truthfulness rules
 Always distinguish:
@@ -71,19 +89,9 @@ D) known remaining limitations.
 Never say everything is fixed until all relevant layers are actually verified.
 No system can guarantee every future error; eliminate known failure modes and add monitoring/self-healing where practical.
 
-## Historical app/search details
-Shopping integrations tested: Wildberries, AliExpress, Yandex Market, Ozon, DNS.
-Historical shopping bug: Wildberries price extraction could turn 595 ₽ into 1; links could arrive as Markdown URLs. These were fixed in the old shopping API work; verify current implementation before claiming.
-
-## Historical infrastructure notes
-Cloudflare named tunnel alice-ai: ID 536ea937-55d5-4b46-ad52-2fe55750bd9f; domain aliceq.ru; hostname ai.aliceq.ru.
-Alice server historically lived at /root/alice-ai on ports 3010/3011 and exposed /alice; separate from main My AI Unified backend.
-
 ## Next work priority
-1. Verify canonical workflow completion and resulting index.html/api.json.
-2. Verify the public Pages app and local Moscow-time command without API dependence.
-3. Verify chat, shopping, photo end-to-end from the public Pages path.
-4. Audit backend deployment ownership; if desired, build a single controlled backend deploy path rather than reintroducing competing auto-deploy workflows.
-5. Restore a verified multi-endpoint API fallback only where endpoints are actually functional and TLS-safe.
-6. Implement PDF/document handling if full document capability is required.
-7. Add further self-healing/monitoring only after the single canonical chain is stable.
+1. Add dedicated canonical smoke tests for /document, /table, /image and /video.
+2. Verify those capabilities through the public Pages path.
+3. Audit Alice/«Мой AI» adapter integration without replacing the existing published skill.
+4. Add a stable public API path if/when a TLS-safe fixed endpoint is available; keep Quick Tunnel fallback.
+5. Continue App Store / Google Play packaging only after the web chain is stable.
