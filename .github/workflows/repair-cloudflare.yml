@@ -1,6 +1,8 @@
 name: Repair Cloudflare tunnel
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
