@@ -1,0 +1,61 @@
+name: Deploy My AI Unified backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server.js'
+      - 'src/**'
+      - 'supervisor.js'
+      - 'supervisor-daemon.js'
+      - 'package.json'
+      - '.github/workflows/deploy-unified-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy changed backend files to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' '${{ secrets.VPS_SSH_KEY }}' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /root/my-ai-unified
+          stamp=$(date +%Y%m%d-%H%M%S)
+          cp -f server.js "server.js.backup-autonomous-$stamp" || true
+          mkdir -p src
+          base='https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main'
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/server.js" -o server.js
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/dispatcher.js" -o src/dispatcher.js
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/capabilities.json" -o src/capabilities.json
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/document-tools.js" -o src/document-tools.js
+          node --check server.js
+          node --check src/dispatcher.js
+          node --check src/document-tools.js
+          systemctl restart my-ai-unified.service
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/my-ai-health.json 2>/dev/null; then break; fi
+            [ "$i" = 45 ] && { systemctl status my-ai-unified.service --no-pager || true; journalctl -u my-ai-unified.service -n 80 --no-pager || true; exit 1; }
+            sleep 2
+          done
+          cat /tmp/my-ai-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/my-ai-health.json'))
+          assert j.get('ok') is True, j
+          assert j.get('dispatcher') is True, j
+          for x in ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification']:
+              assert x in j.get('capabilities',[]), x
+          PY
+          REMOTE
