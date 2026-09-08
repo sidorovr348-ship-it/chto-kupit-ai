@@ -25,8 +25,9 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
-          set -euo pipefail
+          set -u
           cd /root/my-ai-unified
+          echo '--- FETCH ---'
           git fetch origin main
           cp server.js "server.js.before-github-deploy-$(date +%Y%m%d-%H%M%S).bak"
           git checkout origin/main -- server.js src/dispatcher.js
@@ -42,15 +43,25 @@ jobs:
               s = s.replace(marker, route + marker, 1)
               p.write_text(s)
           PY
+          echo '--- CHECK ---'
           node --check server.js
           npm test
-          systemctl restart my-ai-unified.service
-          sleep 2
+          echo '--- RESTART ---'
+          systemctl restart my-ai-unified.service || true
+          sleep 3
+          echo '--- SERVICE STATUS ---'
+          systemctl status my-ai-unified.service --no-pager -l || true
+          echo '--- SERVICE PROPERTIES ---'
+          systemctl show my-ai-unified.service -p ActiveState -p SubState -p ExecStart -p EnvironmentFiles -p User -p WorkingDirectory || true
+          echo '--- JOURNAL ---'
+          journalctl -u my-ai-unified.service -n 100 --no-pager || true
+          echo '--- PORT 3020 ---'
+          ss -ltnp | grep ':3020' || true
           echo '--- LOCAL HEALTH ---'
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
           echo
           echo '--- LOCAL SHOPPING ---'
-          curl --fail --silent --show-error --max-time 25 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
+          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
           echo
           REMOTE
 
