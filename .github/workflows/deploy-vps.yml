@@ -45,10 +45,27 @@ jobs:
           node --check server.js
           npm test
           systemctl restart my-ai-unified.service
-          if command -v cloudflared >/dev/null 2>&1; then
-            cloudflared tunnel route dns alice-ai ai.aliceq.ru || true
-            systemctl restart chto-kupit-cloudflared.service || systemctl restart cloudflared.service || true
+          if systemctl list-unit-files | grep -q '^chto-kupit-cloudflared.service'; then
+            systemctl restart chto-kupit-cloudflared.service
+            echo '--- CLOUDFLARED STATUS ---'
+            systemctl is-active chto-kupit-cloudflared.service
+            systemctl --no-pager -l status chto-kupit-cloudflared.service | tail -40
+          elif systemctl list-unit-files | grep -q '^cloudflared.service'; then
+            systemctl restart cloudflared.service
+            echo '--- CLOUDFLARED STATUS ---'
+            systemctl is-active cloudflared.service
+            systemctl --no-pager -l status cloudflared.service | tail -40
+          else
+            echo 'Cloudflared systemd service not found'
+            exit 1
           fi
           sleep 3
+          echo '--- LOCAL HEALTH ---'
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
           REMOTE
+
+      - name: Verify public API
+        run: |
+          set -euo pipefail
+          echo '--- PUBLIC HEALTH ---'
+          curl --fail --silent --show-error --max-time 20 https://ai.aliceq.ru/health
