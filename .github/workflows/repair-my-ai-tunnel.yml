@@ -30,6 +30,20 @@ jobs:
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
+          echo '=== WAIT FOR UNIFIED BACKEND ==='
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/local-health.json 2>/dev/null; then
+              cat /tmp/local-health.json
+              break
+            fi
+            if [ "$i" = 60 ]; then
+              echo 'UNIFIED_BACKEND_NOT_READY'
+              systemctl status my-ai-unified.service --no-pager || true
+              journalctl -u my-ai-unified.service -n 80 --no-pager || true
+              exit 1
+            fi
+            sleep 2
+          done
           test -x /usr/local/bin/cloudflared
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
           [Unit]
@@ -51,16 +65,24 @@ jobs:
           systemctl daemon-reload
           systemctl enable my-ai-unified-quick-tunnel.service
           systemctl restart my-ai-unified-quick-tunnel.service
-          sleep 10
+          sleep 8
           url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
           if [ -z "$url" ]; then
             echo 'QUICK_TUNNEL_URL_NOT_FOUND'
-            tail -80 /var/log/my-ai-unified-quick-tunnel.log || true
+            tail -100 /var/log/my-ai-unified-quick-tunnel.log || true
             exit 1
           fi
           echo "QUICK_TUNNEL_URL=$url"
-          curl --fail --silent --show-error --max-time 20 "$url/health?t=quick-restore"
-          echo
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$url/health?t=quick-restore"; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'QUICK_TUNNEL_HEALTH_FAILED'
+          tail -100 /var/log/my-ai-unified-quick-tunnel.log || true
+          exit 1
           REMOTE
           url=$(grep '^QUICK_TUNNEL_URL=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
