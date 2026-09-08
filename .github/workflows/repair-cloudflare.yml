@@ -1,43 +1,11 @@
-name: Repair Cloudflare tunnel
+name: Repair Cloudflare tunnel (disabled)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  repair:
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Repair and verify tunnel
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
-          set -u
-          echo '=== CLOUDFLARED SERVICES ==='
-          systemctl list-units --type=service --all | grep -i cloudflared || true
-          echo '=== TUNNEL INFO ==='
-          cloudflared tunnel info alice-ai || true
-          echo '=== DNS ROUTE REPAIR ==='
-          cloudflared tunnel route dns alice-ai ai.aliceq.ru || true
-          echo '=== TUNNEL CONFIG ==='
-          cloudflared tunnel ingress validate --config /etc/cloudflared/config.yml || true
-          echo '=== RESTART TUNNEL ==='
-          systemctl restart cloudflared 2>/dev/null || systemctl restart cloudflared.service 2>/dev/null || true
-          sleep 8
-          echo '=== LOCAL APP ==='
-          curl -fsS --max-time 10 http://127.0.0.1:3020/health || true
-          echo
-          REMOTE
-          echo '=== PUBLIC HTTPS ==='
-          curl -vkI --max-time 20 https://ai.aliceq.ru/health || true
-          echo '=== CERTIFICATE ==='
-          echo | openssl s_client -connect ai.aliceq.ru:443 -servername ai.aliceq.ru 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName || true
+      - run: echo 'Disabled: My AI Unified uses only the canonical Quick Tunnel repair workflow.'
