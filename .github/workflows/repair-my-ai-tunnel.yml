@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: my-ai-unified-canonical
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pages: write
@@ -12,7 +16,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Restore proven Quick Tunnel frontend path'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Update verified Quick Tunnel locator'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -29,7 +33,6 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
-
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
           echo '=== 1. BACKEND SERVICE ==='
@@ -83,7 +86,6 @@ jobs:
           systemctl daemon-reload
           systemctl enable my-ai-unified-quick-tunnel.service
           systemctl restart my-ai-unified-quick-tunnel.service
-
           url=''
           for i in $(seq 1 45); do
             url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
@@ -112,40 +114,33 @@ jobs:
           cat /tmp/public-chat.json
           curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-all-errors --max-time 60 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
           cat /tmp/public-shopping.json | head -c 12000; echo
-
           systemctl is-active my-ai-unified-quick-tunnel.service
           echo "FULL_CHAIN_OK=$url"
           REMOTE
-
           url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
           printf '%s' "$url" > /tmp/quick-url
           echo "Verified public API: $url"
 
-      - name: Bind frontend to the verified API
+      - name: Bind the resilient frontend to the verified API
         run: |
           set -euo pipefail
           url=$(cat /tmp/quick-url)
           python3 - "$url" <<'PY'
-          import pathlib,re,sys,json
+          import pathlib,sys,json
           url=sys.argv[1].rstrip('/')
-          p=pathlib.Path('app.html')
-          s=p.read_text()
-          s2=re.sub(r"const API='https://[^']+'", "const API='"+url+"'", s, count=1)
-          if s2==s: raise SystemExit('API constant not found in app.html')
-          p.write_text(s2)
           pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain'},ensure_ascii=False,indent=2)+'\n')
-          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=full-chain-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=full-chain-verified">Открыть приложение</a></p></body></html>\n''')
+          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260908-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260908-6">Открыть приложение</a></p></body></html>\n''')
           PY
 
-      - name: Commit verified frontend and API locator
+      - name: Commit verified frontend locator
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.html index.html api.json
+          git add index.html api.json
           git diff --cached --quiet && exit 0
-          git commit -m 'Restore proven Quick Tunnel frontend path'
+          git commit -m 'Update verified Quick Tunnel locator'
           git push
 
       - name: Deploy GitHub Pages
@@ -163,5 +158,5 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --max-time 20 "$URL"
-          curl --fail --silent --show-error --max-time 20 "${URL}app.html?v=full-chain-verified" | grep -q 'FULL_CHAIN_PLACEHOLDER_DO_NOT_USE' && exit 1 || true
+          curl --fail --silent --show-error --max-time 20 "${URL}app-fixed.html?v=verify" | grep -q 'My AI Unified'
           echo "PAGES_OK=$URL"
