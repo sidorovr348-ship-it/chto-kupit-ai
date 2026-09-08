@@ -45,37 +45,21 @@ jobs:
           node --check server.js
           npm test
           systemctl restart my-ai-unified.service
-          if systemctl list-unit-files | grep -q '^chto-kupit-cloudflared.service'; then
-            systemctl restart chto-kupit-cloudflared.service
-            CF_SERVICE=chto-kupit-cloudflared.service
-          elif systemctl list-unit-files | grep -q '^cloudflared.service'; then
-            systemctl restart cloudflared.service
-            CF_SERVICE=cloudflared.service
-          else
-            echo 'Cloudflared systemd service not found'
-            exit 1
-          fi
-          echo "--- CLOUDFLARED SERVICE: $CF_SERVICE ---"
-          systemctl is-active "$CF_SERVICE"
-          systemctl --no-pager -l status "$CF_SERVICE" | tail -50
-          echo '--- CLOUDFLARED JOURNAL ---'
-          journalctl -u "$CF_SERVICE" -n 80 --no-pager || true
-          echo '--- CLOUDFLARED EXECSTART ---'
-          systemctl show -p ExecStart "$CF_SERVICE" || true
-          echo '--- CLOUDFLARED CONFIG ---'
-          ls -la /etc/cloudflared || true
-          grep -E '^(tunnel|credentials-file|hostname|service|ingress):' /etc/cloudflared/config.yml 2>/dev/null || true
-          echo '--- TUNNEL LIST ---'
-          cloudflared tunnel list 2>&1 || true
-          echo '--- TUNNEL INFO ---'
-          cloudflared tunnel info alice-ai 2>&1 || true
-          sleep 3
+          sleep 2
           echo '--- LOCAL HEALTH ---'
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
+          echo
+          echo '--- LOCAL SHOPPING ---'
+          curl --fail --silent --show-error --max-time 25 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
+          echo
           REMOTE
 
       - name: Verify public API
         run: |
           set -euo pipefail
           echo '--- PUBLIC HEALTH ---'
-          curl --fail --silent --show-error --max-time 20 https://ai.aliceq.ru/health
+          curl --fail --silent --show-error --max-time 20 'https://ai.aliceq.ru/health?t=deploy'
+          echo
+          echo '--- PUBLIC SHOPPING ---'
+          curl --fail --silent --show-error --max-time 30 -X POST 'https://ai.aliceq.ru/shopping' -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
+          echo
