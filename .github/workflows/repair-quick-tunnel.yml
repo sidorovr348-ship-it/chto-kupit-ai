@@ -17,7 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Restore proven Quick Tunnel on VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -27,7 +26,7 @@ jobs:
           set -euo pipefail
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed19
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
@@ -63,11 +62,9 @@ jobs:
           curl --fail --silent --show-error --max-time 20 "$url/health?t=quick-restore"
           echo
           REMOTE
-
           url=$(grep '^QUICK_TUNNEL_URL=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
           printf '%s' "$url" > /tmp/quick-url
-
       - name: Point frontend to the proven tunnel
         run: |
           set -euo pipefail
@@ -78,12 +75,10 @@ jobs:
           p=pathlib.Path('app.html')
           s=p.read_text()
           s2=re.sub(r"const API='https://[^']+'", "const API='"+url+"'", s, count=1)
-          if s2==s:
-              raise SystemExit('API constant not found in app.html')
+          if s2==s: raise SystemExit('API constant not found in app.html')
           p.write_text(s2)
           pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=quick-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=quick-verified">Открыть приложение</a></p></body></html>\n''')
           PY
-
       - name: Commit restored proven frontend
         run: |
           set -euo pipefail
@@ -93,7 +88,6 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m 'Restore proven Quick Tunnel frontend path'
           git push
-
       - name: Deploy GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -103,7 +97,6 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
       - name: Final HTTPS/API verification
         env:
           URL: ${{ steps.deployment.outputs.page_url }}
