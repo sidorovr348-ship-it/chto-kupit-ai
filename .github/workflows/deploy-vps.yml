@@ -31,6 +31,9 @@ jobs:
           git fetch origin main
           cp server.js "server.js.before-github-deploy-$(date +%Y%m%d-%H%M%S).bak"
           git checkout origin/main -- server.js src/dispatcher.js
+          echo '--- FRONTEND SYNC TO BACKEND ---'
+          curl --fail --silent --show-error --max-time 20 https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main/index.html -o index.html
+          curl --fail --silent --show-error --max-time 20 https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main/app.html -o app.html
           python3 - <<'PY'
           from pathlib import Path
           p = Path('server.js')
@@ -60,17 +63,23 @@ jobs:
           echo '--- LOCAL HEALTH ---'
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
           echo
+          echo '--- LOCAL FRONTEND ---'
+          curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/app.html?v=verify | grep -q 'My AI Unified'
+          echo 'frontend-ok'
           echo '--- LOCAL SHOPPING ---'
           curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
           echo
           REMOTE
 
-      - name: Verify public API
+      - name: Verify public API and frontend
         run: |
           set -euo pipefail
           echo '--- PUBLIC HEALTH ---'
           curl --fail --silent --show-error --max-time 20 'https://ai.aliceq.ru/health?t=deploy'
           echo
+          echo '--- PUBLIC FRONTEND ---'
+          curl --fail --silent --show-error --max-time 20 'https://ai.aliceq.ru/app.html?v=verify' | grep -q 'My AI Unified'
+          echo 'frontend-ok'
           echo '--- PUBLIC SHOPPING ---'
           curl --fail --silent --show-error --max-time 30 -X POST 'https://ai.aliceq.ru/shopping' -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
           echo
