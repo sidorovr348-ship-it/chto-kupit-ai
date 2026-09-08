@@ -87,7 +87,7 @@ async function searchWeb(query, location = 'Россия') {
   const response = await fetch('https://google.serper.dev/search', {
     method: 'POST',
     headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ q: `${query} ${location}`, gl: 'ru', hl: 'ru', num: 10 })
+    body: JSON.stringify({ q: `${query} ${location}`, gl: 'ru', hl: 'ru', num: 6 })
   });
   const data = await response.json();
   if (!response.ok) {
@@ -96,18 +96,32 @@ async function searchWeb(query, location = 'Россия') {
     error.details = data;
     throw error;
   }
-  return Array.isArray(data.organic) ? data.organic.slice(0, 10).map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' })) : [];
+  return Array.isArray(data.organic) ? data.organic.slice(0, 6).map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' })) : [];
+}
+
+function fallbackSearchAnswer(results) {
+  const items = (Array.isArray(results) ? results : []).filter(x => x?.title || x?.content).slice(0, 5);
+  if (!items.length) return 'Поиск не вернул подходящих результатов.';
+  return `Вот что нашёл в интернете:\n\n${items.map((item, index) => {
+    const title = item.title || 'Источник';
+    const snippet = item.content || 'Без описания.';
+    const url = item.url || '';
+    return `${index + 1}. ${title}\n${snippet}${url ? `\nИсточник: ${url}` : ''}`;
+  }).join('\n\n')}`;
 }
 
 async function answerFromSearch(query, results, location = 'Россия') {
-  const compact = (Array.isArray(results) ? results : []).slice(0, 8).map((item, index) =>
+  const items = (Array.isArray(results) ? results : []).slice(0, 5);
+  const compact = items.map((item, index) =>
     `[${index + 1}] ${item.title}\nURL: ${item.url}\nФрагмент: ${item.content}`
   ).join('\n\n');
   if (!compact) return 'Поиск не вернул подходящих результатов.';
 
-  const prompt = `Ты — My AI Unified. Пользователь попросил найти актуальную информацию в интернете. Ниже переданы результаты поиска. Сформируй нормальный человеческий ответ на русском языке, а не технический JSON. Используй только информацию из переданных результатов и не выдумывай факты. Если источники противоречат друг другу или данных недостаточно, прямо скажи об этом. Для важных утверждений указывай номер источника в квадратных скобках, например [1]. В конце добавь короткий раздел «Источники» со списком использованных источников в формате [1] Название — URL. Не говори, что ты сам открыл сайты или проверил то, чего нет в результатах поиска.\n\nЗапрос пользователя: ${query}\nРегион: ${location}\n\nРезультаты поиска:\n${compact}`;
+  const prompt = `Ты — My AI Unified. Кратко и по делу ответь пользователю на русском языке по результатам интернет-поиска ниже. Не выдумывай факты. Используй только эти результаты. Для важных утверждений ставь [номер источника]. В конце дай «Источники» и только использованные номера с названиями и URL. Не пиши технический JSON.\n\nЗапрос: ${query}\nРегион: ${location}\n\n${compact}`;
 
-  return callParalon([{ role: 'user', content: prompt }]);
+  const timeout = new Promise(resolve => setTimeout(() => resolve(null), 12000));
+  const synthesized = await Promise.race([callParalon([{ role: 'user', content: prompt }]), timeout]);
+  return synthesized && String(synthesized).trim() ? String(synthesized).trim() : fallbackSearchAnswer(results);
 }
 
 async function searchShopping(query, location = 'Россия', mode = 'find') {
@@ -176,7 +190,7 @@ app.post('/chat', async (req, res) => {
     if (route === 'web_search') {
       const results = await searchWeb(userPrompt, location);
       const result = await answerFromSearch(userPrompt, results, location);
-      return res.json({ ok: true, route, result, sources: results.slice(0, 8).map(item => ({ title: item.title, url: item.url })) , model: PARALON_MODEL });
+      return res.json({ ok: true, route, result, sources: results.slice(0, 6).map(item => ({ title: item.title, url: item.url })) , model: PARALON_MODEL });
     }
     if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL });
     if (route === 'video') return res.json({ ok: true, route, status: 'routed', message: 'Задача передана модулю видео.' });
