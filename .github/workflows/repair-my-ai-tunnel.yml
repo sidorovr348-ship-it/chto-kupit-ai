@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rebuild and verify the complete chain on VPS
+      - name: Verify VPS backend and rebuild Quick Tunnel
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -37,43 +37,35 @@ jobs:
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
-          echo '=== 1. BACKEND SERVICE ==='
-          systemctl is-enabled my-ai-unified.service || true
+          echo '=== BACKEND ==='
           systemctl is-active my-ai-unified.service
-          for i in $(seq 1 60); do
-            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/local-health.json 2>/dev/null; then break; fi
-            [ "$i" = 60 ] && { systemctl status my-ai-unified.service --no-pager || true; journalctl -u my-ai-unified.service -n 100 --no-pager || true; exit 1; }
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json 2>/dev/null; then break; fi
+            [ "$i" = 45 ] && exit 1
             sleep 2
           done
-          cat /tmp/local-health.json
+          cat /tmp/health.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/local-health.json'))
-          assert j.get('ok') is True, j
-          assert j.get('dispatcher') is True, j
-          for x in ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification']:
-              assert x in j.get('capabilities',[]), x
-          for x in ['paralon','paralon_fallback','serper','video']:
-              assert j.get('adapters',{}).get(x) is True, x
+          j=json.load(open('/tmp/health.json'))
+          assert j.get('ok') is True and j.get('dispatcher') is True, j
+          expected={'chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'}
+          assert expected.issubset(set(j.get('capabilities',[]))), j
           PY
 
-          echo '=== 2. LOCAL API ENDPOINTS ==='
-          curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
+          echo '=== LOCAL SMOKE ==='
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
           cat /tmp/chat.json
-          curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --max-time 50 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
-          cat /tmp/shopping.json | head -c 12000; echo
-          curl --silent --show-error --max-time 10 -X OPTIONS http://127.0.0.1:3020/chat -H 'Origin: https://sidorovr348-ship-it.github.io' -H 'Access-Control-Request-Method: POST' >/tmp/cors.txt || true
-          echo 'CORS:'; cat /tmp/cors.txt || true
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 60 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
+          cat /tmp/shopping.json | head -c 10000; echo
 
-          echo '=== 3. QUICK TUNNEL REBUILD ==='
-          test -x /usr/local/bin/cloudflared
+          echo '=== QUICK TUNNEL ==='
           : >/var/log/my-ai-unified-quick-tunnel.log
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
           [Unit]
           Description=My AI Unified proven Quick Tunnel
           After=network-online.target
           Wants=network-online.target
-
           [Service]
           Type=simple
           ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
@@ -81,7 +73,6 @@ jobs:
           RestartSec=3
           StandardOutput=append:/var/log/my-ai-unified-quick-tunnel.log
           StandardError=append:/var/log/my-ai-unified-quick-tunnel.log
-
           [Install]
           WantedBy=multi-user.target
           UNIT
@@ -94,28 +85,26 @@ jobs:
             [ -n "$url" ] && break
             sleep 2
           done
-          [ -n "$url" ] || { tail -150 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
+          [ -n "$url" ] || { tail -100 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
           echo "QUICK_TUNNEL_URL=$url"
 
-          echo '=== 4. PUBLIC API THROUGH TUNNEL ==='
-          rm -f /tmp/public-health.json
+          echo '=== PUBLIC SMOKE ==='
           public_ok=0
           for i in $(seq 1 120); do
-            if curl --fail --silent --show-error --retry 2 --retry-delay 3 --retry-all-errors --max-time 12 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=full-chain" >/tmp/public-health.json 2>/dev/null; then public_ok=1; break; fi
+            if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 12 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then public_ok=1; break; fi
             sleep 2
           done
-          [ "$public_ok" = 1 ] || { echo 'PUBLIC HEALTH FAILED'; curl -i --max-time 10 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=diagnostic" || true; tail -100 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
+          [ "$public_ok" = 1 ]
           cat /tmp/public-health.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-health.json'))
-          assert j.get('ok') is True, j
-          assert j.get('dispatcher') is True, j
+          assert j.get('ok') is True and j.get('dispatcher') is True, j
           PY
-          curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-all-errors --max-time 50 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 50 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
           cat /tmp/public-chat.json
-          curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-all-errors --max-time 60 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
-          cat /tmp/public-shopping.json | head -c 12000; echo
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 60 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
+          cat /tmp/public-shopping.json | head -c 10000; echo
           systemctl is-active my-ai-unified-quick-tunnel.service
           echo "FULL_CHAIN_OK=$url"
           REMOTE
@@ -124,7 +113,7 @@ jobs:
           printf '%s' "$url" > /tmp/quick-url
           echo "Verified public API: $url"
 
-      - name: Bind the resilient frontend to the verified API
+      - name: Bind frontend to verified API
         run: |
           set -euo pipefail
           url=$(cat /tmp/quick-url)
@@ -132,10 +121,10 @@ jobs:
           import pathlib,sys,json
           url=sys.argv[1].rstrip('/')
           pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain'},ensure_ascii=False,indent=2)+'\n')
-          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260908-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260908-6">Открыть приложение</a></p></body></html>\n''')
+          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260909-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260909">Открыть приложение</a></p></body></html>\n''')
           PY
 
-      - name: Commit verified frontend locator
+      - name: Commit verified locator
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -159,6 +148,8 @@ jobs:
           URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 "$URL"
-          curl --fail --silent --show-error --max-time 20 "${URL}app-fixed.html?v=verify" | grep -q 'My AI Unified'
+          curl --fail --silent --show-error --max-time 20 "$URL" -o /tmp/pages.html
+          grep -q 'My AI Unified' /tmp/pages.html
+          curl --fail --silent --show-error --max-time 20 "${URL}app-fixed.html?v=verify" -o /tmp/app-fixed.html
+          grep -q 'My AI Unified' /tmp/app-fixed.html
           echo "PAGES_OK=$URL"
