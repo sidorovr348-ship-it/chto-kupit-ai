@@ -1,0 +1,66 @@
+name: My AI Unified capability smoke tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server.js'
+      - 'src/**'
+      - '.github/workflows/capability-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exercise all newly activated backend capabilities
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          base64 -w0 /dev/null >/dev/null
+          python3 - <<'PY'
+          import base64, json, urllib.request
+          def post(path, payload, timeout=120):
+              req=urllib.request.Request('http://127.0.0.1:3020'+path, data=json.dumps(payload).encode(), headers={'Content-Type':'application/json'}, method='POST')
+              with urllib.request.urlopen(req, timeout=timeout) as r: return json.load(r)
+          text=base64.b64encode('name\nRoman\n'.encode()).decode()
+          j=post('/document', {'filename':'smoke.txt','data':'data:text/plain;base64,'+text,'prompt':'Ответь только OK'})
+          assert j.get('ok') and j.get('route')=='documents' and j.get('result'), j
+          csv=base64.b64encode('name,price\nphone,100\n'.encode()).decode()
+          j=post('/table', {'filename':'smoke.csv','data':'data:text/csv;base64,'+csv,'prompt':'Ответь только OK'})
+          assert j.get('ok') and j.get('route')=='tables' and j.get('result'), j
+          j=post('/image', {'prompt':'minimal blue circle'})
+          assert j.get('ok') and j.get('imageUrl','').startswith('https://image.pollinations.ai/'), j
+          print('document/table/image: OK')
+          PY
+          ffmpeg -y -f lavfi -i color=c=white:s=96x96:d=1 -frames:v 1 /tmp/smoke.jpg >/dev/null 2>&1
+          python3 - <<'PY'
+          import base64, json, urllib.request
+          b=base64.b64encode(open('/tmp/smoke.jpg','rb').read()).decode()
+          req=urllib.request.Request('http://127.0.0.1:3020/photo', data=json.dumps({'image':'data:image/jpeg;base64,'+b,'prompt':'Ответь только OK'}).encode(), headers={'Content-Type':'application/json'}, method='POST')
+          with urllib.request.urlopen(req, timeout=120) as r: j=json.load(r)
+          assert j.get('ok') and j.get('route')=='vision' and j.get('result'), j
+          print('vision: OK')
+          PY
+          ffmpeg -y -f lavfi -i color=c=white:s=96x96:d=1 -pix_fmt yuv420p /tmp/smoke.mp4 >/dev/null 2>&1
+          python3 - <<'PY'
+          import base64, json, urllib.request
+          b=base64.b64encode(open('/tmp/smoke.mp4','rb').read()).decode()
+          req=urllib.request.Request('http://127.0.0.1:3020/video', data=json.dumps({'video':'data:video/mp4;base64,'+b}).encode(), headers={'Content-Type':'application/json'}, method='POST')
+          with urllib.request.urlopen(req, timeout=180) as r: j=json.load(r)
+          assert j.get('ok') and j.get('route')=='video' and j.get('result'), j
+          print('video: OK')
+          PY
+          REMOTE
