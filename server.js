@@ -34,7 +34,70 @@ async function callParalon(messages) { const safeMessages=withSystemPrompt(messa
 async function searchWeb(query,location='Россия') { if(!configured('serper'))throw Object.assign(new Error('SERPER_API_KEY is not configured'),{status:503}); const response=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':process.env.SERPER_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({q:`${query} ${location}`,gl:'ru',hl:'ru',num:6})}); const data=await response.json(); if(!response.ok)throw Object.assign(new Error('Web search failed'),{status:response.status,details:data}); return Array.isArray(data.organic)?data.organic.slice(0,6).map(item=>({title:item.title||'',url:item.link||'',content:item.snippet||''})):[]; }
 function fallbackSearchAnswer(results){const items=(Array.isArray(results)?results:[]).filter(x=>x?.title||x?.content).slice(0,5);if(!items.length)return 'Поиск не вернул подходящих результатов.';return `Вот что нашёл в интернете:\n\n${items.map((x,i)=>`${i+1}. ${x.title||'Источник'}\n${x.content||'Без описания.'}${x.url?`\nИсточник: ${x.url}`:''}`).join('\n\n')}`;}
 async function answerFromSearch(query,results,location='Россия'){const items=(Array.isArray(results)?results:[]).slice(0,5);const compact=items.map((x,i)=>`[${i+1}] ${x.title}\nURL: ${x.url}\nФрагмент: ${x.content}`).join('\n\n');if(!compact)return 'Поиск не вернул подходящих результатов.';const prompt=`Ты — My AI Unified. Кратко и по делу ответь пользователю на русском языке по результатам интернет-поиска ниже. Не выдумывай факты. Используй только эти результаты. Для важных утверждений ставь [номер источника]. В конце дай «Источники» и только использованные номера с названиями и URL. Не пиши технический JSON.\n\nЗапрос: ${query}\nРегион: ${location}\n\n${compact}`;const timeout=new Promise(resolve=>setTimeout(()=>resolve(null),12000));const synthesized=await Promise.race([callParalon([{role:'user',content:prompt}]),timeout]);return synthesized&&String(synthesized).trim()?String(synthesized).trim():fallbackSearchAnswer(results);}
-async function searchShopping(query,location='Россия',mode='find'){if(!configured('serper'))throw Object.assign(new Error('SERPER_API_KEY is not configured'),{status:503});const q=mode==='cheaper'?`${query} аналог дешевле ${location}`:`${query} купить ${location}`;const response=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':process.env.SERPER_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({q,gl:'ru',hl:'ru',num:20})});const data=await response.json();if(!response.ok)throw Object.assign(new Error('Shopping search failed'),{status:response.status,details:data});const allowed=['ozon.ru','wildberries.ru','market.yandex.ru','dns-shop.ru','mvideo.ru','citilink.ru'];return Array.isArray(data.organic)?data.organic.filter(item=>allowed.some(domain=>String(item.link||'').toLowerCase().includes(domain))).slice(0,10).map(item=>({title:item.title||'',url:item.link||'',content:item.snippet||''})):[];}
+
+async function serperRequest(endpoint, body, timeoutMs=15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`https://google.serper.dev/${endpoint}`, {
+      method: 'POST',
+      headers: {'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = {raw:text}; }
+    if (!response.ok) {
+      const error = new Error(`Serper ${endpoint} failed (${response.status})`);
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const e = new Error(`Serper ${endpoint} timeout`);
+      e.status = 504;
+      throw e;
+    }
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+function normalizeShoppingItem(item, index) {
+  const priceText = item.price || item.priceText || '';
+  const priceValue = Number(item.priceValue ?? item.extractedPrice ?? NaN);
+  const source = item.source || item.merchant || '';
+  const link = item.link || item.url || '';
+  return {
+    title: item.title || '',
+    url: link,
+    content: item.snippet || item.content || '',
+    merchant: source,
+    price: priceText,
+    priceValue: Number.isFinite(priceValue) ? priceValue : null,
+    currency: item.currency || 'RUB',
+    availability: item.availability || '',
+    rating: item.rating ?? null,
+    ratingCount: item.ratingCount ?? null,
+    imageUrl: item.imageUrl || item.image || '',
+    position: index + 1
+  };
+}
+
+async function searchShopping(query, location='Россия', mode='find') {
+  if (!configured('serper')) throw Object.assign(new Error('SERPER_API_KEY is not configured'),{status:503});
+  const cleanQuery = String(query).trim();
+  const q = mode === 'cheaper' ? `${cleanQuery} купить дешевле ${location}` : `${cleanQuery} купить ${location}`;
+  const data = await serperRequest('shopping', {q, gl:'ru', hl:'ru', num:20}, 15000);
+  const items = Array.isArray(data.shopping) ? data.shopping : [];
+  const allowed = ['ozon.ru','wildberries.ru','market.yandex.ru','dns-shop.ru','mvideo.ru','citilink.ru','aliexpress.ru','detmir.ru','eldorado.ru','holodilnik.ru','sbermegamarket.ru'];
+  const normalized = items.map(normalizeShoppingItem).filter(x => x.title || x.price || x.merchant);
+  const preferred = normalized.filter(x => allowed.some(domain => String(x.url||'').toLowerCase().includes(domain) || String(x.merchant||'').toLowerCase().includes(domain.replace('.ru',''))));
+  return (preferred.length ? preferred : normalized).slice(0,10);
+}
+
 function runFfmpeg(args){return new Promise((resolve,reject)=>{execFile('ffmpeg',args,{timeout:30000},(error,stdout,stderr)=>{if(error)reject(Object.assign(error,{stderr}));else resolve({stdout,stderr});});});}
 async function extractVideoFrames(inputFile){const stamp=`${Date.now()}-${Math.random().toString(36).slice(2)}`;const frameFiles=[path.join(TEMP_DIR,`frame-${stamp}-1.jpg`),path.join(TEMP_DIR,`frame-${stamp}-2.jpg`)];await Promise.all([runFfmpeg(['-y','-ss','0.6','-i',inputFile,'-frames:v','1','-vf','scale=320:180','-q:v','6',frameFiles[0]]),runFfmpeg(['-y','-ss','5.4','-i',inputFile,'-frames:v','1','-vf','scale=320:180','-q:v','6',frameFiles[1]])]);return frameFiles.filter(file=>fs.existsSync(file));}
 async function analyzeVideo(images){const content=[{type:'text',text:'Проанализируй видео по выбранным кадрам. Опиши, что происходит, какие объекты и действия видны, и укажи важные детали.'}];for(const image of images)content.push({type:'image_url',image_url:{url:image}});return callParalon([{role:'user',content}]);}
