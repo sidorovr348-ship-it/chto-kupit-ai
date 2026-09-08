@@ -17,7 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Restore proven Quick Tunnel and verify API
+
+      - name: Rebuild and verify the complete chain on VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -28,22 +29,38 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
-          echo '=== WAIT FOR UNIFIED BACKEND ==='
+          echo '=== 1. BACKEND SERVICE ==='
+          systemctl is-enabled my-ai-unified.service || true
+          systemctl is-active my-ai-unified.service
           for i in $(seq 1 60); do
-            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/local-health.json 2>/dev/null; then
-              cat /tmp/local-health.json
-              break
-            fi
-            if [ "$i" = 60 ]; then
-              echo 'UNIFIED_BACKEND_NOT_READY'
-              systemctl status my-ai-unified.service --no-pager || true
-              journalctl -u my-ai-unified.service -n 80 --no-pager || true
-              exit 1
-            fi
+            if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/local-health.json 2>/dev/null; then break; fi
+            [ "$i" = 60 ] && { systemctl status my-ai-unified.service --no-pager || true; journalctl -u my-ai-unified.service -n 100 --no-pager || true; exit 1; }
             sleep 2
           done
+          cat /tmp/local-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/local-health.json'))
+          assert j.get('ok') is True, j
+          assert j.get('dispatcher') is True, j
+          for x in ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification']:
+              assert x in j.get('capabilities',[]), x
+          for x in ['paralon','paralon_fallback','serper','video']:
+              assert j.get('adapters',{}).get(x) is True, x
+          PY
+
+          echo '=== 2. LOCAL API ENDPOINTS ==='
+          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
+          cat /tmp/chat.json
+          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
+          cat /tmp/shopping.json | head -c 12000; echo
+          curl -fsS --max-time 10 -X OPTIONS http://127.0.0.1:3020/chat -H 'Origin: https://sidorovr348-ship-it.github.io' -H 'Access-Control-Request-Method: POST' >/tmp/cors.txt || true
+          echo 'CORS:'; cat /tmp/cors.txt || true
+
+          echo '=== 3. QUICK TUNNEL REBUILD ==='
           test -x /usr/local/bin/cloudflared
           : >/var/log/my-ai-unified-quick-tunnel.log
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
@@ -66,55 +83,68 @@ jobs:
           systemctl daemon-reload
           systemctl enable my-ai-unified-quick-tunnel.service
           systemctl restart my-ai-unified-quick-tunnel.service
+
           url=''
-          for i in $(seq 1 30); do
+          for i in $(seq 1 45); do
             url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
             [ -n "$url" ] && break
             sleep 2
           done
-          if [ -z "$url" ]; then
-            echo 'QUICK_TUNNEL_URL_NOT_FOUND'
-            tail -100 /var/log/my-ai-unified-quick-tunnel.log || true
-            exit 1
-          fi
+          [ -n "$url" ] || { tail -150 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
           echo "QUICK_TUNNEL_URL=$url"
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 "$url/health?t=quick-restore"; then
-              echo
-              exit 0
-            fi
+
+          echo '=== 4. PUBLIC API THROUGH TUNNEL ==='
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 8 "$url/health?t=full-chain" >/tmp/public-health.json 2>/dev/null; then break; fi
             sleep 2
           done
-          echo 'QUICK_TUNNEL_HEALTH_FAILED'
-          tail -100 /var/log/my-ai-unified-quick-tunnel.log || true
-          exit 1
+          cat /tmp/public-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-health.json'))
+          assert j.get('ok') is True, j
+          assert j.get('dispatcher') is True, j
+          PY
+          curl -fsS --max-time 30 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
+          cat /tmp/public-chat.json
+          curl -fsS --max-time 40 -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
+          cat /tmp/public-shopping.json | head -c 12000; echo
+
+          systemctl is-active my-ai-unified-quick-tunnel.service
+          echo "FULL_CHAIN_OK=$url"
           REMOTE
-          url=$(grep '^QUICK_TUNNEL_URL=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
+
+          url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
           printf '%s' "$url" > /tmp/quick-url
-      - name: Point frontend to proven tunnel
+          echo "Verified public API: $url"
+
+      - name: Bind frontend to the verified API
         run: |
           set -euo pipefail
           url=$(cat /tmp/quick-url)
           python3 - "$url" <<'PY'
-          import pathlib, re, sys
-          url=sys.argv[1]
+          import pathlib,re,sys,json
+          url=sys.argv[1].rstrip('/')
           p=pathlib.Path('app.html')
           s=p.read_text()
           s2=re.sub(r"const API='https://[^']+'", "const API='"+url+"'", s, count=1)
           if s2==s: raise SystemExit('API constant not found in app.html')
           p.write_text(s2)
-          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=quick-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=quick-verified">Открыть приложение</a></p></body></html>\n''')
+          pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain'},ensure_ascii=False,indent=2)+'\n')
+          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=full-chain-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=full-chain-verified">Открыть приложение</a></p></body></html>\n''')
           PY
-      - name: Commit restored frontend
+
+      - name: Commit verified frontend and API locator
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.html index.html
+          git add app.html index.html api.json
           git diff --cached --quiet && exit 0
           git commit -m 'Restore proven Quick Tunnel frontend path'
           git push
+
       - name: Deploy GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
@@ -124,7 +154,11 @@ jobs:
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Verify Pages
+      - name: Verify Pages deployment
         env:
           URL: ${{ steps.deployment.outputs.page_url }}
-        run: curl --fail --silent --show-error --max-time 20 "$URL"
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 "$URL"
+          curl --fail --silent --show-error --max-time 20 "${URL}app.html?v=full-chain-verified" | grep -q 'FULL_CHAIN_PLACEHOLDER_DO_NOT_USE' && exit 1 || true
+          echo "PAGES_OK=$URL"
