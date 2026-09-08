@@ -113,6 +113,15 @@ jobs:
           printf '%s' "$url" > /tmp/quick-url
           echo "Verified public API: $url"
 
+      - name: Prepare public frontend
+        run: |
+          set -euo pipefail
+          rm -rf pages
+          mkdir -p pages
+          cp index.html app-fixed.html api.json pages/
+          [ ! -f favicon.ico ] || cp favicon.ico pages/
+          [ ! -f manifest.webmanifest ] || cp manifest.webmanifest pages/
+
       - name: Bind frontend to verified API
         run: |
           set -euo pipefail
@@ -123,6 +132,7 @@ jobs:
           pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain'},ensure_ascii=False,indent=2)+'\n')
           pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260909-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260909">Открыть приложение</a></p></body></html>\n''')
           PY
+          cp index.html app-fixed.html api.json pages/
 
       - name: Commit verified locator
         run: |
@@ -139,7 +149,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pages
       - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
