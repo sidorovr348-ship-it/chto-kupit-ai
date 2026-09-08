@@ -1,4 +1,4 @@
-name: Repair My AI Unified tunnel
+name: Verify My AI Unified tunnel
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
   repair:
     runs-on: ubuntu-latest
     steps:
-      - name: Repair and verify Cloudflare Tunnel
+      - name: Repair and verify My AI Unified endpoint
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -21,39 +21,32 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
-          set -u
+          set -euo pipefail
           echo '=== LOCAL APP ==='
-          systemctl is-active my-ai-unified.service || true
-          curl -sS --max-time 10 http://127.0.0.1:3020/health || true
-          echo
-          echo '=== CLOUDFLARED SERVICE ==='
-          if systemctl list-unit-files | grep -q '^chto-kupit-cloudflared.service'; then
-            CF_SERVICE=chto-kupit-cloudflared.service
-          elif systemctl list-unit-files | grep -q '^cloudflared.service'; then
-            CF_SERVICE=cloudflared.service
-          else
-            echo 'ERROR: no cloudflared service'
-            exit 1
+          if ! systemctl is-active --quiet my-ai-unified.service; then
+            echo 'My AI Unified service is not active; restarting it.'
+            systemctl restart my-ai-unified.service
+            sleep 3
           fi
-          echo "service=$CF_SERVICE"
-          systemctl is-active "$CF_SERVICE" || true
-          systemctl show -p ExecStart "$CF_SERVICE" || true
-          echo '=== CONFIG ==='
-          sed -n '1,160p' /etc/cloudflared/config.yml 2>/dev/null || true
-          echo '=== RECENT JOURNAL ==='
-          journalctl -u "$CF_SERVICE" -n 60 --no-pager || true
-          echo '=== ENSURE SERVICE IS RUNNING ==='
-          if ! systemctl is-active --quiet "$CF_SERVICE"; then
-            systemctl start "$CF_SERVICE"
-          fi
-          sleep 5
-          systemctl is-active "$CF_SERVICE"
-          echo '=== LOCAL HEALTH AFTER REPAIR ==='
+          systemctl is-active my-ai-unified.service
+          echo '=== LOCAL HEALTH ==='
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
+          echo
+          echo '=== LOCAL SHOPPING ==='
+          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/shopping \
+            -H 'Content-Type: application/json' \
+            --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
+          echo
           REMOTE
 
       - name: Verify public API
         run: |
           set -euo pipefail
           echo '=== PUBLIC HEALTH ==='
-          curl --fail --silent --show-error --max-time 25 https://ai.aliceq.ru/health
+          curl --fail --silent --show-error --max-time 25 'https://ai.aliceq.ru/health?t=repair'
+          echo
+          echo '=== PUBLIC SHOPPING ==='
+          curl --fail --silent --show-error --max-time 30 -X POST 'https://ai.aliceq.ru/shopping' \
+            -H 'Content-Type: application/json' \
+            --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}'
+          echo
