@@ -1,0 +1,16 @@
+[Unit]
+Description=My AI Unified self-healing supervisor
+After=network-online.target my-ai-unified.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/my-ai-unified
+Environment=MY_AI_PORT=3020
+ExecStart=/usr/bin/node /root/my-ai-unified/supervisor-daemon.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
