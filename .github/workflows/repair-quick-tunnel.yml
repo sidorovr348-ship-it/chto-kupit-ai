@@ -1,107 +1,11 @@
-name: Restore proven Quick Tunnel
+name: Restore proven Quick Tunnel (disabled duplicate)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 jobs:
-  restore:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Restore proven Quick Tunnel frontend path'
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Restore proven Quick Tunnel on VPS
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
-          set -euo pipefail
-          test -x /usr/local/bin/cloudflared
-          cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
-          [Unit]
-          Description=My AI Unified proven Quick Tunnel
-          After=network-online.target
-          Wants=network-online.target
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
-          Restart=always
-          RestartSec=3
-          StandardOutput=append:/var/log/my-ai-unified-quick-tunnel.log
-          StandardError=append:/var/log/my-ai-unified-quick-tunnel.log
-
-          [Install]
-          WantedBy=multi-user.target
-          UNIT
-          systemctl daemon-reload
-          systemctl enable my-ai-unified-quick-tunnel.service
-          systemctl restart my-ai-unified-quick-tunnel.service
-          sleep 10
-          url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
-          if [ -z "$url" ]; then
-            echo 'QUICK_TUNNEL_URL_NOT_FOUND'
-            tail -80 /var/log/my-ai-unified-quick-tunnel.log || true
-            exit 1
-          fi
-          echo "QUICK_TUNNEL_URL=$url"
-          curl --fail --silent --show-error --max-time 20 "$url/health?t=quick-restore"
-          echo
-          REMOTE
-          url=$(grep '^QUICK_TUNNEL_URL=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
-          test -n "$url"
-          printf '%s' "$url" > /tmp/quick-url
-      - name: Point frontend to the proven tunnel
-        run: |
-          set -euo pipefail
-          url=$(cat /tmp/quick-url)
-          python3 - "$url" <<'PY'
-          import pathlib, re, sys
-          url=sys.argv[1]
-          p=pathlib.Path('app.html')
-          s=p.read_text()
-          s2=re.sub(r"const API='https://[^']+'", "const API='"+url+"'", s, count=1)
-          if s2==s: raise SystemExit('API constant not found in app.html')
-          p.write_text(s2)
-          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=quick-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=quick-verified">Открыть приложение</a></p></body></html>\n''')
-          PY
-      - name: Commit restored proven frontend
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.html index.html
-          git diff --cached --quiet && exit 0
-          git commit -m 'Restore proven Quick Tunnel frontend path'
-          git push
-      - name: Deploy GitHub Pages
-        uses: actions/configure-pages@v5
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - name: Deploy Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-      - name: Final HTTPS/API verification
-        env:
-          URL: ${{ steps.deployment.outputs.page_url }}
-        run: |
-          set -euo pipefail
-          echo "PAGES_URL=$URL"
-          curl --fail --silent --show-error --max-time 20 "$URL"
-          echo
+      - run: echo 'Disabled: the canonical full-chain repair is .github/workflows/repair-my-ai-tunnel.yml'
