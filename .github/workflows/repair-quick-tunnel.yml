@@ -1,6 +1,8 @@
 name: Restore proven Quick Tunnel
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -10,6 +12,7 @@ permissions:
 
 jobs:
   restore:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Restore proven Quick Tunnel frontend path'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -62,7 +65,6 @@ jobs:
 
           url=$(grep '^QUICK_TUNNEL_URL=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
-          echo "Using $url"
           printf '%s' "$url" > /tmp/quick-url
 
       - name: Point frontend to the proven tunnel
@@ -79,7 +81,6 @@ jobs:
               raise SystemExit('API constant not found in app.html')
           p.write_text(s2)
           pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><title>My AI Unified</title></head><body><script>location.replace('./app.html?v=quick-verified');</script><p>Открываю My AI Unified…</p><p><a href="./app.html?v=quick-verified">Открыть приложение</a></p></body></html>\n''')
-          print(url)
           PY
 
       - name: Commit restored proven frontend
