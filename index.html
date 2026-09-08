@@ -1,67 +1,41 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>My AI Unified</title><style>*{box-sizing:border-box}body{margin:0;background:#0b0b0d;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:720px;margin:auto;padding:22px 16px 36px}h1{font-size:30px;margin:8px 0 4px}.sub{color:#999;margin-bottom:20px}.chat{min-height:55vh;background:#151518;border-radius:22px;padding:14px;display:flex;flex-direction:column;gap:10px}.msg{padding:12px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap}.msg p{margin:0 0 10px}.msg p:last-child{margin-bottom:0}.msg ul,.msg ol{margin:6px 0 10px;padding-left:22px}.msg li{margin:3px 0}.msg strong{font-weight:800}.msg code{background:#111115;border-radius:6px;padding:2px 5px}.msg a{color:#9cc7ff;text-decoration:underline}.ai{background:#222226;align-self:flex-start;max-width:92%}.user{background:#fff;color:#111;align-self:flex-end;max-width:92%}.user a{color:#0645ad}.bar{display:flex;gap:8px;margin-top:12px}.bar textarea{flex:1;resize:none;border:0;border-radius:17px;padding:14px;background:#202024;color:#fff;font:inherit;min-height:52px}.bar button{width:58px;border:0;border-radius:17px;background:#fff;font-size:23px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.actions button{padding:13px;border:0;border-radius:15px;background:#202024;color:#fff;font-weight:700}.hint{color:#777;font-size:13px;text-align:center;margin-top:10px}</style></head>
-<body><main><h1>🧠 My AI Unified</h1><div class="sub">Один помощник. Ты просто говоришь, что нужно сделать.</div><section class="chat" id="chat"><div class="msg ai">Готов. Скажи, что нужно сделать: найти информацию, разобрать фото, проанализировать документ, написать код, найти товар или выполнить другую задачу.</div></section><div class="bar"><textarea id="input" placeholder="Напиши или продиктуй задачу…"></textarea><button id="send">➤</button></div><div class="actions"><button id="voice">🎙️ Голос</button><button id="photo">📷 Фото</button><button id="file">📎 Файл</button><button id="reset">↻ Сначала</button></div><div class="hint">Dispatcher (диспетчер) сам определяет нужный тип AI и инструмент.</div><input id="photoInput" type="file" accept="image/*" capture="environment" hidden><input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" hidden>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0d"><title>My AI Unified</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b0d;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:720px;margin:auto;padding:18px 14px 30px}h1{font-size:29px;margin:6px 0 2px}.sub{color:#999;margin-bottom:10px}.status{font-size:12px;color:#aaa;margin:0 0 12px}.chat{min-height:56vh;background:#151518;border-radius:22px;padding:12px;display:flex;flex-direction:column;gap:9px}.msg{padding:12px 14px;border-radius:17px;line-height:1.45;white-space:pre-wrap}.ai{background:#222226;align-self:flex-start;max-width:94%}.user{background:#fff;color:#111;align-self:flex-end;max-width:94%}.msg a{color:#9cc7ff}.user a{color:#0645ad}.msg pre{white-space:pre-wrap;overflow:auto;background:#111115;padding:10px;border-radius:9px}.msg code{background:#111115;padding:2px 5px;border-radius:6px}.bar{display:flex;gap:8px;margin-top:10px}.bar textarea{flex:1;resize:none;border:0;border-radius:17px;padding:14px;background:#202024;color:#fff;font:inherit;min-height:52px}.bar button{width:58px;border:0;border-radius:17px;background:#fff;font-size:22px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.actions button{padding:13px;border:0;border-radius:15px;background:#202024;color:#fff;font-weight:700}.hint{color:#777;font-size:12px;text-align:center;margin-top:9px}
+</style></head>
+<body><main>
+<h1>🧠 My AI Unified</h1><div class="sub">Один помощник. Ты просто говоришь, что нужно сделать.</div>
+<div class="status" id="status">🟡 Проверяю соединение с сервером…</div>
+<section class="chat" id="chat"><div class="msg ai">Готов. Скажи, что нужно сделать: найти информацию, разобрать фото, проанализировать документ, написать код, найти товар или выполнить другую задачу.</div></section>
+<div class="bar"><textarea id="input" placeholder="Напиши или продиктуй задачу…"></textarea><button id="send">➤</button></div>
+<div class="actions"><button id="voice">🎙️ Голос</button><button id="photo">📷 Фото</button><button id="file">📎 Файл</button><button id="reset">↻ Сначала</button></div>
+<div class="hint">Dispatcher (диспетчер) автоматически выбирает нужный модуль.</div>
+<input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+<input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" hidden>
 <script>
 const API_BASE='https://ai.aliceq.ru';
-const chat=document.querySelector('#chat'),input=document.querySelector('#input');
-function escapeHtml(text){return String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function formatMarkdown(text){let s=escapeHtml(String(text||''));s=s.replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>');s=s.replace(/`([^`]+)`/g,'<code>$1</code>');s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');s=s.replace(/^### (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^## (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^# (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^[-*] (.+)$/gm,'• $1');return s}
+const chat=document.querySelector('#chat'),input=document.querySelector('#input'),statusEl=document.querySelector('#status');
+function escapeHtml(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function formatMarkdown(t){let s=escapeHtml(String(t||''));s=s.replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>');s=s.replace(/`([^`]+)`/g,'<code>$1</code>');s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');s=s.replace(/^### (.+)$/gm,'<strong>$1</strong>').replace(/^## (.+)$/gm,'<strong>$1</strong>').replace(/^# (.+)$/gm,'<strong>$1</strong>').replace(/^[-*] (.+)$/gm,'• $1');return s}
 function add(text,who){const d=document.createElement('div');d.className='msg '+who;if(who==='ai')d.innerHTML=formatMarkdown(text);else d.textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
-
-// Живой голос: используем наиболее естественный доступный русский голос iPhone/iOS,
-// а не безличный голос по умолчанию. Если iOS отдаёт несколько вариантов,
-// выбираем Siri/Enhanced/Premium/русский женский вариант.
+function formatResult(j){if(j.result)return j.result;if(Array.isArray(j.results)&&j.results.length)return j.results.map((x,i)=>`${i+1}. ${x.title||'Результат'}\n${x.url||''}${x.content?'\n'+x.content:''}`).join('\n\n');if(Array.isArray(j.results)&&!j.results.length)return 'Не нашёл подходящих предложений в подключённых магазинах.';if(j.message)return j.message;return JSON.stringify(j,null,2)}
+async function api(path,body,timeoutMs=75000){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const r=await fetch(API_BASE+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw new Error(j.error||j.message||`HTTP ${r.status}`);return j}catch(e){if(e.name==='AbortError')throw new Error('Сервер не ответил за 75 секунд');throw e}finally{clearTimeout(timer)}}
+async function checkServer(){try{const r=await fetch(API_BASE+'/health',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const j=await r.json();statusEl.textContent=j.ok?'🟢 Сервер My AI Unified подключён':'🔴 Сервер вернул ошибку';return !!j.ok}catch(e){statusEl.textContent='🔴 Сервер сейчас недоступен: '+e.message;return false}}
 let preferredVoice=null;
-function pickRussianVoice(){
-  if(!('speechSynthesis' in window))return null;
-  const voices=window.speechSynthesis.getVoices()||[];
-  const ru=voices.filter(v=>/^ru(-|_)/i.test(v.lang)||/Russian|рус/i.test(v.name));
-  if(!ru.length)return null;
-  const score=v=>{
-    const n=(v.name||'').toLowerCase();
-    let s=0;
-    if(/siri/.test(n))s+=100;
-    if(/enhanced|premium|natural|improved/.test(n))s+=80;
-    if(/milena|yuri|katya|irina|anna|alena|elena/.test(n))s+=35;
-    if(/^ru-ru$/i.test(v.lang))s+=20;
-    if(v.localService)s+=5;
-    return s;
-  };
-  ru.sort((a,b)=>score(b)-score(a));
-  return ru[0]||null;
-}
-function initVoices(){preferredVoice=pickRussianVoice()}
-if('speechSynthesis' in window){initVoices();window.speechSynthesis.onvoiceschanged=initVoices}
-function speak(text){
-  if(!('speechSynthesis' in window))return;
-  const clean=String(text||'').replace(/\[\d+\]/g,'').replace(/https?:\/\/\S+/g,'').trim();
-  if(!clean)return;
-  window.speechSynthesis.cancel();
-  const voice=preferredVoice||pickRussianVoice();
-  // Разбиваем ответ на фразы: iOS делает естественнее паузы и интонацию.
-  const parts=clean.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/gu)||[clean];
-  let delay=0;
-  parts.slice(0,30).forEach(part=>{
-    const phrase=part.trim();if(!phrase)return;
-    const u=new SpeechSynthesisUtterance(phrase);
-    u.lang='ru-RU';
-    if(voice)u.voice=voice;
-    u.rate=0.94;
-    u.pitch=1.04;
-    u.volume=1;
-    setTimeout(()=>window.speechSynthesis.speak(u),delay);
-    delay+=Math.max(180,Math.min(900,phrase.length*14));
-  });
-}
-function formatResult(j){if(j.result)return j.result;if(Array.isArray(j.results)&&j.results.length)return j.results.map((x,i)=>`${i+1}. ${x.title||'Результат'}\n${x.url||''}${x.content?'\n'+x.content:''}`).join('\n\n');if(j.message)return j.message;return '🔴 Сервер вернул неполный ответ.\n'+JSON.stringify(j,null,2)}
-async function api(path,body){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),75000);try{const r=await fetch(API_BASE+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw new Error(j.error||j.message||`HTTP ${r.status}: сервер не принял запрос`);return j}catch(e){if(e.name==='AbortError')throw new Error('Сервер не ответил за 75 секунд');throw e}finally{clearTimeout(timer)}}
-async function send(){const text=input.value.trim();if(!text)return;add(text,'user');input.value='';add('⏳ Выполняю…','ai');try{const j=await api('/chat',{prompt:text});chat.lastChild.remove();const result=formatResult(j);add(result,'ai');speak(result)}catch(e){chat.lastChild.remove();add('🔴 Ошибка соединения с My AI Unified:\n'+e.message,'ai')}}
+function pickRussianVoice(){if(!('speechSynthesis'in window))return null;const ru=(speechSynthesis.getVoices()||[]).filter(v=>/^ru(-|_)/i.test(v.lang)||/Russian|рус/i.test(v.name));if(!ru.length)return null;const score=v=>{const n=(v.name||'').toLowerCase();let s=0;if(/siri/.test(n))s+=100;if(/enhanced|premium|natural|improved/.test(n))s+=80;if(/milena|katya|irina|anna|alena|elena/.test(n))s+=35;if(/^ru-ru$/i.test(v.lang))s+=20;if(v.localService)s+=5;return s};return ru.sort((a,b)=>score(b)-score(a))[0]||null}
+function initVoices(){preferredVoice=pickRussianVoice()}if('speechSynthesis'in window){initVoices();speechSynthesis.onvoiceschanged=initVoices}
+function speak(text){if(!('speechSynthesis'in window))return;const clean=String(text||'').replace(/\[\d+\]/g,'').replace(/https?:\/\/\S+/g,'').trim();if(!clean)return;speechSynthesis.cancel();const voice=preferredVoice||pickRussianVoice();const parts=clean.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/gu)||[clean];let delay=0;parts.slice(0,30).forEach(p=>{const phrase=p.trim();if(!phrase)return;const u=new SpeechSynthesisUtterance(phrase);u.lang='ru-RU';if(voice)u.voice=voice;u.rate=.94;u.pitch=1.04;u.volume=1;setTimeout(()=>speechSynthesis.speak(u),delay);delay+=Math.max(180,Math.min(900,phrase.length*14))})}
+function isShopping(t){return /(купить|купи|товар|цена|магазин|ozon|озон|wildberries|wb|яндекс.?маркет|dns|м\.видео|ситилинк|в наличии|дешевле|где купить|стоимость)/iu.test(t)}
+async function send(){const text=input.value.trim();if(!text)return;add(text,'user');input.value='';const wait=add('⏳ Выполняю…','ai');try{let j;if(isShopping(text)){const cheaper=/(дешевле|самый дешёвый|самая дешёвая|минимальная цена|где дешевле)/iu.test(text);j=await api('/shopping',{query:text,location:'Москва, Россия',mode:cheaper?'cheaper':'find'})}else j=await api('/chat',{prompt:text});wait.remove();const result=formatResult(j);add(result,'ai');speak(result)}catch(e){wait.remove();add('🔴 Не удалось выполнить запрос. Сервер My AI Unified недоступен или вернул ошибку:\n'+e.message,'ai');await checkServer()}}
 document.querySelector('#send').onclick=send;input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
-document.querySelector('#voice').onclick=()=>{const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){add('🔴 Safari на этом iPhone не поддерживает голосовой ввод сайта. Используй микрофон клавиатуры iPhone: нажми в поле ввода → 🎙️ на клавиатуре → продиктуй текст → нажми ➤.','ai');return}const r=new R();r.lang='ru-RU';r.interimResults=false;r.continuous=false;let listening=false;r.onstart=()=>{listening=true;add('🎙️ Слушаю…','ai')};r.onresult=e=>{const last=chat.lastChild;if(last&&last.textContent==='🎙️ Слушаю…')last.remove();input.value=e.results[0][0].transcript;send()};r.onerror=e=>{const last=chat.lastChild;if(last&&last.textContent==='🎙️ Слушаю…')last.remove();let msg='Не удалось получить голос.';if(e&&e.error==='not-allowed')msg='Доступ к микрофону запрещён. Разреши микрофон для этого сайта в настройках Safari.';else if(e&&e.error==='service-not-allowed')msg='Голосовой сервис Safari недоступен. Используй микрофон клавиатуры iPhone.';add('🔴 '+msg,'ai')};r.onend=()=>{listening=false};try{r.start()}catch(e){if(listening)return;add('🔴 Не удалось запустить микрофон. На iPhone используй микрофон клавиатуры: нажми в поле ввода → 🎙️ → продиктуй текст.','ai')}};
+document.querySelector('#voice').onclick=()=>{const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){add('🎙️ Голосовой ввод Safari недоступен. Используй микрофон клавиатуры iPhone: поле ввода → 🎙️ на клавиатуре → ➤.','ai');return}const r=new R();r.lang='ru-RU';r.interimResults=false;r.continuous=false;r.onstart=()=>add('🎙️ Слушаю…','ai');r.onresult=e=>{const last=chat.lastChild;if(last&&last.textContent==='🎙️ Слушаю…')last.remove();input.value=e.results[0][0].transcript;send()};r.onerror=e=>{const last=chat.lastChild;if(last&&last.textContent==='🎙️ Слушаю…')last.remove();add('🔴 Голосовой ввод: '+(e.error==='not-allowed'?'разреши микрофон для сайта.':'сервис Safari недоступен.'),'ai')};try{r.start()}catch(e){add('🔴 Не удалось запустить голос. Используй микрофон клавиатуры iPhone.','ai')}};
 document.querySelector('#photo').onclick=()=>document.querySelector('#photoInput').click();
-document.querySelector('#photoInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;add('📷 '+f.name,'user');add('⏳ Анализирую изображение…','ai');try{const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f)});const j=await api('/photo',{image:data,prompt:'Опиши изображение и ответь, что на нём важно для пользователя.'});chat.lastChild.remove();const result=j.result||'Изображение обработано.';add(result,'ai');speak(result)}catch(err){chat.lastChild.remove();add('🔴 '+err.message,'ai')}e.target.value=''};
+document.querySelector('#photoInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;add('📷 '+f.name,'user');const w=add('⏳ Анализирую изображение…','ai');try{const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)});const j=await api('/photo',{image:data,prompt:'Опиши изображение и ответь, что на нём важно для пользователя.'});w.remove();const result=j.result||'Изображение обработано.';add(result,'ai');speak(result)}catch(err){w.remove();add('🔴 '+err.message,'ai')}e.target.value=''};
 document.querySelector('#file').onclick=()=>document.querySelector('#fileInput').click();
-document.querySelector('#fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;add('📎 '+f.name,'user');add('🟡 Читаю файл…','ai');try{if(f.type.startsWith('image/')){const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(f)});const j=await api('/photo',{image:data,prompt:'Проанализируй этот файл/изображение и извлеки полезную информацию.'});chat.lastChild.remove();add(j.result||'Файл обработан.','ai');speak(j.result||'Файл обработан.')}else{const text=await f.text();const j=await api('/chat',{prompt:`Проанализируй содержимое файла «${f.name}» и дай полезный ответ.\n\nСодержимое:\n${text.slice(0,120000)}`,hasFile:true});chat.lastChild.remove();const result=formatResult(j);add(result,'ai');speak(result)}}catch(err){chat.lastChild.remove();add('🔴 '+err.message,'ai')}e.target.value=''};
-document.querySelector('#reset').onclick=()=>{window.speechSynthesis?.cancel();chat.innerHTML='<div class="msg ai">Готов. Скажи, что нужно сделать.</div>';input.value=''};
+document.querySelector('#fileInput').onchange=async e=>{const f=e.target.files[0];if(!f)return;add('📎 '+f.name,'user');const w=add('🟡 Читаю файл…','ai');try{if(f.type.startsWith('image/')){const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)});const j=await api('/photo',{image:data,prompt:'Проанализируй этот файл/изображение и извлеки полезную информацию.'});w.remove();add(j.result||'Файл обработан.','ai')}else if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){w.remove();add('🟡 PDF-файлы пока не передаю в AI как полноценный документ. Эта функция требует отдельного PDF-модуля на сервере; я не буду делать вид, что он уже работает.','ai')}else{const text=await f.text();const j=await api('/chat',{prompt:`Проанализируй содержимое файла «${f.name}» и дай полезный ответ.\n\nСодержимое:\n${text.slice(0,120000)}`,hasFile:true});w.remove();const result=formatResult(j);add(result,'ai');speak(result)}}catch(err){w.remove();add('🔴 '+err.message,'ai')}e.target.value=''};
+document.querySelector('#reset').onclick=()=>{speechSynthesis?.cancel();chat.innerHTML='<div class="msg ai">Готов. Скажи, что нужно сделать.</div>';input.value=''};
+checkServer();
 </script></main></body></html>
