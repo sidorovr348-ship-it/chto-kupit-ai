@@ -27,10 +27,11 @@ jobs:
           set -euo pipefail
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed19
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
+          test -x /usr/local/bin/cloudflared
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
           [Unit]
           Description=My AI Unified proven Quick Tunnel
@@ -39,7 +40,7 @@ jobs:
 
           [Service]
           Type=simple
-          ExecStart=/usr/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
+          ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
           Restart=always
           RestartSec=3
           StandardOutput=append:/var/log/my-ai-unified-quick-tunnel.log
@@ -51,11 +52,11 @@ jobs:
           systemctl daemon-reload
           systemctl enable my-ai-unified-quick-tunnel.service
           systemctl restart my-ai-unified-quick-tunnel.service
-          sleep 8
+          sleep 10
           url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
           if [ -z "$url" ]; then
             echo 'QUICK_TUNNEL_URL_NOT_FOUND'
-            tail -50 /var/log/my-ai-unified-quick-tunnel.log || true
+            tail -80 /var/log/my-ai-unified-quick-tunnel.log || true
             exit 1
           fi
           echo "QUICK_TUNNEL_URL=$url"
