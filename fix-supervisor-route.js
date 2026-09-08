@@ -1,0 +1,16 @@
+const fs = require('fs');
+const path = require('path');
+const ROOT = '/root/my-ai-unified';
+const serverPath = path.join(ROOT, 'server.js');
+if (!fs.existsSync(serverPath)) throw new Error(`Не найден ${serverPath}`);
+let source = fs.readFileSync(serverPath, 'utf8');
+const importLine = "const { attach: attachSupervisor } = require('./supervisor');";
+const backup = `${serverPath}.before-supervisor-route-${Date.now()}.bak`;
+fs.copyFileSync(serverPath, backup);
+source = source.replace(/const \{ attach: attachSupervisor \} = require\('\.\/supervisor'\);\n?/g, '');
+source = source.replace(/\n?\s*attachSupervisor\(app\);\n?/g, '\n');
+const anchor = "const app = express();";
+if (!source.includes(anchor)) throw new Error('Не найден безопасный якорь const app = express();');
+source = source.replace(anchor, `${anchor}\n${importLine}\nattachSupervisor(app);`);
+fs.writeFileSync(serverPath, source);
+console.log(`Supervisor маршруты перенесены в начало server.js. Backup: ${backup}`);
