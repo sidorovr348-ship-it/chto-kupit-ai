@@ -53,11 +53,11 @@ jobs:
           PY
 
           echo '=== 2. LOCAL API ENDPOINTS ==='
-          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
           cat /tmp/chat.json
-          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --max-time 50 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
           cat /tmp/shopping.json | head -c 12000; echo
-          curl -fsS --max-time 10 -X OPTIONS http://127.0.0.1:3020/chat -H 'Origin: https://sidorovr348-ship-it.github.io' -H 'Access-Control-Request-Method: POST' >/tmp/cors.txt || true
+          curl --silent --show-error --max-time 10 -X OPTIONS http://127.0.0.1:3020/chat -H 'Origin: https://sidorovr348-ship-it.github.io' -H 'Access-Control-Request-Method: POST' >/tmp/cors.txt || true
           echo 'CORS:'; cat /tmp/cors.txt || true
 
           echo '=== 3. QUICK TUNNEL REBUILD ==='
@@ -94,10 +94,13 @@ jobs:
           echo "QUICK_TUNNEL_URL=$url"
 
           echo '=== 4. PUBLIC API THROUGH TUNNEL ==='
-          for i in $(seq 1 45); do
-            if curl -fsS --max-time 8 "$url/health?t=full-chain" >/tmp/public-health.json 2>/dev/null; then break; fi
+          rm -f /tmp/public-health.json
+          public_ok=0
+          for i in $(seq 1 120); do
+            if curl --fail --silent --show-error --retry 2 --retry-delay 3 --retry-all-errors --max-time 12 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=full-chain" >/tmp/public-health.json 2>/dev/null; then public_ok=1; break; fi
             sleep 2
           done
+          [ "$public_ok" = 1 ] || { echo 'PUBLIC HEALTH FAILED'; curl -i --max-time 10 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=diagnostic" || true; tail -100 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
           cat /tmp/public-health.json
           python3 - <<'PY'
           import json
@@ -105,9 +108,9 @@ jobs:
           assert j.get('ok') is True, j
           assert j.get('dispatcher') is True, j
           PY
-          curl -fsS --max-time 30 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-all-errors --max-time 50 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
           cat /tmp/public-chat.json
-          curl -fsS --max-time 40 -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 --retry-all-errors --max-time 60 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
           cat /tmp/public-shopping.json | head -c 12000; echo
 
           systemctl is-active my-ai-unified-quick-tunnel.service
