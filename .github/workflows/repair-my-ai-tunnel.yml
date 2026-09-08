@@ -14,10 +14,15 @@ permissions:
   pages: write
   id-token: write
 
+environment:
+  name: github-pages
+
 jobs:
   repair:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Update verified Quick Tunnel locator'
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,7 +148,7 @@ jobs:
           git commit -m 'Update verified Quick Tunnel locator'
           git push
 
-      - name: Deploy GitHub Pages
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
