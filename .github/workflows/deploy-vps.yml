@@ -45,6 +45,10 @@ jobs:
           node --check server.js
           npm test
           systemctl restart my-ai-unified.service
-          sleep 2
+          if command -v cloudflared >/dev/null 2>&1; then
+            cloudflared tunnel route dns alice-ai ai.aliceq.ru || true
+            systemctl restart chto-kupit-cloudflared.service || systemctl restart cloudflared.service || true
+          fi
+          sleep 3
           curl --fail --silent --show-error --max-time 15 http://127.0.0.1:3020/health
           REMOTE
