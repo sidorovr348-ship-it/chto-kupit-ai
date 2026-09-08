@@ -8,7 +8,52 @@ const chat=document.querySelector('#chat'),input=document.querySelector('#input'
 function escapeHtml(text){return String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function formatMarkdown(text){let s=escapeHtml(String(text||''));s=s.replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>');s=s.replace(/`([^`]+)`/g,'<code>$1</code>');s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');s=s.replace(/^### (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^## (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^# (.+)$/gm,'<strong>$1</strong>');s=s.replace(/^[-*] (.+)$/gm,'• $1');return s}
 function add(text,who){const d=document.createElement('div');d.className='msg '+who;if(who==='ai')d.innerHTML=formatMarkdown(text);else d.textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
-function speak(text){if(!('speechSynthesis' in window))return;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(text).replace(/\[\d+\]/g,''));u.lang='ru-RU';u.rate=1;u.pitch=1;window.speechSynthesis.speak(u)}
+
+// Живой голос: используем наиболее естественный доступный русский голос iPhone/iOS,
+// а не безличный голос по умолчанию. Если iOS отдаёт несколько вариантов,
+// выбираем Siri/Enhanced/Premium/русский женский вариант.
+let preferredVoice=null;
+function pickRussianVoice(){
+  if(!('speechSynthesis' in window))return null;
+  const voices=window.speechSynthesis.getVoices()||[];
+  const ru=voices.filter(v=>/^ru(-|_)/i.test(v.lang)||/Russian|рус/i.test(v.name));
+  if(!ru.length)return null;
+  const score=v=>{
+    const n=(v.name||'').toLowerCase();
+    let s=0;
+    if(/siri/.test(n))s+=100;
+    if(/enhanced|premium|natural|improved/.test(n))s+=80;
+    if(/milena|yuri|katya|irina|anna|alena|elena/.test(n))s+=35;
+    if(/^ru-ru$/i.test(v.lang))s+=20;
+    if(v.localService)s+=5;
+    return s;
+  };
+  ru.sort((a,b)=>score(b)-score(a));
+  return ru[0]||null;
+}
+function initVoices(){preferredVoice=pickRussianVoice()}
+if('speechSynthesis' in window){initVoices();window.speechSynthesis.onvoiceschanged=initVoices}
+function speak(text){
+  if(!('speechSynthesis' in window))return;
+  const clean=String(text||'').replace(/\[\d+\]/g,'').replace(/https?:\/\/\S+/g,'').trim();
+  if(!clean)return;
+  window.speechSynthesis.cancel();
+  const voice=preferredVoice||pickRussianVoice();
+  // Разбиваем ответ на фразы: iOS делает естественнее паузы и интонацию.
+  const parts=clean.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/gu)||[clean];
+  let delay=0;
+  parts.slice(0,30).forEach(part=>{
+    const phrase=part.trim();if(!phrase)return;
+    const u=new SpeechSynthesisUtterance(phrase);
+    u.lang='ru-RU';
+    if(voice)u.voice=voice;
+    u.rate=0.94;
+    u.pitch=1.04;
+    u.volume=1;
+    setTimeout(()=>window.speechSynthesis.speak(u),delay);
+    delay+=Math.max(180,Math.min(900,phrase.length*14));
+  });
+}
 function formatResult(j){if(j.result)return j.result;if(Array.isArray(j.results)&&j.results.length)return j.results.map((x,i)=>`${i+1}. ${x.title||'Результат'}\n${x.url||''}${x.content?'\n'+x.content:''}`).join('\n\n');if(j.message)return j.message;return '🔴 Сервер вернул неполный ответ.\n'+JSON.stringify(j,null,2)}
 async function api(path,body){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),75000);try{const r=await fetch(API_BASE+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}if(!r.ok)throw new Error(j.error||j.message||`HTTP ${r.status}: сервер не принял запрос`);return j}catch(e){if(e.name==='AbortError')throw new Error('Сервер не ответил за 75 секунд');throw e}finally{clearTimeout(timer)}}
 async function send(){const text=input.value.trim();if(!text)return;add(text,'user');input.value='';add('⏳ Выполняю…','ai');try{const j=await api('/chat',{prompt:text});chat.lastChild.remove();const result=formatResult(j);add(result,'ai');speak(result)}catch(e){chat.lastChild.remove();add('🔴 Ошибка соединения с My AI Unified:\n'+e.message,'ai')}}
