@@ -8,6 +8,7 @@ const { execFile } = require('child_process');
 const { dispatch, getCapability } = require('./src/dispatcher');
 const { diagnostics } = require('./supervisor');
 const { extractDocumentText } = require('./src/document-tools');
+const cloudru = require('./src/cloudru-agent');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3020);
@@ -27,6 +28,7 @@ const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсаль
 function configured(name) {
   if (name === 'paralon') return Boolean(process.env.PARALON_API_KEY);
   if (name === 'serper') return Boolean(process.env.SERPER_API_KEY);
+  if (name === 'cloudru') return cloudru.configured();
   return false;
 }
 
@@ -196,7 +198,24 @@ async function analyzeExtractedFile(buffer, filename, prompt, kindHint) {
 
 app.get('/health', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), paralon_fallback: true, serper: configured('serper'), video: true }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification') }) });
+  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), paralon_fallback: true, serper: configured('serper'), video: true, cloudru: configured('cloudru') }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: getCapability('voice'), code: getCapability('code'), verification: getCapability('verification'), cloud_agent: true }) });
+});
+
+app.get('/cloudru/health', async (req, res) => {
+  try {
+    if (!configured('cloudru')) return res.status(503).json({ ok: false, configured: false, error: 'CLOUDRU_AGENT_URL is not configured' });
+    const card = await cloudru.getAgentCard();
+    res.json({ ok: true, configured: true, agent: { name: card.name || card.title || null, description: card.description || null, url: card.url || null, protocol: 'A2A' } });
+  } catch (error) { res.status(error.status || 502).json({ ok: false, configured: true, error: error.message }); }
+});
+
+app.post('/cloudru', async (req, res) => {
+  try {
+    const prompt = String(req.body?.prompt || '').trim();
+    if (!prompt) return res.status(400).json({ ok: false, error: 'prompt is required' });
+    const answer = await cloudru.ask(prompt, { contextId: req.body?.contextId });
+    res.json({ ok: true, route: 'cloud_agent', result: answer.result, raw: answer.raw });
+  } catch (error) { console.error('CLOUDRU ERROR:', error); res.status(error.status || 502).json({ ok: false, route: 'cloud_agent', error: error.message, details: error.details || undefined }); }
 });
 
 app.get('/diagnostics', async (req, res) => {
@@ -210,6 +229,10 @@ app.post('/chat', async (req, res) => {
     const chatMessages = Array.isArray(messages) && messages.length ? messages : (prompt ? [{ role: 'user', content: prompt }] : []);
     const userPrompt = String(prompt || textFromMessages(chatMessages)).trim();
     if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
+    if (configured('cloudru') && process.env.CLOUDRU_AGENT_AUTO === 'true' && /\bcloud\.ru\b|облачн.*агент|через cloudru|через cloud\.ru/iu.test(userPrompt)) {
+      const answer = await cloudru.ask(userPrompt);
+      return res.json({ ok: true, route: 'cloud_agent', result: answer.result, raw: answer.raw });
+    }
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
     if (route === 'verification') { const result = await diagnostics(); return res.json({ ok: result.ok, route, result: result.ok ? 'Проверка завершена: критических проблем не обнаружено.' : 'Проверка завершена: обнаружена проблема.', diagnostics: result }); }
     if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(userPrompt, location, /дешевле|самый дешёвый|где дешевле/iu.test(userPrompt) ? 'cheaper' : 'find') });
