@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: my-ai-unified-canonical
+  group: my-ai-unified-local-ai
   cancel-in-progress: true
 
 permissions:
@@ -23,7 +23,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Deploy local AI gateway and Alice adapter
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -53,11 +52,7 @@ jobs:
           if [ "$ram_mb" -ge 7000 ]; then MODEL='qwen3-vl:4b-instruct'; else MODEL='qwen3-vl:2b'; fi
           echo "LOCAL_MODEL=$MODEL RAM_MB=$ram_mb"
           ollama pull "$MODEL"
-          cat >/root/my-ai-unified/.local-ai.env <<ENV
-          OLLAMA_BASE_URL=http://127.0.0.1:11434
-          OLLAMA_MODEL=$MODEL
-          OLLAMA_TIMEOUT_MS=20000
-          ENV
+          printf 'OLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=%s\nOLLAMA_TIMEOUT_MS=20000\n' "$MODEL" >/root/my-ai-unified/.local-ai.env
           cat >/etc/systemd/system/my-ai-unified-legacy.service <<'UNIT'
           [Unit]
           Description=My AI Unified legacy modules
@@ -97,22 +92,10 @@ jobs:
           systemctl restart my-ai-unified.service
           mkdir -p /root/alice-ai
           cat >/root/alice-ai/server.js <<'NODE'
-          const express=require('express');
-          const app=express();
-          app.use(express.json({limit:'10mb'}));
+          const express=require('express'); const app=express(); app.use(express.json({limit:'10mb'}));
           const TARGET='http://127.0.0.1:3020/alice';
           app.get('/health',(req,res)=>res.json({ok:true,service:'alice-ai-adapter',target:TARGET}));
-          app.post('/alice',async(req,res)=>{
-            try{
-              const c=new AbortController(); const t=setTimeout(()=>c.abort(),4300);
-              const r=await fetch(TARGET,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body||{}),signal:c.signal});
-              clearTimeout(t); const text=await r.text(); res.status(r.status).type('application/json').send(text);
-            }catch(e){
-              const q=String(req.body?.request?.command||req.body?.request?.original_utterance||'');
-              const text=/кто тебя создал/iu.test(q)?'Меня создал Roman.':/как тебя зовут/iu.test(q)?'Мой AI.':'Мой AI получил запрос. Повтори его ещё раз.';
-              res.json({version:'1.0',response:{text,end_session:false},session_state:{fallback:true}});
-            }
-          });
+          app.post('/alice',async(req,res)=>{try{const c=new AbortController();const t=setTimeout(()=>c.abort(),4300);const r=await fetch(TARGET,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body||{}),signal:c.signal});clearTimeout(t);res.status(r.status).type('application/json').send(await r.text());}catch(e){const q=String(req.body?.request?.command||req.body?.request?.original_utterance||'');const text=/кто тебя создал/iu.test(q)?'Меня создал Roman.':/как тебя зовут/iu.test(q)?'Мой AI.':'Мой AI получил запрос. Повтори его ещё раз.';res.json({version:'1.0',response:{text,end_session:false},session_state:{fallback:true}});}});
           app.listen(3011,'127.0.0.1',()=>console.log('Alice adapter -> My AI Unified :3020'));
           NODE
           cat >/etc/systemd/system/alice-ai.service <<'UNIT'
@@ -134,59 +117,46 @@ jobs:
           systemctl restart alice-ai.service
           systemctl is-active ollama.service my-ai-unified-legacy.service my-ai-unified.service alice-ai.service
           REMOTE
-
-      - name: Verify local AI, Dispatcher and Alice
+      - name: Verify local AI and Alice
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          install -m 700 -d ~/.ssh; printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
           curl -fsS --max-time 5 http://127.0.0.1:11434/api/tags >/tmp/ollama.json
           curl -fsS --max-time 10 http://127.0.0.1:3020/health >/tmp/health.json
           python3 - <<'PY'
           import json
-          h=json.load(open('/tmp/health.json'))
-          assert h.get('ok') and h.get('dispatcher') and h.get('local_ai',{}).get('ok'), h
-          print('LOCAL_HEALTH_OK',h['local_ai'])
+          h=json.load(open('/tmp/health.json')); assert h.get('ok') and h.get('dispatcher') and h.get('local_ai',{}).get('ok'),h; print('LOCAL_HEALTH_OK',h['local_ai'])
           PY
           curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j
-          print('LOCAL_CHAT_OK',j.get('model'),j.get('result'))
+          j=json.load(open('/tmp/chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j; print('LOCAL_CHAT_OK',j.get('model'),j.get('result'))
           PY
           curl --fail --silent --show-error --max-time 8 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-alice"}}' >/tmp/alice.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/alice.json')); t=j.get('response',{}).get('text',''); assert t,j
-          print('ALICE_LOCAL_OK',t)
+          j=json.load(open('/tmp/alice.json')); assert j.get('response',{}).get('text'),j; print('ALICE_LOCAL_OK',j['response']['text'])
           PY
           curl --fail --silent --show-error --max-time 10 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-public-alice"}}' >/tmp/alice-public.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/alice-public.json')); t=j.get('response',{}).get('text',''); assert t,j
-          print('ALICE_PUBLIC_OK',t)
+          j=json.load(open('/tmp/alice-public.json')); assert j.get('response',{}).get('text'),j; print('ALICE_PUBLIC_OK',j['response']['text'])
           PY
           REMOTE
-
-      - name: Rebuild verified Quick Tunnel
+      - name: Rebuild verified Quick Tunnel and Pages
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          install -m 700 -d ~/.ssh; printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
           : >/var/log/my-ai-unified-quick-tunnel.log
@@ -205,62 +175,36 @@ jobs:
           [Install]
           WantedBy=multi-user.target
           UNIT
-          systemctl daemon-reload
-          systemctl enable my-ai-unified-quick-tunnel.service
-          systemctl restart my-ai-unified-quick-tunnel.service
-          url=''
-          for i in $(seq 1 45); do url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true); [ -n "$url" ] && break; sleep 2; done
-          test -n "$url"
-          for i in $(seq 1 120); do if curl --fail --silent --show-error --retry 2 --retry-delay 2 --retry-all-errors --max-time 10 "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then break; fi; sleep 2; done
+          systemctl daemon-reload; systemctl enable my-ai-unified-quick-tunnel.service; systemctl restart my-ai-unified-quick-tunnel.service
+          url=''; for i in $(seq 1 45); do url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true); [ -n "$url" ] && break; sleep 2; done; test -n "$url"
+          for i in $(seq 1 120); do if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 10 "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then break; fi; sleep 2; done
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('local_ai',{}).get('ok'),j
-          print('PUBLIC_HEALTH_OK',j['local_ai'])
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('local_ai',{}).get('ok'),j; print('PUBLIC_HEALTH_OK',j['local_ai'])
           PY
           curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 40 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j
-          print('PUBLIC_CHAT_OK',j.get('model'),j.get('result'))
+          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j; print('PUBLIC_CHAT_OK',j.get('model'),j.get('result'))
           PY
           echo "FULL_CHAIN_OK=$url"
           REMOTE
-          url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | cut -d= -f2-)
-          test -n "$url"
-          printf '%s' "$url" > /tmp/quick-url
-
-      - name: Prepare Pages and commit verified locator
-        run: |
-          set -euo pipefail
-          rm -rf pages && mkdir -p pages
-          cp index.html app-fixed.html pages/
-          url=$(cat /tmp/quick-url)
-          python3 - "$url" <<'PY'
+          url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | cut -d= -f2-); test -n "$url"; printf '%s' "$url" > /tmp/quick-url
+          rm -rf pages; mkdir -p pages; cp index.html app-fixed.html pages/
+          python3 - "$(cat /tmp/quick-url)" <<'PY'
           import pathlib,sys,json
-          url=sys.argv[1].rstrip('/')
-          pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n')
-          pathlib.Path('index.html').write_text('<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>My AI Unified</title></head><body><script>location.replace(\'./app-fixed.html?v=local-\'+Date.now());</script><p>Открываю My AI Unified…</p></body></html>\n')
+          u=sys.argv[1].rstrip('/'); pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':u,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n'); pathlib.Path('index.html').write_text('<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>My AI Unified</title></head><body><script>location.replace(\'./app-fixed.html?v=local-\'+Date.now());</script><p>Открываю My AI Unified…</p></body></html>\n')
           PY
           cp index.html app-fixed.html api.json pages/
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html api.json
-          git diff --cached --quiet || (git commit -m 'Update verified local AI locator' && git push)
-
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'; git add index.html api.json; git diff --cached --quiet || (git commit -m 'Update verified local AI locator' && git push)
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
-        with:
-          path: pages
+        with: { path: pages }
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify Pages
-        env:
-          URL: ${{ steps.deployment.outputs.page_url }}
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --max-time 20 "$URL" -o /tmp/pages.html
-          grep -q 'My AI Unified' /tmp/pages.html
-          echo "PAGES_OK=$URL"
+        env: { URL: ${{ steps.deployment.outputs.page_url }} }
+        run: curl --fail --silent --show-error --max-time 20 "$URL" | grep -q 'My AI Unified'
