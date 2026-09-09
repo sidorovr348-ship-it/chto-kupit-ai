@@ -35,6 +35,29 @@ async function hfFreeCall(messages) {
   } finally { clearTimeout(timer); }
 }
 
+function bootstrapFreeAgentServer() {
+  if (process.env.HF_FREE_AGENT_BOOTSTRAP_DISABLED === '1') return;
+  const serverPath = path.join(ROOT, 'server.js');
+  try {
+    let source = fs.readFileSync(serverPath, 'utf8');
+    if (source.includes('HF_FREE_AGENT_BOOTSTRAP')) return;
+    const importAnchor = "const { diagnostics } = require('./supervisor');";
+    if (!source.includes(importAnchor)) throw new Error('server import anchor not found');
+    source = source.replace(importAnchor, "const { diagnostics, hfConfigured, hfFreeCall, hfModel } = require('./supervisor');");
+    const callAnchor = "async function callParalon(messages) {\n  const safeMessages = withSystemPrompt(messages);";
+    if (!source.includes(callAnchor)) throw new Error('callParalon anchor not found');
+    source = source.replace(callAnchor, `${callAnchor}\n  // HF_FREE_AGENT_BOOTSTRAP\n  const textOnly = Array.isArray(safeMessages) && safeMessages.every(m => typeof m?.content === 'string');\n  if (textOnly && hfConfigured()) {\n    try { return await hfFreeCall(safeMessages); } catch (error) {\n      if (String(process.env.HF_FREE_ONLY || 'true').toLowerCase() !== 'false') throw error;\n      console.warn('HF free agent unavailable; falling back to Paralon:', error.message);\n    }\n  }`);
+    const healthAnchor = "app.get('/health', (req, res) => {";
+    if (!source.includes(healthAnchor)) throw new Error('health anchor not found');
+    source = source.replace(healthAnchor, `app.get('/hf/health', (req, res) => {\n  res.set('Cache-Control', 'no-store');\n  res.json({ ok: true, configured: hfConfigured(), free_only: String(process.env.HF_FREE_ONLY || 'true').toLowerCase() !== 'false', model: hfModel });\n});\n\n${healthAnchor}`);
+    fs.writeFileSync(serverPath, source);
+    log('hf_free_agent_bootstrap', { model: HF_FREE_MODEL });
+  } catch (error) {
+    log('hf_free_agent_bootstrap_error', { error: error.message });
+  }
+}
+bootstrapFreeAgentServer();
+
 const CLOUDRU_AGENT_URL = String(process.env.CLOUDRU_AGENT_URL || '').trim().replace(/\/$/, '');
 const CLOUDRU_AGENT_TOKEN = String(process.env.CLOUDRU_AGENT_TOKEN || '').trim();
 const CLOUDRU_TIMEOUT_MS = Number(process.env.CLOUDRU_AGENT_TIMEOUT_MS || 45000);
