@@ -19,7 +19,20 @@ systemd: my-ai-unified.service
 Express: 127.0.0.1:3020
 Legacy API: /root/chto-kupit-ai-api on port 3000; do not confuse with main backend.
 
-Expected backend health: ok=true, dispatcher=true, adapters paralon/paralon_fallback/serper/video=true; capabilities chat, vision, image_generation, video, web_search, documents, tables, shopping, voice, code, verification.
+## Current verified diagnostic — 2026-09-09
+Commit b9f5fa4cb9d38cb8a4191c0a1f2b5b2a750a4356 diagnostic workflow succeeded.
+- Ollama: active; qwen3:0.6b installed.
+- my-ai-unified-legacy: active.
+- my-ai-unified: active.
+- alice-ai: active.
+- Ports 11434, 3021, 3020 and 3011 listening.
+- GET /health on 3020 returned ok=true, dispatcher=true, local_ai.ok=true.
+- Reported capabilities: chat, vision, image_generation, video, web_search, documents, tables, shopping, voice, code, verification.
+- Local Alice endpoint returned a valid response for «Кто тебя создал?». The diagnostic response used fallback=true, so Alice→central AI live routing is NOT yet proven.
+- VPS storage is critically low: 716 MB free / 8.6 GB (92% used). RAM available was about 553 MiB and swap was in use. Do not pull large models or create unnecessary files.
+
+## Expected backend health
+ok=true, dispatcher=true, local AI available; capabilities chat, vision, image_generation, video, web_search, documents, tables, shopping, voice, code, verification.
 
 ## Public network architecture
 GitHub Pages frontend -> Cloudflare Quick Tunnel -> VPS 3020.
@@ -29,43 +42,28 @@ Protocol: http2.
 Quick Tunnel log: /var/log/my-ai-unified-quick-tunnel.log.
 Before tunnel restart: truncate the log so an old hostname cannot be reused.
 
-Named tunnel alice-ai / ai.aliceq.ru exists, but Safari previously reported an HTTPS trust/secure-connection problem. Do NOT make it the user-facing API unless TLS is independently verified fixed.
+Named tunnel alice-ai / aliceq.ru exists. Do not rotate its token or reinstall cloudflared without necessity. Do not make it the user-facing My AI API unless TLS is independently verified.
 
 ## Frontend stabilization
-app-fixed.html is the resilient frontend version, upgraded in the autonomous release.
-It now sends normal text tasks through the central /chat Dispatcher instead of duplicating shopping/web routing in the browser.
-It supports chat, voice input, photo, video, text/PDF/DOCX/CSV/TSV/XLSX file input, image-generation responses and shopping result rendering.
+app-fixed.html is the resilient frontend version. It supports chat, voice input, photo, video, text/PDF/DOCX/CSV/TSV/XLSX file input, image-generation responses and shopping result rendering.
 API discovery uses ./api.json?t=Date.now() with no-cache and a validated trycloudflare.com URL; fallback is the last verified Quick Tunnel URL.
 GET health timeout: 15s. POST timeout: 90s; video/document operations use a longer client timeout.
 Moscow time MUST be computed locally with Intl.DateTimeFormat using Europe/Moscow and MUST NOT depend on the API.
 
-## Autonomous release 2026-09-09
-The project was independently hardened and merged to main.
+## Autonomous release history
+The project has a central Dispatcher routing for vision, image_generation, documents, tables, video, shopping, web_search, code, verification and chat.
+Local document/table extraction helpers exist for TXT/MD/JSON/XML/HTML/CSV/TSV/PDF/DOCX/XLSX.
+Shopping price parsing and cheaper-mode sorting were improved.
+Video currently remains a known HTTP 400 limitation until fixed and smoke-tested.
 
-Implemented:
-- Central Dispatcher routing for vision, image_generation, documents, tables, video, shopping, web_search, code, verification and chat.
-- Fixed image-generation routing priority so «сделай картинку» does not get misclassified as vision.
-- Added local document/table extraction helpers for TXT/MD/JSON/XML/HTML/CSV/TSV/PDF/DOCX/XLSX.
-- Added /document, /table and /image backend endpoints.
-- Improved video frame extraction using ffprobe-derived duration and three proportional frames instead of fixed timestamps.
-- Improved shopping price parsing and cheaper-mode sorting.
-- Added dispatcher and document extraction regression tests.
-- Added controlled backend deployment workflow: .github/workflows/deploy-unified-backend.yml.
-- Backend deployment run #3: SUCCESS; my-ai-unified.service restarted and health verification passed on VPS.
-- Canonical tunnel rerun #44: SUCCESS; VPS health, local chat/shopping, Quick Tunnel, public health/chat/shopping, GitHub Pages deployment and Pages content verification all passed.
-- Pages deployment now publishes only frontend files (index.html, app-fixed.html, api.json and optional favicon/manifest), not backend source or repository backups.
-- Capability smoke test: document/table/image/vision all passed; video currently returns HTTP 400 from the multimodal provider path and remains the one known capability blocker.
+## Alice / «Мой AI»
+Published Yandex Alice skill «Мой AI» remains an important existing component and must not be broken or replaced.
+Target architecture: Alice -> /alice adapter -> My AI Unified Dispatcher -> model/tool -> Alice.
+Keep a fast fallback while the unified route is being proven.
+Historical working tests included identity, creator and arithmetic responses, but historical success does not prove current live routing.
 
-Current verified public API locator in api.json:
-https://that-luis-grams-riding.trycloudflare.com
-
-## Known limitations after this release
-- The public Quick Tunnel hostname remains temporary/dynamic and can change after restart; api.json is therefore generated by the canonical workflow.
-- PDF/DOCX/XLSX extraction is implemented; document/table smoke validation passed locally on the deployed VPS.
-- Vision smoke validation passed on the deployed VPS.
-- Video extraction reaches the backend but the final multimodal provider request currently returns HTTP 400. This is a real remaining limitation; do not claim video is fully working until fixed and smoke-tested.
-- Image generation currently returns a Pollinations image URL; the external generator itself is not part of the VPS health check.
-- Alice/«Мой AI» integration remains separate and intentionally untouched by this release.
+## Shopping
+«ЧтоКупить AI» is the shopping module, not the whole project. Historical stores: Wildberries, AliExpress, Яндекс Маркет, Ozon, DNS. Puter redirect/auth must never return.
 
 ## Disabled/controlled workflows
 pages.yml: disabled duplicate.
@@ -79,17 +77,31 @@ deploy-unified-backend.yml is the canonical backend-code deployment owner.
 capability-smoke.yml is the capability regression owner.
 
 ## Critical truthfulness rules
-Always distinguish:
-A) confirmed by repository/history;
-B) confirmed by automated workflow;
-C) confirmed on the user's iPhone/Safari;
-D) known remaining limitations.
+Always distinguish: A) repository/history; B) automated workflow; C) user's iPhone/Safari; D) remaining limitation.
 Never say everything is fixed until all relevant layers are actually verified.
 No system can guarantee every future error; eliminate known failure modes and add monitoring/self-healing where practical.
 
+## Security and exclusions
+Do not store API keys, HF_TOKEN, PARALON_API_KEY, SERPER_API_KEY, Cloudflare tokens, SSH keys or passwords in GitHub or archives.
+Do not delete backups.
+Do not touch VPN/Xray as part of this project.
+Do not return to Vercel as a solution.
+HF and Cloud.ru Agents Space are rejected as the primary zero-cost backend because they do not satisfy the no-mandatory-payment requirement.
+
+## User working rules
+User is Russian-speaking and non-programmer.
+English technical terms in instructions must have Russian translation in parentheses.
+Keep actions short and concrete; avoid circular diagnostics and repeated questions.
+Prefer automation over manual Termius copying.
+Say «готово» only after factual verification.
+Checkpoint every 5 assistant messages.
+Markers: 🟢 ready, 🟡 process, 🔴 problem, 🔵 next step, 🟣 important decision, ⚪ context.
+
 ## Next work priority
-1. Fix the video HTTP 400 by changing video analysis to single-frame multimodal calls followed by text synthesis, rather than sending multiple image parts in one provider request.
-2. Rerun capability smoke and canonical public-chain verification after the video fix.
-3. Audit Alice/«Мой AI» adapter integration without replacing the existing published skill.
-4. Add a stable public API path if/when a TLS-safe fixed endpoint is available; keep Quick Tunnel fallback.
-5. Continue App Store / Google Play packaging only after the web chain is stable.
+1. Run the canonical repair/deploy workflow on the current main commit now that the diagnostic confirms the local services are healthy.
+2. Verify local chat and public Quick Tunnel chain.
+3. Verify Alice public path and determine whether it reaches Dispatcher or still uses fallback.
+4. Do not pull a larger model while disk remains near 92% full.
+5. Fix video HTTP 400 after the core web/Alice chain is stable.
+6. Continue iPhone/Safari verification.
+7. App Store / Google Play only after the web chain is stable.
