@@ -1,5 +1,4 @@
 const express = require('express');
-const { execFileSync } = require('child_process');
 const { dispatch } = require('./src/dispatcher');
 const { callOllama, callVision, health, OLLAMA_MODEL } = require('./src/local-ai');
 
@@ -93,7 +92,4 @@ app.use((req, res, next) => {
   proxy(req, res);
 });
 
-try {
-  execFileSync('/usr/bin/fuser', ['-k', `${PORT}/tcp`], { stdio: 'ignore' });
-} catch (_) {}
 app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; model=${OLLAMA_MODEL}`));
