@@ -8,29 +8,14 @@ async function callOllama(messages, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || OLLAMA_TIMEOUT_MS);
   try {
-    const safeMessages = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...(Array.isArray(messages) ? messages : [])
-    ];
-    const body = {
-      model: options.model || OLLAMA_MODEL,
-      messages: safeMessages,
-      stream: false,
-      think: false,
-      options: { temperature: 0.6, num_predict: Number(options.numPredict || 500) }
-    };
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
+    const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
+    const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, options: { temperature: 0.6, num_predict: Number(options.numPredict || 500) } };
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
     const text = await response.text();
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!response.ok) throw Object.assign(new Error(`Local AI error (${response.status})`), { status: 502, details: data });
     const result = String(data?.message?.content || data?.response || '').trim();
-    if (!result) throw Object.assign(new Error('Local AI returned an empty response'), { status: 502 });
+    if (!result) throw Object.assign(new Error('Local AI returned an empty response'), { status: 502, details: data });
     return { result, model: data.model || body.model, totalDuration: data.total_duration || null };
   } catch (error) {
     if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 });
@@ -40,32 +25,17 @@ async function callOllama(messages, options = {}) {
 
 async function callVision(prompt, images, options = {}) {
   const content = String(prompt || 'Проанализируй изображение.').trim();
-  const encoded = (Array.isArray(images) ? images : []).map((image) => {
-    const value = String(image || '');
-    return value.includes(',') ? value.slice(value.indexOf(',') + 1) : value;
-  }).filter(Boolean);
+  const encoded = (Array.isArray(images) ? images : []).map(image => { const value = String(image || ''); return value.includes(',') ? value.slice(value.indexOf(',') + 1) : value; }).filter(Boolean);
   if (!encoded.length) throw Object.assign(new Error('image is required'), { status: 400 });
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || 30000);
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || OLLAMA_MODEL,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content, images: encoded }],
-        stream: false,
-        think: false,
-        options: { temperature: 0.4, num_predict: Number(options.numPredict || 500) }
-      }),
-      signal: controller.signal
-    });
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { model: options.model || OLLAMA_MODEL, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content, images: encoded }], stream: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 500) } }, signal: controller.signal });
     const text = await response.text();
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!response.ok) throw Object.assign(new Error(`Local vision error (${response.status})`), { status: 502, details: data });
     const result = String(data?.message?.content || '').trim();
-    if (!result) throw Object.assign(new Error('Local vision returned an empty response'), { status: 502 });
+    if (!result) throw Object.assign(new Error('Local vision returned an empty response'), { status: 502, details: data });
     return { result, model: data.model || options.model || OLLAMA_MODEL, totalDuration: data.total_duration || null };
   } catch (error) {
     if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел проанализировать изображение'), { status: 504 });
