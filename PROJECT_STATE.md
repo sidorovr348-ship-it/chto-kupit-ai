@@ -65,6 +65,18 @@ Historical working tests included identity, creator and arithmetic responses, bu
 ## Shopping
 «ЧтоКупить AI» is the shopping module, not the whole project. Historical stores: Wildberries, AliExpress, Яндекс Маркет, Ozon, DNS. Puter redirect/auth must never return.
 
+## Cloud.ru external capability layer — decision 2026-09-09
+Cloud.ru AI Agents / Agents Space is now a candidate OPTIONAL external capability layer, not a replacement backend.
+- Current Cloud.ru documentation confirms AI agents, multi-agent systems, MCP, A2A, triggers, sessions, tracing and Public API.
+- One agent system currently supports up to five agents.
+- Agents and agent systems can expose public URLs.
+- Agents Space is pay-as-you-go; current documentation gives 2 vCPU + 4 GB RAM at 3.84 RUB/hour while an agent is running, plus model token charges. Storage has a 15 GB free tier.
+- Cloud.ru Evolution documentation currently advertises a 4,000-bonus starting grant and free-tier services, but this is account-dependent and must be checked before calling the integration free.
+- Preview/free models exist in the model catalog, but a free model does not make always-on agent infrastructure free.
+- First experiment should be one low-cost/serverless Cloud.ru agent or MCP capability behind a My AI Unified adapter with timeout and fallback.
+- Do not migrate the main Dispatcher, Alice, shopping or the whole project to Cloud.ru.
+- Detailed plan is in CLOUD_RU_INTEGRATION_PLAN.md.
+
 ## Disabled/controlled workflows
 pages.yml: disabled duplicate.
 deploy-vps.yml: manual-only.
@@ -86,7 +98,7 @@ Do not store API keys, HF_TOKEN, PARALON_API_KEY, SERPER_API_KEY, Cloudflare tok
 Do not delete backups.
 Do not touch VPN/Xray as part of this project.
 Do not return to Vercel as a solution.
-HF and Cloud.ru Agents Space are rejected as the primary zero-cost backend because they do not satisfy the no-mandatory-payment requirement.
+HF and Cloud.ru are NOT the primary backend. Cloud.ru is an optional external capability layer subject to cost/grant verification.
 
 ## User working rules
 User is Russian-speaking and non-programmer.
@@ -98,10 +110,11 @@ Checkpoint every 5 assistant messages.
 Markers: 🟢 ready, 🟡 process, 🔴 problem, 🔵 next step, 🟣 important decision, ⚪ context.
 
 ## Next work priority
-1. Run the canonical repair/deploy workflow on the current main commit now that the diagnostic confirms the local services are healthy.
+1. Verify/fix the canonical public-chain workflow; current run 34390501036 attempt 2 completed with failure, so the exact failing step must be inspected before any claim of deployment success.
 2. Verify local chat and public Quick Tunnel chain.
 3. Verify Alice public path and determine whether it reaches Dispatcher or still uses fallback.
 4. Do not pull a larger model while disk remains near 92% full.
-5. Fix video HTTP 400 after the core web/Alice chain is stable.
-6. Continue iPhone/Safari verification.
-7. App Store / Google Play only after the web chain is stable.
+5. Run a controlled Cloud.ru integration experiment only after the current core chain is stable; do not require payment without checking grant/free balance.
+6. Fix video HTTP 400 after the core web/Alice chain is stable.
+7. Continue iPhone/Safari verification.
+8. App Store / Google Play only after the web chain is stable.
