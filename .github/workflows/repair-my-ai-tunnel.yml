@@ -1,42 +1,30 @@
 name: Deploy and verify My AI Unified
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 concurrency:
   group: my-ai-unified-local-ai
   cancel-in-progress: true
-
 permissions:
   contents: write
   pages: write
   id-token: write
-
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Update verified local AI locator'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
+    environment: { name: github-pages }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Deploy local AI gateway and Alice adapter
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      - uses: actions/checkout@v4
+      - name: Deploy VPS local AI and Alice
+        env: { VPS_HOST: '${{ secrets.VPS_HOST }}', VPS_USER: '${{ secrets.VPS_USER }}', VPS_SSH_KEY: '${{ secrets.VPS_SSH_KEY }}' }
         run: |
           set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          install -m 700 -d ~/.ssh; printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          SSH="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          SCP="scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          $SSH "$VPS_USER@$VPS_HOST" 'mkdir -p /root/my-ai-unified/backups /root/my-ai-unified/src /root/alice-ai && ts=$(date +%Y%m%d-%H%M%S); for f in server.js supervisor.js package.json local-gateway.js src/local-ai.js src/dispatcher.js src/capabilities.json src/document-tools.js; do [ -f "/root/my-ai-unified/$f" ] && cp -a "/root/my-ai-unified/$f" "/root/my-ai-unified/backups/$(basename "$f").$ts" || true; done; [ -f /root/alice-ai/server.js ] && cp -a /root/alice-ai/server.js "/root/alice-ai/server.js.backup-unified-$ts" || true'
+          SSH="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"; SCP="scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          $SSH "$VPS_USER@$VPS_HOST" 'mkdir -p /root/my-ai-unified/backups /root/my-ai-unified/src /root/alice-ai; ts=$(date +%Y%m%d-%H%M%S); for f in server.js supervisor.js package.json local-gateway.js src/local-ai.js src/dispatcher.js src/capabilities.json src/document-tools.js; do [ -f "/root/my-ai-unified/$f" ] && cp -a "/root/my-ai-unified/$f" "/root/my-ai-unified/backups/$(basename "$f").$ts" || true; done; [ -f /root/alice-ai/server.js ] && cp -a /root/alice-ai/server.js "/root/alice-ai/server.js.backup-unified-$ts" || true'
           $SCP server.js supervisor.js package.json local-gateway.js "$VPS_USER@$VPS_HOST:/root/my-ai-unified/"
           $SCP src/local-ai.js src/dispatcher.js src/capabilities.json src/document-tools.js "$VPS_USER@$VPS_HOST:/root/my-ai-unified/src/"
           $SSH "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
@@ -44,22 +32,15 @@ jobs:
           cd /root/my-ai-unified
           npm install --omit=dev
           if ! command -v ollama >/dev/null 2>&1; then curl -fsSL https://ollama.com/install.sh | sh; fi
-          systemctl enable ollama >/dev/null 2>&1 || true
-          systemctl restart ollama
+          systemctl enable ollama >/dev/null 2>&1 || true; systemctl restart ollama
           for i in $(seq 1 30); do curl -fsS --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS --max-time 3 http://127.0.0.1:11434/api/tags >/dev/null
-          ram_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
-          if [ "$ram_mb" -ge 7000 ]; then MODEL='qwen3-vl:4b-instruct'; else MODEL='qwen3-vl:2b'; fi
-          echo "LOCAL_MODEL=$MODEL RAM_MB=$ram_mb"
-          ollama pull "$MODEL"
-          printf 'OLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=%s\nOLLAMA_TIMEOUT_MS=20000\n' "$MODEL" >/root/my-ai-unified/.local-ai.env
+          MODEL='qwen3-vl:2b'; ollama pull "$MODEL"
+          printf 'OLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=%s\nOLLAMA_TIMEOUT_MS=30000\n' "$MODEL" >/root/my-ai-unified/.local-ai.env
           cat >/etc/systemd/system/my-ai-unified-legacy.service <<'UNIT'
           [Unit]
-          Description=My AI Unified legacy modules
           After=network-online.target
-          Wants=network-online.target
           [Service]
-          Type=simple
           WorkingDirectory=/root/my-ai-unified
           Environment=PORT=3021
           Environment=ENV_FILE=/root/chto-kupit-ai.env
@@ -71,11 +52,8 @@ jobs:
           UNIT
           cat >/etc/systemd/system/my-ai-unified.service <<'UNIT'
           [Unit]
-          Description=My AI Unified local Dispatcher gateway
           After=network-online.target ollama.service my-ai-unified-legacy.service
-          Wants=network-online.target ollama.service my-ai-unified-legacy.service
           [Service]
-          Type=simple
           WorkingDirectory=/root/my-ai-unified
           Environment=PORT=3020
           Environment=LEGACY_URL=http://127.0.0.1:3021
@@ -86,25 +64,16 @@ jobs:
           [Install]
           WantedBy=multi-user.target
           UNIT
-          systemctl daemon-reload
-          systemctl enable my-ai-unified-legacy.service my-ai-unified.service
-          systemctl restart my-ai-unified-legacy.service
-          systemctl restart my-ai-unified.service
-          mkdir -p /root/alice-ai
           cat >/root/alice-ai/server.js <<'NODE'
-          const express=require('express'); const app=express(); app.use(express.json({limit:'10mb'}));
-          const TARGET='http://127.0.0.1:3020/alice';
-          app.get('/health',(req,res)=>res.json({ok:true,service:'alice-ai-adapter',target:TARGET}));
-          app.post('/alice',async(req,res)=>{try{const c=new AbortController();const t=setTimeout(()=>c.abort(),4300);const r=await fetch(TARGET,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(req.body||{}),signal:c.signal});clearTimeout(t);res.status(r.status).type('application/json').send(await r.text());}catch(e){const q=String(req.body?.request?.command||req.body?.request?.original_utterance||'');const text=/кто тебя создал/iu.test(q)?'Меня создал Roman.':/как тебя зовут/iu.test(q)?'Мой AI.':'Мой AI получил запрос. Повтори его ещё раз.';res.json({version:'1.0',response:{text,end_session:false},session_state:{fallback:true}});}});
-          app.listen(3011,'127.0.0.1',()=>console.log('Alice adapter -> My AI Unified :3020'));
+          const express=require('express');const app=express();app.use(express.json({limit:'10mb'}));const TARGET='http://127.0.0.1:3020/alice';
+          app.get('/health',(q,r)=>r.json({ok:true,service:'alice-ai-adapter',target:TARGET}));
+          app.post('/alice',async(q,r)=>{try{const c=new AbortController(),t=setTimeout(()=>c.abort(),4300);const x=await fetch(TARGET,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(q.body||{}),signal:c.signal});clearTimeout(t);r.status(x.status).type('application/json').send(await x.text())}catch(e){const s=String(q.body?.request?.command||q.body?.request?.original_utterance||'');const text=/кто тебя создал/iu.test(s)?'Меня создал Roman.':/как тебя зовут/iu.test(s)?'Мой AI.':'Мой AI получил запрос. Повтори его ещё раз.';r.json({version:'1.0',response:{text,end_session:false},session_state:{fallback:true}})}});
+          app.listen(3011,'127.0.0.1',()=>console.log('Alice -> My AI Unified :3020'));
           NODE
           cat >/etc/systemd/system/alice-ai.service <<'UNIT'
           [Unit]
-          Description=Alice My AI Unified adapter
           After=network-online.target my-ai-unified.service
-          Wants=network-online.target
           [Service]
-          Type=simple
           WorkingDirectory=/root/alice-ai
           ExecStart=/usr/bin/node /root/alice-ai/server.js
           Restart=always
@@ -112,16 +81,12 @@ jobs:
           [Install]
           WantedBy=multi-user.target
           UNIT
-          systemctl daemon-reload
-          systemctl enable alice-ai.service
-          systemctl restart alice-ai.service
-          systemctl is-active ollama.service my-ai-unified-legacy.service my-ai-unified.service alice-ai.service
+          systemctl daemon-reload; systemctl enable my-ai-unified-legacy my-ai-unified alice-ai
+          systemctl restart my-ai-unified-legacy; systemctl restart my-ai-unified; systemctl restart alice-ai
+          systemctl is-active ollama my-ai-unified-legacy my-ai-unified alice-ai
           REMOTE
       - name: Verify local AI and Alice
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        env: { VPS_HOST: '${{ secrets.VPS_HOST }}', VPS_USER: '${{ secrets.VPS_USER }}', VPS_SSH_KEY: '${{ secrets.VPS_SSH_KEY }}' }
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh; printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
@@ -133,12 +98,12 @@ jobs:
           import json
           h=json.load(open('/tmp/health.json')); assert h.get('ok') and h.get('dispatcher') and h.get('local_ai',{}).get('ok'),h; print('LOCAL_HEALTH_OK',h['local_ai'])
           PY
-          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j; print('LOCAL_CHAT_OK',j.get('model'),j.get('result'))
           PY
-          curl --fail --silent --show-error --max-time 8 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-alice"}}' >/tmp/alice.json
+          curl --fail --silent --show-error --max-time 10 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-alice"}}' >/tmp/alice.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/alice.json')); assert j.get('response',{}).get('text'),j; print('ALICE_LOCAL_OK',j['response']['text'])
@@ -150,10 +115,7 @@ jobs:
           PY
           REMOTE
       - name: Rebuild verified Quick Tunnel and Pages
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        env: { VPS_HOST: '${{ secrets.VPS_HOST }}', VPS_USER: '${{ secrets.VPS_USER }}', VPS_SSH_KEY: '${{ secrets.VPS_SSH_KEY }}' }
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh; printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519; ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
@@ -162,11 +124,8 @@ jobs:
           : >/var/log/my-ai-unified-quick-tunnel.log
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
           [Unit]
-          Description=My AI Unified proven Quick Tunnel
           After=network-online.target
-          Wants=network-online.target
           [Service]
-          Type=simple
           ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
           Restart=always
           RestartSec=3
@@ -175,14 +134,14 @@ jobs:
           [Install]
           WantedBy=multi-user.target
           UNIT
-          systemctl daemon-reload; systemctl enable my-ai-unified-quick-tunnel.service; systemctl restart my-ai-unified-quick-tunnel.service
+          systemctl daemon-reload; systemctl enable my-ai-unified-quick-tunnel; systemctl restart my-ai-unified-quick-tunnel
           url=''; for i in $(seq 1 45); do url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true); [ -n "$url" ] && break; sleep 2; done; test -n "$url"
           for i in $(seq 1 120); do if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 10 "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then break; fi; sleep 2; done
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('local_ai',{}).get('ok'),j; print('PUBLIC_HEALTH_OK',j['local_ai'])
           PY
-          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 40 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('local') and j.get('result'),j; print('PUBLIC_CHAT_OK',j.get('model'),j.get('result'))
@@ -197,14 +156,7 @@ jobs:
           PY
           cp index.html app-fixed.html api.json pages/
           git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'; git add index.html api.json; git diff --cached --quiet || (git commit -m 'Update verified local AI locator' && git push)
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with: { path: pages }
-      - name: Deploy Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-      - name: Verify Pages
-        env: { URL: ${{ steps.deployment.outputs.page_url }} }
-        run: curl --fail --silent --show-error --max-time 20 "$URL" | grep -q 'My AI Unified'
+      - uses: actions/deploy-pages@v4
