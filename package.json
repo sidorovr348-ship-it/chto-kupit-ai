@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js')\""
+    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js');require('./supervisor')\""
   },
   "dependencies": {
     "cors": "^2.8.5",
