@@ -99,6 +99,8 @@ jobs:
           UNIT
           systemctl daemon-reload; systemctl enable my-ai-unified-legacy my-ai-unified alice-ai
           systemctl restart my-ai-unified-legacy; systemctl restart my-ai-unified; systemctl restart alice-ai
+          for i in $(seq 1 30); do curl -fsS --max-time 2 http://127.0.0.1:3020/health >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS --max-time 5 http://127.0.0.1:3020/health >/dev/null
           systemctl is-active ollama my-ai-unified-legacy my-ai-unified alice-ai
           REMOTE
       - name: Verify local AI and Alice
