@@ -9,6 +9,7 @@ on:
       - 'supervisor.js'
       - 'supervisor-daemon.js'
       - 'package.json'
+      - 'scripts/**'
       - '.github/workflows/deploy-unified-backend.yml'
   workflow_dispatch:
 
@@ -34,15 +35,23 @@ jobs:
           cd /root/my-ai-unified
           stamp=$(date +%Y%m%d-%H%M%S)
           cp -f server.js "server.js.backup-autonomous-$stamp" || true
-          mkdir -p src
+          git fetch origin main
+          git checkout origin/main -- server.js src/dispatcher.js
+          mkdir -p scripts
           base='https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main'
           curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/server.js" -o server.js
           curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/dispatcher.js" -o src/dispatcher.js
           curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/capabilities.json" -o src/capabilities.json
           curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/document-tools.js" -o src/document-tools.js
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/supervisor.js" -o supervisor.js
+          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/scripts/bootstrap-free-openrouter.js" -o scripts/bootstrap-free-openrouter.js
           node --check server.js
           node --check src/dispatcher.js
           node --check src/document-tools.js
+          node --check supervisor.js
+          node scripts/bootstrap-free-openrouter.js
+          node --check server.js
+          npm test
           systemctl restart my-ai-unified.service
           for i in $(seq 1 45); do
             if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/my-ai-health.json 2>/dev/null; then break; fi
@@ -50,6 +59,9 @@ jobs:
             sleep 2
           done
           cat /tmp/my-ai-health.json
+          echo
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3020/openrouter/health
+          echo
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/my-ai-health.json'))
