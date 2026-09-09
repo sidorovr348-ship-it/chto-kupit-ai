@@ -1,0 +1,22 @@
+name: Debug My AI Unified VPS
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect service
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set +e
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'set +e; echo "=== STATUS ==="; systemctl status my-ai-unified.service --no-pager -l; echo "=== JOURNAL ==="; journalctl -u my-ai-unified.service -n 80 --no-pager; echo "=== NODE CHECK ==="; cd /root/my-ai-unified; node --check server.js; node --check supervisor.js; node --check src/cloudru-agent.js; echo "=== FILES ==="; ls -l src/cloudru-agent.js server.js supervisor.js package.json'
