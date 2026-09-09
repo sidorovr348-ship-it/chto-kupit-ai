@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "postinstall": "node -e \"const fs=require('fs');fs.copyFileSync('supervisor.js','src/cloudru-agent.js');let p='server.js',s=fs.readFileSync(p,'utf8');if(!s.includes('HF_FREE_AGENT_BOOTSTRAP')){s=s.replace(\"const { diagnostics } = require('./supervisor');\",\"const { diagnostics, hfConfigured, hfFreeCall, hfModel } = require('./supervisor');\");const a=\"async function callParalon(messages) {\\n  const safeMessages = withSystemPrompt(messages);\";const b=a+\"\\n  // HF_FREE_AGENT_BOOTSTRAP\\n  const textOnly = Array.isArray(safeMessages) && safeMessages.every(m => typeof m?.content === 'string');\\n  if (textOnly && hfConfigured()) {\\n    try { return await hfFreeCall(safeMessages); } catch (error) {\\n      if (String(process.env.HF_FREE_ONLY || 'true').toLowerCase() !== 'false') throw error;\\n      console.warn('HF free agent unavailable; falling back to Paralon:', error.message);\\n    }\\n  }\";if(!s.includes(a))throw new Error('HF bootstrap: callParalon anchor not found');s=s.replace(a,b);const h=\"app.get('/health', (req, res) => {\";const r=\"app.get('/hf/health', (req, res) => { res.set('Cache-Control','no-store'); res.json({ ok:true, configured:hfConfigured(), free_only:String(process.env.HF_FREE_ONLY || 'true').toLowerCase() !== 'false', model:hfModel }); });\\n\\n\"+h;if(!s.includes(\"app.get('/hf/health'\")){if(!s.includes(h))throw new Error('HF bootstrap: health anchor not found');s=s.replace(h,r)}fs.writeFileSync(p,s)}\""
+    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js')\""
   },
   "dependencies": {
     "cors": "^2.8.5",
