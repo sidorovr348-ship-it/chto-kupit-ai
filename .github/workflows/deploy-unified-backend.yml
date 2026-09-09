@@ -38,13 +38,12 @@ jobs:
           git fetch origin main
           git checkout origin/main -- server.js src/dispatcher.js
           mkdir -p scripts
-          base='https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main'
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/server.js" -o server.js
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/dispatcher.js" -o src/dispatcher.js
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/capabilities.json" -o src/capabilities.json
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/src/document-tools.js" -o src/document-tools.js
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/supervisor.js" -o supervisor.js
-          curl --fail --silent --show-error --retry 4 --retry-all-errors "$base/scripts/bootstrap-free-openrouter.js" -o scripts/bootstrap-free-openrouter.js
+          git show origin/main:server.js > server.js
+          git show origin/main:src/dispatcher.js > src/dispatcher.js
+          git show origin/main:src/capabilities.json > src/capabilities.json
+          git show origin/main:src/document-tools.js > src/document-tools.js
+          git show origin/main:supervisor.js > supervisor.js
+          git show origin/main:scripts/bootstrap-free-openrouter.js > scripts/bootstrap-free-openrouter.js
           node --check server.js
           node --check src/dispatcher.js
           node --check src/document-tools.js
