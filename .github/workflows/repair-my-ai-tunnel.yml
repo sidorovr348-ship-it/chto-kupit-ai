@@ -31,7 +31,8 @@ jobs:
           set -euo pipefail
           cd /root/my-ai-unified
           if [ ! -d node_modules/express ] || [ ! -d node_modules/cors ] || [ ! -d node_modules/dotenv ]; then npm install --omit=dev --no-audit --no-fund; fi
-          if ! command -v ollama >/dev/null 2>&1; then curl -fsSL https://ollama.com/install.sh | sh; fi
+          if command -v ollama >/dev/null 2>&1; then systemctl stop ollama >/dev/null 2>&1 || true; rm -rf /usr/local/lib/ollama; fi
+          curl -fsSL https://ollama.com/install.sh | sh
           if ! systemctl cat ollama.service >/dev/null 2>&1; then
             OLLAMA_BIN=$(command -v ollama)
             cat >/etc/systemd/system/ollama.service <<UNIT
