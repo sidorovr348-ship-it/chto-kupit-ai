@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js')\""
+    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js')\" && node scripts/bootstrap-free-hf.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
