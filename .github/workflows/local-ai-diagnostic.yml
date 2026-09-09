@@ -1,0 +1,32 @@
+name: Local AI diagnostic
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check VPS local AI and Alice
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo '=== RAM ==='; free -h
+          echo '=== DISK ==='; df -h / | tail -1
+          echo '=== OLLAMA ==='; command -v ollama || true; systemctl is-active ollama || true; ollama list || true
+          echo '=== SERVICES ==='; systemctl is-active my-ai-unified-legacy my-ai-unified alice-ai || true
+          echo '=== PORTS ==='; ss -ltnp | grep -E ':3011|:3020|:3021|:11434' || true
+          echo '=== HEALTH ==='; curl -sS --max-time 5 http://127.0.0.1:3020/health || true
+          echo
+          echo '=== ALICE ==='; curl -sS --max-time 6 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"request":{"command":"Кто тебя создал?"},"session":{"session_id":"diag"}}' || true
+          echo
+          REMOTE
