@@ -37,29 +37,30 @@ jobs:
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
-          echo '=== BACKEND ==='
           systemctl is-active my-ai-unified.service
           for i in $(seq 1 45); do
             if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json 2>/dev/null; then break; fi
             [ "$i" = 45 ] && exit 1
             sleep 2
           done
-          cat /tmp/health.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/health.json'))
           assert j.get('ok') is True and j.get('dispatcher') is True, j
           expected={'chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'}
           assert expected.issubset(set(j.get('capabilities',[]))), j
+          assert all(j.get('adapters',{}).get(x) is True for x in ['paralon','paralon_fallback','serper','video']), j
           PY
-
-          echo '=== LOCAL SMOKE ==='
           curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/chat.json
-          cat /tmp/chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/chat.json')); assert j.get('ok') is True and j.get('result'), j
+          PY
           curl --fail --silent --show-error --retry 3 --retry-all-errors --max-time 60 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/shopping.json
-          cat /tmp/shopping.json | head -c 10000; echo
-
-          echo '=== QUICK TUNNEL ==='
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/shopping.json')); assert j.get('ok') is True and isinstance(j.get('results'),list), j
+          PY
           : >/var/log/my-ai-unified-quick-tunnel.log
           cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
           [Unit]
@@ -85,42 +86,39 @@ jobs:
             [ -n "$url" ] && break
             sleep 2
           done
-          [ -n "$url" ] || { tail -100 /var/log/my-ai-unified-quick-tunnel.log || true; exit 1; }
-          echo "QUICK_TUNNEL_URL=$url"
-
-          echo '=== PUBLIC SMOKE ==='
+          [ -n "$url" ]
           public_ok=0
           for i in $(seq 1 120); do
-            if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 12 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then public_ok=1; break; fi
+            if curl --fail --silent --show-error --retry 2 --retry-delay 3 --retry-all-errors --max-time 12 -A 'Mozilla/5.0 MyAIUnifiedHealth' "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then public_ok=1; break; fi
             sleep 2
           done
           [ "$public_ok" = 1 ]
-          cat /tmp/public-health.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/public-health.json'))
-          assert j.get('ok') is True and j.get('dispatcher') is True, j
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') is True and j.get('dispatcher') is True, j
           PY
           curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 50 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: OK"}' >/tmp/public-chat.json
-          cat /tmp/public-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') is True and j.get('result'), j
+          PY
           curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 60 -A 'Mozilla/5.0 MyAIUnifiedClient' -X POST "$url/shopping" -H 'Content-Type: application/json' --data '{"query":"iPhone 17 Pro","location":"Москва, Россия","mode":"find"}' >/tmp/public-shopping.json
-          cat /tmp/public-shopping.json | head -c 10000; echo
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-shopping.json')); assert j.get('ok') is True and isinstance(j.get('results'),list), j
+          PY
           systemctl is-active my-ai-unified-quick-tunnel.service
           echo "FULL_CHAIN_OK=$url"
           REMOTE
           url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | tail -1 | cut -d= -f2-)
           test -n "$url"
           printf '%s' "$url" > /tmp/quick-url
-          echo "Verified public API: $url"
 
       - name: Prepare public frontend
         run: |
           set -euo pipefail
-          rm -rf pages
-          mkdir -p pages
+          rm -rf pages && mkdir -p pages
           cp index.html app-fixed.html api.json pages/
-          [ ! -f favicon.ico ] || cp favicon.ico pages/
-          [ ! -f manifest.webmanifest ] || cp manifest.webmanifest pages/
 
       - name: Bind frontend to verified API
         run: |
@@ -130,7 +128,7 @@ jobs:
           import pathlib,sys,json
           url=sys.argv[1].rstrip('/')
           pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':url,'verified':'full-chain'},ensure_ascii=False,indent=2)+'\n')
-          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260909-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260909">Открыть приложение</a></p></body></html>\n''')
+          pathlib.Path('index.html').write_text('''<!doctype html>\n<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>My AI Unified</title></head><body><script>location.replace('./app-fixed.html?v=20260909-'+Date.now());</script><p>Открываю My AI Unified…</p><p><a href="./app-fixed.html?v=20260909">Открыть приложение</a></p></body></html>\n''')
           PY
           cp index.html app-fixed.html api.json pages/
 
