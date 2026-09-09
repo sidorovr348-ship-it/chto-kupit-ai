@@ -32,7 +32,7 @@ jobs:
           cd /root/my-ai-unified
           if [ ! -d node_modules/express ] || [ ! -d node_modules/cors ] || [ ! -d node_modules/dotenv ]; then npm install --omit=dev --no-audit --no-fund; fi
           if ! command -v ollama >/dev/null 2>&1; then curl -fsSL https://ollama.com/install.sh | sh; fi
-          if ! systemctl list-unit-files ollama.service >/dev/null 2>&1 || ! systemctl cat ollama.service >/dev/null 2>&1; then
+          if ! systemctl cat ollama.service >/dev/null 2>&1; then
             OLLAMA_BIN=$(command -v ollama)
             cat >/etc/systemd/system/ollama.service <<UNIT
           [Unit]
@@ -51,7 +51,9 @@ jobs:
           systemctl daemon-reload; systemctl enable ollama >/dev/null 2>&1 || true; systemctl restart ollama
           for i in $(seq 1 30); do curl -fsS --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS --max-time 3 http://127.0.0.1:11434/api/tags >/dev/null
-          MODEL='qwen3:0.6b'; ollama pull "$MODEL"
+          MODEL='qwen3:0.6b'
+          ollama rm qwen3-vl:2b >/dev/null 2>&1 || true
+          ollama pull "$MODEL"
           printf 'OLLAMA_BASE_URL=http://127.0.0.1:11434\nOLLAMA_MODEL=%s\nOLLAMA_TIMEOUT_MS=30000\n' "$MODEL" >/root/my-ai-unified/.local-ai.env
           cat >/etc/systemd/system/my-ai-unified-legacy.service <<'UNIT'
           [Unit]
@@ -122,12 +124,12 @@ jobs:
           curl --fail --silent --show-error --max-time 10 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-alice"}}' >/tmp/alice.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/alice.json')); assert j.get('response',{}).get('text'),j; print('ALICE_LOCAL_OK',j['response']['text'])
+          j=json.load(open('/tmp/alice.json')); assert j.get('response',{}).get('text'),j; assert not j.get('session_state',{}).get('fallback'),j; print('ALICE_LOCAL_OK',j['response']['text'])
           PY
           curl --fail --silent --show-error --max-time 10 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Кто тебя создал?","original_utterance":"Кто тебя создал?"},"session":{"session_id":"ci-public-alice"}}' >/tmp/alice-public.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/alice-public.json')); assert j.get('response',{}).get('text'),j; print('ALICE_PUBLIC_OK',j['response']['text'])
+          j=json.load(open('/tmp/alice-public.json')); assert j.get('response',{}).get('text'),j; assert not j.get('session_state',{}).get('fallback'),j; print('ALICE_PUBLIC_OK',j['response']['text'])
           PY
           REMOTE
       - name: Rebuild verified Quick Tunnel and Pages
