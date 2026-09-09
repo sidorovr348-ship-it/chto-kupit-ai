@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Universal AI dispatcher and multi-tool assistant",
-  "main": "server.js",
+  "main": "local-gateway.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test",
-    "postinstall": "node -e \"require('fs').copyFileSync('supervisor.js','src/cloudru-agent.js');require('./supervisor')\""
+    "start": "node local-gateway.js",
+    "start:legacy": "PORT=3021 node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "cors": "^2.8.5",
