@@ -1,0 +1,1 @@
+Final repair trigger: use the verified qwen3:0.6b local model and local-first chat fallback.
