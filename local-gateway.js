@@ -17,10 +17,10 @@ function textFromMessages(messages) {
   return String(last.content || '');
 }
 
-async function proxy(req, res) {
+async function proxy(req, res, timeoutMs = 15000) {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(`${LEGACY_URL}${req.originalUrl}`, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
@@ -30,7 +30,27 @@ async function proxy(req, res) {
     clearTimeout(timer);
     const text = await response.text();
     res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
-  } catch (error) { res.status(502).json({ ok: false, error: 'Legacy module unavailable', details: error.message }); }
+  } catch (error) {
+    res.status(502).json({ ok: false, error: 'Legacy module unavailable', details: error.message });
+  }
+}
+
+async function callFastRemote(prompt) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const url = new URL('https://text.pollinations.ai/');
+    url.searchParams.set('model', 'openai');
+    url.searchParams.set('system', 'Отвечай по-русски кратко и естественно. Ты My AI Unified.');
+    url.searchParams.set('prompt', prompt);
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`remote HTTP ${response.status}`);
+    const text = (await response.text()).trim();
+    if (!text) throw new Error('remote AI returned empty response');
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 app.get('/health', async (req, res) => {
@@ -55,12 +75,18 @@ app.post('/chat', async (req, res) => {
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
     if (route === 'chat' || route === 'code') {
       try {
-        const answer = await callOllama(chatMessages, { numPredict: route === 'code' ? 900 : 180 });
+        const answer = await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 });
         return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
       } catch (localError) {
-        console.warn('Local AI unavailable, using legacy fallback:', localError.message);
-        return proxy(req, res);
+        console.warn('Local AI unavailable:', localError.message);
       }
+      try {
+        const answer = await callFastRemote(userPrompt);
+        return res.json({ ok: true, route, result: answer, model: 'pollinations-openai', local: false, fallback: true });
+      } catch (remoteError) {
+        console.warn('Fast remote AI unavailable:', remoteError.message);
+      }
+      return proxy(req, res, 15000);
     }
     if (route === 'vision' && req.body?.image) {
       const answer = await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]);
@@ -87,8 +113,13 @@ app.post('/alice', async (req, res) => {
     const text = String(answer || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
     return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: true, model: OLLAMA_MODEL } });
   } catch (error) {
-    const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но локальный AI сейчас занят. Повтори вопрос.';
-    return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true } });
+    try {
+      const text = (await callFastRemote(command)).slice(0, 1024);
+      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true, model: 'pollinations-openai' } });
+    } catch (remoteError) {
+      const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но AI сейчас недоступен. Повтори вопрос.';
+      return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true } });
+    }
   }
 });
 
