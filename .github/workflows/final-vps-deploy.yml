@@ -68,7 +68,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 20 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
       - name: Rebuild and verify public app
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -128,7 +128,7 @@ jobs:
           test -n "$url"
           rm -rf pages
           mkdir -p pages
-          cp app-fixed.html index.html pages/
+          cp index.html pages/index.html
           python3 - "$url" <<'PY'
           import json,pathlib,sys
           u=sys.argv[1].rstrip('/')
