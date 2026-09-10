@@ -134,4 +134,3 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with: { path: pages }
       - uses: actions/deploy-pages@v4
-      # Triggered redeploy after verified fast-fallback fix.
