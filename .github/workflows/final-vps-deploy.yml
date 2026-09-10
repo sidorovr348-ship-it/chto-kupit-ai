@@ -77,27 +77,29 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
           STABLE='https://ai.aliceq.ru'
-          if command -v cloudflared >/dev/null 2>&1 && cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.out 2>&1; then
-            cfg=''
-            for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
-            if [ -n "$cfg" ]; then
-              cp "$cfg" "$cfg.bak-my-ai-unified"
-              python3 - "$cfg" <<'PY'
+          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.out 2>&1 || true
+          cfg=''
+          for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
+          test -n "$cfg"
+          cp "$cfg" "$cfg.bak-my-ai-unified"
+          python3 - "$cfg" <<'PY'
           import sys
           p=sys.argv[1]
           s=open(p).read()
-          host='ai.aliceq.ru'
-          if host not in s:
+          entry='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n'
+          if 'hostname: ai.aliceq.ru' not in s:
               marker='ingress:\n'
-              entry='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n'
               if marker in s: s=s.replace(marker,marker+entry,1)
               else: s += '\n\ningress:\n'+entry
-              open(p,'w').write(s)
+          alice_path='  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n'
+          if 'path: ^/alice$' not in s:
+              marker='ingress:\n'
+              if marker in s: s=s.replace(marker,marker+alice_path,1)
+              else: s += '\n\ningress:\n'+alice_path
+          open(p,'w').write(s)
           PY
-              cloudflared tunnel ingress validate --config "$cfg"
-              systemctl restart alice-ai
-            fi
-          fi
+          cloudflared tunnel ingress validate --config "$cfg"
+          systemctl restart cloudflared 2>/dev/null || systemctl restart cloudflared.service 2>/dev/null || true
           for i in $(seq 1 45); do curl -fsS --max-time 5 "$STABLE/health?t=verify" >/tmp/public-health.json 2>/dev/null && break; sleep 2; done
           python3 - <<'PY'
           import json
@@ -111,6 +113,14 @@ jobs:
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
           print('STABLE_PUBLIC_CHAT_OK',j.get('result'))
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST 'https://aliceq.ru/alice' -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"public-unified-check"}}' >/tmp/public-alice.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-alice.json'))
+          text=str(j.get('response',{}).get('text',''))
+          assert text, j
+          print('ALICE_PUBLIC_OK',text)
           PY
           echo "FULL_CHAIN_OK=$STABLE"
           REMOTE
