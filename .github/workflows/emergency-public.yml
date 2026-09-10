@@ -50,13 +50,14 @@ jobs:
           assert h.get('ok') and h.get('dispatcher'), h
           print('LOCAL_HEALTH_OK')
           PY
-          if [ -f /tmp/my-ai-quick-tunnel.pid ] && kill -0 "$(cat /tmp/my-ai-quick-tunnel.pid 2>/dev/null)" 2>/dev/null; then
-            echo 'QUICK_TUNNEL_ALREADY_ACTIVE'
-          else
-            rm -f /tmp/my-ai-quick-tunnel.log /tmp/my-ai-quick-tunnel.url /tmp/my-ai-quick-tunnel.pid
-            nohup cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3020 >/tmp/my-ai-quick-tunnel.log 2>&1 </dev/null &
-            echo $! >/tmp/my-ai-quick-tunnel.pid
+          if [ -f /tmp/my-ai-quick-tunnel.pid ]; then
+            oldpid=$(cat /tmp/my-ai-quick-tunnel.pid 2>/dev/null || true)
+            if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then kill "$oldpid" 2>/dev/null || true; sleep 2; fi
           fi
+          pkill -f 'cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3020' 2>/dev/null || true
+          rm -f /tmp/my-ai-quick-tunnel.log /tmp/my-ai-quick-tunnel.url /tmp/my-ai-quick-tunnel.pid
+          nohup cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3020 >/tmp/my-ai-quick-tunnel.log 2>&1 </dev/null &
+          echo $! >/tmp/my-ai-quick-tunnel.pid
           for i in $(seq 1 45); do
             url=$(grep -oE 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/my-ai-quick-tunnel.log | tail -1 || true)
             if [ -n "$url" ]; then echo "$url" >/tmp/my-ai-quick-tunnel.url; break; fi
@@ -64,9 +65,9 @@ jobs:
           done
           test -s /tmp/my-ai-quick-tunnel.url
           url=$(cat /tmp/my-ai-quick-tunnel.url)
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 "$url/health?t=emergency" >/tmp/public-health.json
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST "$url/alice" -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"emergency-public"}}' >/tmp/public-alice.json
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 45 "$url/health?t=emergency" >/tmp/public-health.json
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 30 -X POST "$url/alice" -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"emergency-public"}}' >/tmp/public-alice.json
           python3 - <<'PY'
           import json
           h=json.load(open('/tmp/public-health.json')); c=json.load(open('/tmp/public-chat.json')); a=json.load(open('/tmp/public-alice.json'))
