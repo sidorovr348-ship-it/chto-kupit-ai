@@ -1,5 +1,5 @@
 # chto-kupit-ai
 
-My AI Unified — redeploy trigger.
+My AI Unified — final VPS deployment trigger.
 
-Local AI deployment verification trigger: 2026-09-09.
+Local AI deployment verification trigger: 2026-09-10.
