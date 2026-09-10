@@ -1,0 +1,38 @@
+name: Diagnose Cloudflare Tunnel
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect Cloudflare Tunnel on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== CLOUDFLARED ==='
+          command -v cloudflared || true
+          cloudflared --version 2>&1 || true
+          echo '=== SERVICE ==='
+          systemctl status cloudflared --no-pager -l 2>&1 || true
+          echo '=== SERVICE COMMAND ==='
+          systemctl show cloudflared -p ExecStart -p FragmentPath -p DropInPaths --no-pager 2>&1 || true
+          echo '=== CONFIG FILES ==='
+          find /etc/cloudflared /root/.cloudflared -maxdepth 2 -type f \( -name 'config.yml' -o -name 'config.yaml' \) -print 2>/dev/null || true
+          echo '=== TUNNEL CREDENTIAL FILES ==='
+          find /etc/cloudflared /root/.cloudflared -maxdepth 2 -type f -name '536ea937-55d5-4b46-ad52-2fe55750bd9f.json' -print 2>/dev/null || true
+          echo '=== ALL TUNNEL FILE NAMES ==='
+          find /etc/cloudflared /root/.cloudflared -maxdepth 2 -type f -printf '%p\n' 2>/dev/null | sed 's#^#FILE #'
+          echo '=== CLOUDFLARED PROCESSES ==='
+          ps aux | grep '[c]loudflared' || true
+          REMOTE
