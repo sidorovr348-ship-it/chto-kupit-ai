@@ -66,7 +66,7 @@ jobs:
       - name: Verify stable public API
         run: |
           set -euo pipefail
-          STABLE='https://ai.aliceq.ru'
+          STABLE='https://aliceq.ru'
           curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 "$STABLE/health?t=verify" >/tmp/public-health.json
           python3 - <<'PY'
           import json
@@ -102,7 +102,7 @@ jobs:
           cp index.html pages/index.html
           python3 - <<'PY'
           import json,pathlib
-          u='https://ai.aliceq.ru'
+          u='https://aliceq.ru'
           data=json.dumps({'ok':True,'api':u,'verified':'stable-full-chain'},ensure_ascii=False,indent=2)+'\n'
           pathlib.Path('api.json').write_text(data)
           pathlib.Path('pages/api.json').write_text(data)
