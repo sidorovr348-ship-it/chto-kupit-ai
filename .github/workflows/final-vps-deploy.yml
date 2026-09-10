@@ -51,7 +51,7 @@ jobs:
           print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False))
           PY
           REMOTE
-      - name: Verify Alice
+      - name: Verify Alice locally
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -63,75 +63,46 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
-      - name: Rebuild and verify public app
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      - name: Verify stable public API
         run: |
           set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
-          set -euo pipefail
           STABLE='https://ai.aliceq.ru'
-          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.out 2>&1 || true
-          cfg=''
-          for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
-          test -n "$cfg"
-          cp "$cfg" "$cfg.bak-my-ai-unified"
-          python3 - "$cfg" <<'PY'
-          import sys
-          p=sys.argv[1]
-          s=open(p).read()
-          entry='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n'
-          if 'hostname: ai.aliceq.ru' not in s:
-              marker='ingress:\n'
-              if marker in s: s=s.replace(marker,marker+entry,1)
-              else: s += '\n\ningress:\n'+entry
-          alice_path='  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n'
-          if 'path: ^/alice$' not in s:
-              marker='ingress:\n'
-              if marker in s: s=s.replace(marker,marker+alice_path,1)
-              else: s += '\n\ningress:\n'+alice_path
-          open(p,'w').write(s)
-          PY
-          cloudflared tunnel ingress validate --config "$cfg"
-          systemctl restart cloudflared 2>/dev/null || systemctl restart cloudflared.service 2>/dev/null || true
-          for i in $(seq 1 45); do curl -fsS --max-time 5 "$STABLE/health?t=verify" >/tmp/public-health.json 2>/dev/null && break; sleep 2; done
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 "$STABLE/health?t=verify" >/tmp/public-health.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-health.json'))
-          assert j.get('ok'), j
+          assert j.get('ok') and j.get('dispatcher'), j
           print('STABLE_PUBLIC_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST "$STABLE/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 90 -X POST "$STABLE/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
-          print('STABLE_PUBLIC_CHAT_OK',j.get('result'))
+          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False))
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST 'https://aliceq.ru/alice' -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"public-unified-check"}}' >/tmp/public-alice.json
+          echo "FULL_CHAIN_OK=$STABLE"
+      - name: Verify Alice public route
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 -X POST 'https://aliceq.ru/alice' -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"public-unified-check"}}' >/tmp/public-alice.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-alice.json'))
           text=str(j.get('response',{}).get('text',''))
           assert text, j
           print('ALICE_PUBLIC_OK',text)
+          print('ALICE_UNIFIED',j.get('session_state',{}).get('unified',False))
           PY
-          echo "FULL_CHAIN_OK=$STABLE"
-          REMOTE
-          url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | cut -d= -f2-)
-          test -n "$url"
+      - name: Prepare Pages
+        run: |
+          set -euo pipefail
           rm -rf pages
           mkdir -p pages
           cp index.html pages/index.html
-          python3 - "$url" <<'PY'
-          import json,pathlib,sys
-          u=sys.argv[1].rstrip('/')
+          python3 - <<'PY'
+          import json,pathlib
+          u='https://ai.aliceq.ru'
           data=json.dumps({'ok':True,'api':u,'verified':'stable-full-chain'},ensure_ascii=False,indent=2)+'\n'
           pathlib.Path('api.json').write_text(data)
           pathlib.Path('pages/api.json').write_text(data)
