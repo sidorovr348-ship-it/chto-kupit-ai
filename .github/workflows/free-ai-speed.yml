@@ -22,6 +22,6 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -e
-          /usr/bin/time -f 'POLLINATIONS_SECONDS=%e' curl --fail --silent --show-error --max-time 20 'https://text.pollinations.ai/Ответь одним словом ОК?model=openai'
+          /usr/bin/time -f 'POLLINATIONS_SECONDS=%e' curl --fail --silent --show-error --max-time 20 --get 'https://text.pollinations.ai/' --data-urlencode 'Ответь одним словом: ОК' --data-urlencode 'model=openai'
           echo
           REMOTE
