@@ -46,8 +46,7 @@ jobs:
             const safeMessages = withSystemPrompt(messages);
             const localFallback = async (reason) => {
               console.warn(`Paralon unavailable; using local Ollama fallback: ${reason}`);
-              const local = await callOllama(safeMessages, { numPredict: 180, timeoutMs: 42000 });
-              return local.result;
+              return await callOllama(safeMessages, { numPredict: 180, timeoutMs: 42000 });
             };
             if (!configured('paralon')) {
               try { return await localFallback('API key missing'); }
