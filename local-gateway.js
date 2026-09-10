@@ -54,12 +54,12 @@ app.post('/chat', async (req, res) => {
     if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
     if (route === 'chat' || route === 'code') {
-      const answer = await callOllama(chatMessages, { numPredict: route === 'code' ? 900 : 500 });
-      return res.json({ ok: true, route, result: answer.result, model: answer.model, local: true });
+      const answer = await callOllama(chatMessages, { numPredict: route === 'code' ? 900 : 180 });
+      return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
     }
     if (route === 'vision' && req.body?.image) {
       const answer = await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]);
-      return res.json({ ok: true, route, result: answer.result, model: answer.model, local: true });
+      return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
     }
     return proxy(req, res);
   } catch (error) { res.status(error.status || 502).json({ ok: false, error: error.message, details: error.details }); }
@@ -69,7 +69,7 @@ app.post('/photo', async (req, res) => {
   try {
     const images = Array.isArray(req.body?.images) ? req.body.images : (req.body?.image ? [req.body.image] : []);
     const answer = await callVision(req.body?.prompt || 'Опиши изображение подробно.', images);
-    res.json({ ok: true, route: 'vision', result: answer.result, model: answer.model, local: true });
+    res.json({ ok: true, route: 'vision', result: answer, model: OLLAMA_MODEL, local: true });
   } catch (error) { res.status(error.status || 502).json({ ok: false, error: error.message, details: error.details }); }
 });
 
@@ -79,8 +79,8 @@ app.post('/alice', async (req, res) => {
   if (!command || /^ping$/iu.test(command)) return res.json({ version: '1.0', response: { text: 'Мой AI на связи.', end_session: false } });
   try {
     const answer = await callOllama([{ role: 'user', content: command }], { timeoutMs: 3900, numPredict: 220 });
-    const text = String(answer.result || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
-    return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: true, model: answer.model } });
+    const text = String(answer || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
+    return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: true, model: OLLAMA_MODEL } });
   } catch (error) {
     const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но локальный AI сейчас занят. Повтори вопрос.';
     return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true } });
