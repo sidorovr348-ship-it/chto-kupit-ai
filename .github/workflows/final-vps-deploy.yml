@@ -30,25 +30,36 @@ jobs:
           test -n "$workdir"
           scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
           scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/dispatcher.js src/capabilities.json "$VPS_USER@$VPS_HOST:$workdir/src/"
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
           set -euo pipefail
           node --check "$workdir/local-gateway.js"
           node --check "$workdir/src/local-ai.js"
-          systemctl restart my-ai-unified
-          systemctl is-active --quiet ollama
+          node --check "$workdir/src/dispatcher.js"
+          systemctl stop my-ai-unified || true
+          pkill -f "node $workdir/local-gateway.js" || true
+          systemctl reset-failed my-ai-unified || true
+          systemctl start my-ai-unified
           ready=0
           for i in \$(seq 1 30); do
             if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then ready=1; break; fi
             sleep 1
           done
-          test "\$ready" = 1
-          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          if [ "\$ready" != 1 ]; then
+            echo '=== MY AI SERVICE STATUS ==='
+            systemctl status my-ai-unified --no-pager -l || true
+            echo '=== MY AI SERVICE JOURNAL ==='
+            journalctl -u my-ai-unified --no-pager -n 100 || true
+            exit 1
+          fi
+          systemctl is-active --quiet ollama
+          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
           h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
           assert h.get('ok') and h.get('dispatcher'), h
           assert j.get('ok') and j.get('result'), j
-          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False))
+          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'))
           PY
           REMOTE
       - name: Verify Alice locally
@@ -79,7 +90,7 @@ jobs:
           import json
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
-          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False))
+          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'))
           PY
           echo "FULL_CHAIN_OK=$STABLE"
       - name: Verify Alice public route
