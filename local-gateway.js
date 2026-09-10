@@ -76,6 +76,18 @@ async function callFastRemote(prompt) {
   } finally { clearTimeout(timer); }
 }
 
+async function answerForChat(chatMessages, userPrompt, route) {
+  if (route === 'chat' || route === 'code') {
+    try { return { result: await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true }; }
+    catch (e) { console.warn('Local AI unavailable:', e.message); }
+    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false, fallback: true }; }
+    catch (e) { console.warn('Paralon unavailable:', e.message); }
+    try { return { result: await callFastRemote(userPrompt), model: 'pollinations-openai', local: false, fallback: true }; }
+    catch (e) { console.warn('Fast remote AI unavailable:', e.message); }
+  }
+  return null;
+}
+
 app.get('/health', async (req, res) => {
   const local = await health();
   res.set('Cache-Control', 'no-store');
@@ -89,27 +101,11 @@ app.post('/chat', async (req, res) => {
     const userPrompt = String(prompt || textFromMessages(chatMessages)).trim();
     if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
-    if (route === 'chat' || route === 'code') {
-      try {
-        const answer = await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 });
-        return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
-      } catch (localError) { console.warn('Local AI unavailable:', localError.message); }
-      try {
-        const answer = await callParalon(chatMessages);
-        return res.json({ ok: true, route, result: answer, model: PARALON_MODEL, local: false, fallback: true });
-      } catch (paralonError) { console.warn('Paralon unavailable:', paralonError.message); }
-      try {
-        const answer = await callFastRemote(userPrompt);
-        return res.json({ ok: true, route, result: answer, model: 'pollinations-openai', local: false, fallback: true });
-      } catch (remoteError) { console.warn('Fast remote AI unavailable:', remoteError.message); }
-      return proxy(req, res, 30000);
-    }
+    const answer = await answerForChat(chatMessages, userPrompt, route);
+    if (answer) return res.json({ ok: true, route, ...answer });
     if (route === 'vision' && req.body?.image) {
-      try {
-        const answer = await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]);
-        return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
-      } catch (localError) { console.warn('Local vision unavailable:', localError.message); }
-      return proxy(req, res, 60000);
+      try { return res.json({ ok: true, route, result: await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: OLLAMA_MODEL, local: true }); }
+      catch (e) { console.warn('Local vision unavailable:', e.message); }
     }
     return proxy(req, res, 30000);
   } catch (error) { return res.status(error.status || 502).json({ ok: false, error: error.message, details: error.details }); }
@@ -118,10 +114,8 @@ app.post('/chat', async (req, res) => {
 app.post('/photo', async (req, res) => {
   try {
     const images = Array.isArray(req.body?.images) ? req.body.images : (req.body?.image ? [req.body.image] : []);
-    try {
-      const answer = await callVision(req.body?.prompt || 'Опиши изображение подробно.', images);
-      return res.json({ ok: true, route: 'vision', result: answer, model: OLLAMA_MODEL, local: true });
-    } catch (localError) { console.warn('Local photo vision unavailable:', localError.message); }
+    try { return res.json({ ok: true, route: 'vision', result: await callVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: OLLAMA_MODEL, local: true }); }
+    catch (e) { console.warn('Local photo vision unavailable:', e.message); }
     return proxy(req, res, 60000);
   } catch (error) { return res.status(error.status || 502).json({ ok: false, error: error.message, details: error.details }); }
 });
@@ -131,20 +125,24 @@ app.post('/alice', async (req, res) => {
   const sessionId = String(req.body?.session?.session_id || 'default');
   if (!command || /^ping$/iu.test(command)) return res.json({ version: '1.0', response: { text: 'Мой AI на связи.', end_session: false } });
   try {
-    const answer = await callOllama([{ role: 'user', content: command }], { timeoutMs: 3900, numPredict: 220 });
-    const text = String(answer || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
-    return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: true, model: OLLAMA_MODEL } });
+    const route = dispatch({ prompt: command, hasImage: false, hasFile: false, hasVideo: false });
+    const answer = await answerForChat([{ role: 'user', content: command }], command, route || 'chat');
+    if (answer?.result) {
+      const text = String(answer.result).replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
+      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: true, route, local: answer.local, fallback: Boolean(answer.fallback), model: answer.model } });
+    }
+    throw new Error('central dispatcher returned no answer');
   } catch (error) {
     try {
       const text = (await callParalon([{ role: 'user', content: command }])).slice(0, 1024);
-      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true, model: PARALON_MODEL } });
+      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true, model: PARALON_MODEL } });
     } catch (paralonError) {
       try {
         const text = (await callFastRemote(command)).slice(0, 1024);
-        return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true, model: 'pollinations-openai' } });
+        return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true, model: 'pollinations-openai' } });
       } catch {
         const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но AI сейчас недоступен. Повтори вопрос.';
-        return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, local: false, fallback: true } });
+        return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true } });
       }
     }
   }
