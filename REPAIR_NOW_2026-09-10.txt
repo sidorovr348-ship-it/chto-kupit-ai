@@ -1,1 +1,1 @@
-Trigger fresh My AI Unified deployment using the repaired workflow definition.
+Fresh repair trigger after workflow fix. Active deployment path: VPS + Cloudflare Quick Tunnel + GitHub Pages only. No other hosting path.
