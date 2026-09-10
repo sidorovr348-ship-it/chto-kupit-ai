@@ -1,0 +1,33 @@
+name: Test root API
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test public root API
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo ROOT_HEALTH
+          curl -fsS --max-time 30 https://aliceq.ru/health
+          echo
+          echo ROOT_CHAT
+          curl -fsS --max-time 90 -X POST https://aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ROOT_OK"}'
+          echo
+          echo ROOT_PHOTO_ROUTE
+          curl -sS -o /tmp/root-photo.txt -w '%{http_code}\n' --max-time 30 -X POST https://aliceq.ru/photo -H 'Content-Type: application/json' --data '{"image":"bad","prompt":"test"}'
+          REMOTE
