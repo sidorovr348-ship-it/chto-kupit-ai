@@ -96,13 +96,13 @@ jobs:
           PY
           REMOTE
       - name: Publish verified Pages
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           rm -rf pages && mkdir pages
           cp index.html pages/index.html
           printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-full-chain"}' > pages/api.json
-          echo 'Pages artifact prepared'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+      - uses: actions/deploy-pages@v4
