@@ -1,0 +1,36 @@
+name: Diagnose VPS now
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect My AI Unified
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -e
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== STATUS ==='
+          systemctl status my-ai-unified --no-pager -l
+          echo '=== PORT 3020 ==='
+          ss -lntp | grep ':3020' || true
+          echo '=== HEALTH ==='
+          curl -i --max-time 8 http://127.0.0.1:3020/health || true
+          echo '=== JOURNAL ==='
+          journalctl -u my-ai-unified -n 80 --no-pager -o cat
+          echo '=== FILE ==='
+          wd=$(systemctl show -p WorkingDirectory --value my-ai-unified)
+          echo "$wd"
+          sed -n '1,260p' "$wd/local-gateway.js"
+          REMOTE
