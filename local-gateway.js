@@ -54,8 +54,13 @@ app.post('/chat', async (req, res) => {
     if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
     const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo });
     if (route === 'chat' || route === 'code') {
-      const answer = await callOllama(chatMessages, { numPredict: route === 'code' ? 900 : 180 });
-      return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
+      try {
+        const answer = await callOllama(chatMessages, { numPredict: route === 'code' ? 900 : 180 });
+        return res.json({ ok: true, route, result: answer, model: OLLAMA_MODEL, local: true });
+      } catch (localError) {
+        console.warn('Local AI unavailable, using legacy fallback:', localError.message);
+        return proxy(req, res);
+      }
     }
     if (route === 'vision' && req.body?.image) {
       const answer = await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]);
