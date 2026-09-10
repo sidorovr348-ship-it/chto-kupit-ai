@@ -2,6 +2,9 @@ name: My AI Unified — production repair
 on:
   push:
     branches: [main]
+concurrency:
+  group: my-ai-unified-production-repair
+  cancel-in-progress: true
 permissions:
   contents: read
   pages: write
@@ -45,21 +48,38 @@ jobs:
           print('LOCAL_CHAT_OK',j.get('result'))
           PY
 
-          echo '=== REMOVE COMPETING QUICK TUNNELS ==='
-          pkill -f 'cloudflared tunnel --url' || true
-          pkill -f '/usr/local/bin/cloudflared tunnel --protocol http2 --url' || true
-          sleep 2
-          echo '=== START ONLY NAMED TUNNEL SERVICE ==='
-          systemctl restart cloudflared
-          sleep 5
-          systemctl is-active --quiet cloudflared
-          ps aux | grep '[c]loudflared' || true
+          echo '=== STOP ANY SYSTEMD QUICK-TUNNEL UNITS ==='
+          while read -r unit; do
+            [ -n "$unit" ] || continue
+            execstart=$(systemctl show "$unit" -p ExecStart --value 2>/dev/null || true)
+            case "$execstart" in
+              *cloudflared*--url*)
+                echo "STOPPING_QUICK_UNIT=$unit"
+                systemctl disable --now "$unit" || true
+                ;;
+            esac
+          done < <(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -i cloudflared || true)
 
-          echo '=== RESTORE DNS ROUTES ==='
-          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns-ai.txt 2>&1 || true
-          cloudflared tunnel route dns alice-ai aliceq.ru >/tmp/dns-root.txt 2>&1 || true
-          cat /tmp/dns-ai.txt || true
-          cat /tmp/dns-root.txt || true
+          echo '=== KILL ALL STRAY QUICK TUNNELS ==='
+          for n in 1 2 3; do
+            pgrep -af 'cloudflared.*--url' || true
+            pkill -9 -f 'cloudflared.*--url' || true
+            sleep 1
+          done
+
+          echo '=== START ONLY NAMED TUNNEL ==='
+          systemctl restart cloudflared
+          sleep 6
+          systemctl is-active --quiet cloudflared
+
+          echo '=== VERIFY ONLY NAMED TUNNEL REMAINS ==='
+          stray=$(pgrep -af 'cloudflared.*--url' || true)
+          if [ -n "$stray" ]; then
+            echo "$stray"
+            echo 'ERROR: STRAY_QUICK_TUNNEL_REMAINS'
+            exit 1
+          fi
+          ps aux | grep '[c]loudflared' || true
 
           echo '=== PUBLIC HEALTH ==='
           ok=0
@@ -98,11 +118,11 @@ jobs:
           REMOTE
       - name: Publish Pages only after backend verification
         run: |
+          set -euo pipefail
           rm -rf pages && mkdir pages
           cp index.html pages/index.html
           printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-chain"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with:
-          path: pages
+        with: { path: pages }
       - uses: actions/deploy-pages@v4
