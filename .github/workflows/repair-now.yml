@@ -1,4 +1,4 @@
-name: My AI Unified — one-time live repair
+name: My AI Unified — production repair
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     environment: { name: github-pages }
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy and verify full chain
+      - name: Repair production tunnel
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -23,73 +23,84 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/live-output.txt <<'REMOTE'
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          workdir=$(systemctl show -p WorkingDirectory --value my-ai-unified)
-          test -n "$workdir"
-          node -e "const fs=require('fs'); console.log(fs.existsSync('$workdir/local-gateway.js'))"
+          echo '=== LOCAL BACKEND ==='
           systemctl restart my-ai-unified
-          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
+            sleep 1
+          done
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          j=json.load(open('/tmp/h.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
           print('LOCAL_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
+          j=json.load(open('/tmp/c.json'))
+          assert j.get('ok') and j.get('result'), j
           print('LOCAL_CHAT_OK',j.get('result'))
           PY
-          cfg=''
-          for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
-          test -n "$cfg"
-          cp "$cfg" "$cfg.bak-my-ai-unified"
-          python3 - "$cfg" <<'PY'
-          import sys
-          p=sys.argv[1]; s=open(p).read()
-          marker='ingress:\n'
-          entries='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n'
-          if 'hostname: ai.aliceq.ru' not in s:
-              s=s.replace(marker,marker+entries,1) if marker in s else s+'\n\ningress:\n'+entries
-          elif 'path: ^/alice$' not in s:
-              s=s.replace(marker,marker+'  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n',1)
-          open(p,'w').write(s)
-          PY
-          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.txt 2>&1 || true
-          cloudflared tunnel ingress validate --config "$cfg"
-          systemctl restart cloudflared 2>/dev/null || systemctl restart cloudflared.service 2>/dev/null || true
-          for i in $(seq 1 45); do curl -fsS --max-time 5 https://ai.aliceq.ru/health >/tmp/ph.json 2>/dev/null && break; sleep 2; done
+
+          echo '=== REMOVE COMPETING QUICK TUNNELS ==='
+          pkill -f 'cloudflared tunnel --url' || true
+          pkill -f '/usr/local/bin/cloudflared tunnel --protocol http2 --url' || true
+          sleep 2
+          echo '=== START ONLY NAMED TUNNEL SERVICE ==='
+          systemctl restart cloudflared
+          sleep 5
+          systemctl is-active --quiet cloudflared
+          ps aux | grep '[c]loudflared' || true
+
+          echo '=== RESTORE DNS ROUTES ==='
+          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns-ai.txt 2>&1 || true
+          cloudflared tunnel route dns alice-ai aliceq.ru >/tmp/dns-root.txt 2>&1 || true
+          cat /tmp/dns-ai.txt || true
+          cat /tmp/dns-root.txt || true
+
+          echo '=== PUBLIC HEALTH ==='
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 8 https://ai.aliceq.ru/health >/tmp/ph.json; then ok=1; break; fi
+            sleep 2
+          done
+          test "$ok" = 1
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/ph.json')); assert j.get('ok'),j
+          j=json.load(open('/tmp/ph.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
           print('PUBLIC_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
+
+          echo '=== PUBLIC CHAT ==='
+          curl -fsS --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and j.get('result'),j
+          j=json.load(open('/tmp/pc.json'))
+          assert j.get('ok') and j.get('result'), j
           print('PUBLIC_CHAT_OK',j.get('result'))
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"live-unified-check"}}' >/tmp/pa.json
+
+          echo '=== PUBLIC ALICE ==='
+          curl -fsS --retry 10 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production-check"}}' >/tmp/pa.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/pa.json')); text=str(j.get('response',{}).get('text','')); assert text,j
-          print('ALICE_PUBLIC_OK',text); print('ALICE_UNIFIED',j.get('session_state',{}).get('unified',False))
+          j=json.load(open('/tmp/pa.json'))
+          text=str(j.get('response',{}).get('text',''))
+          assert text and j.get('session_state',{}).get('unified') is True, j
+          print('ALICE_PUBLIC_OK',text)
+          print('ALICE_UNIFIED',j['session_state']['unified'])
           PY
-          echo 'FULL_CHAIN_OK=https://ai.aliceq.ru'
+          echo 'PRODUCTION_CHAIN_OK'
           REMOTE
-          grep '^LOCAL_HEALTH_OK' /tmp/live-output.txt
-          grep '^LOCAL_CHAT_OK' /tmp/live-output.txt
-          grep '^PUBLIC_HEALTH_OK' /tmp/live-output.txt
-          grep '^PUBLIC_CHAT_OK' /tmp/live-output.txt
-          grep '^ALICE_PUBLIC_OK' /tmp/live-output.txt
-          grep '^ALICE_UNIFIED' /tmp/live-output.txt
-      - name: Publish verified Pages
+      - name: Publish Pages only after backend verification
         run: |
           rm -rf pages && mkdir pages
           cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-full-chain"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-chain"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
