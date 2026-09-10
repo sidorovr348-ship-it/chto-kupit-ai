@@ -77,11 +77,13 @@ async function callFastRemote(prompt) {
 }
 
 async function answerForChat(chatMessages, userPrompt, route) {
+  // Paralon/Qwen is the confirmed central AI. Do not let the experimental
+  // local qwen3:0.6b model block or degrade the main assistant.
   if (route === 'chat' || route === 'code') {
-    try { return { result: await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true }; }
-    catch (e) { console.warn('Local AI unavailable:', e.message); }
-    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false, fallback: true }; }
+    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false }; }
     catch (e) { console.warn('Paralon unavailable:', e.message); }
+    try { return { result: await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true, fallback: true }; }
+    catch (e) { console.warn('Local AI unavailable:', e.message); }
     try { return { result: await callFastRemote(userPrompt), model: 'pollinations-openai', local: false, fallback: true }; }
     catch (e) { console.warn('Fast remote AI unavailable:', e.message); }
   }
@@ -153,4 +155,4 @@ app.use((req, res, next) => {
   proxy(req, res);
 });
 
-app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; model=${OLLAMA_MODEL}`));
+app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; central=${PARALON_MODEL}; local-fallback=${OLLAMA_MODEL}`));
