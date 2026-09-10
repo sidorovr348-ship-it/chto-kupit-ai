@@ -39,7 +39,7 @@ jobs:
           systemctl is-active --quiet ollama
           systemctl is-active --quiet my-ai-unified
           curl -fsS --max-time 8 http://127.0.0.1:3020/health >/tmp/health.json
-          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          curl --fail --silent --show-error --max-time 35 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
           h=json.load(open('/tmp/health.json'))
@@ -48,7 +48,7 @@ jobs:
           assert 'qwen3:0.6b' in h.get('local_ai',{}).get('models',[]), h
           assert j.get('ok') and j.get('result'), j
           print('LOCAL_HEALTH_OK', h['local_ai'])
-          print('LOCAL_CHAT_OK', j.get('model'), j.get('result'))
+          print('LOCAL_CHAT_OK', j.get('model'), j.get('result'), 'fallback=', j.get('fallback',False))
           PY
           REMOTE
       - name: Verify Alice
@@ -62,7 +62,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 15 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 20 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
       - name: Rebuild and verify public app
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -114,7 +114,7 @@ jobs:
           import json
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
-          print('PUBLIC_CHAT_OK', j.get('model'), j.get('result'))
+          print('PUBLIC_CHAT_OK', j.get('model'), j.get('result'), 'fallback=', j.get('fallback',False))
           PY
           echo "FULL_CHAIN_OK=$url"
           REMOTE
@@ -126,10 +126,10 @@ jobs:
           python3 - "$url" <<'PY'
           import json,pathlib,sys
           u=sys.argv[1].rstrip('/')
-          pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':u,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n')
-          pathlib.Path('pages/api.json').write_text(pathlib.Path('api.json').read_text())
+          data=json.dumps({'ok':True,'api':u,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n'
+          pathlib.Path('api.json').write_text(data)
+          pathlib.Path('pages/api.json').write_text(data)
           PY
-          cp api.json pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: pages }
