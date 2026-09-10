@@ -31,28 +31,24 @@ jobs:
           PY
           cfg=''
           execstart=$(systemctl show cloudflared -p ExecStart --value 2>/dev/null || true)
-          for f in $(printf '%s\n' "$execstart" | grep -oE '/[^ ]*cloudflared[^ ]*\.ya?ml' || true); do [ -f "$f" ] && cfg="$f" && break; done
+          for f in $(printf '%s\n' "$execstart" | grep -oE '/[^ ]*config\.ya?ml' || true); do [ -f "$f" ] && cfg="$f" && break; done
           if [ -z "$cfg" ]; then for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done; fi
           test -n "$cfg"
           echo "CONFIG=$cfg"
           cp "$cfg" "$cfg.bak-unify-$(date +%s)"
           python3 - "$cfg" <<'PY'
           import re,sys
-          p=sys.argv[1]; s=open(p).read()
-          # Remove any existing rules for our two public endpoints, then prepend the correct rules.
-          lines=s.splitlines(True); out=[]; i=0
+          p=sys.argv[1]
+          lines=open(p).read().splitlines(True)
+          out=[]; i=0
           while i < len(lines):
               if re.match(r'^\s*-\s*hostname:\s*(ai\.aliceq\.ru|aliceq\.ru)\s*$', lines[i]):
                   host=re.search(r'hostname:\s*([^\s]+)',lines[i]).group(1)
-                  block=[lines[i]]; i+=1
-                  while i<len(lines) and (lines[i].startswith('    ') or lines[i].startswith('      ') or lines[i].strip()==''):
-                      block.append(lines[i]); i+=1
-                  if host in ('ai.aliceq.ru','aliceq.ru') and any('127.0.0.1:3020' in x for x in block):
-                      continue
-                  if host in ('ai.aliceq.ru','aliceq.ru'):
-                      continue
-              out.append(lines[i] if i < len(lines) else '')
-              i+=1
+                  i += 1
+                  while i < len(lines) and (lines[i].startswith('    ') or lines[i].startswith('      ') or lines[i].strip()==''):
+                      i += 1
+                  continue
+              out.append(lines[i]); i += 1
           s=''.join(out)
           marker='ingress:\n'
           if marker not in s: raise SystemExit('No ingress section in cloudflared config')
