@@ -30,7 +30,7 @@ jobs:
           workdir=$(systemctl show -p WorkingDirectory --value my-ai-unified)
           [ -n "$workdir" ] && [ -f "$workdir/server.js" ]
           [ -f "$workdir/src/local-ai.js" ]
-          cp -a "$workdir/server.js" "$workdir/server.js.bak-before-local-fallback"
+          cp -a "$workdir/server.js" "$workdir/server.js.bak-before-local-first"
           python3 - "$workdir/server.js" <<'PY'
           from pathlib import Path
           import re, sys
@@ -44,17 +44,13 @@ jobs:
           pattern = re.compile(r"async function callParalon\(messages\) \{.*?\n\}\n\nasync function searchWeb", re.S)
           replacement = '''async function callParalon(messages) {
             const safeMessages = withSystemPrompt(messages);
-            const localFallback = async (reason) => {
-              console.warn(`Paralon unavailable; using local Ollama fallback: ${reason}`);
+            try {
+              console.log('Using local Ollama as primary chat backend');
               return await callOllama(safeMessages, { numPredict: 180, timeoutMs: 42000 });
-            };
-            if (!configured('paralon')) {
-              try { return await localFallback('API key missing'); }
-              catch (localError) {
-                console.warn(`Local Ollama fallback failed: ${localError.message}`);
-                return callEmergencyTextFallback(safeMessages);
-              }
+            } catch (localError) {
+              console.warn(`Local Ollama failed: ${localError.message}; trying remote fallback`);
             }
+            if (!configured('paralon')) return callEmergencyTextFallback(safeMessages);
             try {
               const response = await fetchWithTimeout(`${PARALON_BASE_URL}/chat/completions`, {
                 method: 'POST',
@@ -69,11 +65,7 @@ jobs:
               if (!result) throw Object.assign(new Error('Paralon returned an empty response'), { status: 502 });
               return result;
             } catch (error) {
-              try { return await localFallback(error.message || 'request failed'); }
-              catch (localError) {
-                console.warn(`Local Ollama fallback failed: ${localError.message}`);
-                throw error;
-              }
+              return callEmergencyTextFallback(safeMessages);
             }
           }
 
