@@ -1,0 +1,132 @@
+name: My AI Unified — VPS final deploy
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy local gateway to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
+          set -euo pipefail
+          node --check "$workdir/local-gateway.js"
+          node --check "$workdir/src/local-ai.js"
+          systemctl restart my-ai-unified
+          sleep 3
+          systemctl is-active --quiet ollama
+          systemctl is-active --quiet my-ai-unified
+          curl -fsS --max-time 8 http://127.0.0.1:3020/health >/tmp/health.json
+          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          python3 - <<'PY'
+          import json
+          h=json.load(open('/tmp/health.json'))
+          j=json.load(open('/tmp/chat.json'))
+          assert h.get('ok') and h.get('dispatcher') and h.get('local_ai',{}).get('ok'), h
+          assert 'qwen3:0.6b' in h.get('local_ai',{}).get('models',[]), h
+          assert j.get('ok') and j.get('result'), j
+          print('LOCAL_HEALTH_OK', h['local_ai'])
+          print('LOCAL_CHAT_OK', j.get('model'), j.get('result'))
+          PY
+          REMOTE
+      - name: Verify Alice
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 15 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
+      - name: Rebuild and verify public app
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
+          set -euo pipefail
+          : >/var/log/my-ai-unified-quick-tunnel.log
+          cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
+          [Unit]
+          After=network-online.target
+          [Service]
+          ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
+          Restart=always
+          RestartSec=3
+          StandardOutput=append:/var/log/my-ai-unified-quick-tunnel.log
+          StandardError=append:/var/log/my-ai-unified-quick-tunnel.log
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable my-ai-unified-quick-tunnel >/dev/null
+          systemctl restart my-ai-unified-quick-tunnel
+          url=''
+          for i in $(seq 1 45); do
+            url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
+            [ -n "$url" ] && break
+            sleep 2
+          done
+          test -n "$url"
+          for i in $(seq 1 120); do
+            if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 10 "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then break; fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-health.json'))
+          assert j.get('ok') and j.get('local_ai',{}).get('ok'), j
+          print('PUBLIC_HEALTH_OK', j['local_ai'])
+          PY
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-chat.json'))
+          assert j.get('ok') and j.get('result'), j
+          print('PUBLIC_CHAT_OK', j.get('model'), j.get('result'))
+          PY
+          echo "FULL_CHAIN_OK=$url"
+          REMOTE
+          url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | cut -d= -f2-)
+          test -n "$url"
+          rm -rf pages
+          mkdir -p pages
+          cp app-fixed.html index.html pages/
+          python3 - "$url" <<'PY'
+          import json,pathlib,sys
+          u=sys.argv[1].rstrip('/')
+          pathlib.Path('api.json').write_text(json.dumps({'ok':True,'api':u,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n')
+          pathlib.Path('pages/api.json').write_text(pathlib.Path('api.json').read_text())
+          PY
+          cp api.json pages/api.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: pages }
+      - uses: actions/deploy-pages@v4
