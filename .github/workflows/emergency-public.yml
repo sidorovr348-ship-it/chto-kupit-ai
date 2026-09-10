@@ -1,104 +1,14 @@
-name: My AI Unified — stable public deployment
+name: My AI Unified — emergency public deployment
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: my-ai-unified-pages
-  cancel-in-progress: true
+
+# Manual emergency workflow only. It must never race the canonical deployment.
 jobs:
-  deploy:
+  disabled-by-default:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to VPS and configure stable Cloudflare Tunnel
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
-          test -n "$workdir"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
-          set -euo pipefail
-          node --check "$WORKDIR/local-gateway.js"
-          node --check "$WORKDIR/src/local-ai.js"
-          systemctl restart my-ai-unified
-          for i in $(seq 1 30); do
-            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then break; fi
-            sleep 1
-          done
-          test -s /tmp/health.json
-          python3 - <<'PY'
-          import json
-          h=json.load(open('/tmp/health.json'))
-          assert h.get('ok') and h.get('dispatcher'), h
-          print('LOCAL_HEALTH_OK', h)
-          PY
-          test -x "$(command -v cloudflared)"
-          TUNNEL_ID='536ea937-55d5-4b46-ad52-2fe55750bd9f'
-          CREDS=$(find /etc/cloudflared /root/.cloudflared -maxdepth 2 -type f -name "$TUNNEL_ID.json" 2>/dev/null | head -1 || true)
-          test -n "$CREDS"
-          install -d -m 755 /etc/cloudflared
-          cat >/etc/cloudflared/config.yml <<CFG
-          tunnel: $TUNNEL_ID
-          credentials-file: $CREDS
-          ingress:
-            - hostname: ai.aliceq.ru
-              service: http://127.0.0.1:3020
-            - hostname: aliceq.ru
-              path: ^/alice(?:/.*)?$
-              service: http://127.0.0.1:3020
-            - hostname: aliceq.ru
-              service: http://127.0.0.1:3011
-            - service: http_status:404
-          CFG
-          cloudflared tunnel ingress validate --config /etc/cloudflared/config.yml
-          cloudflared tunnel route dns --overwrite-dns alice-ai ai.aliceq.ru || true
-          systemctl restart cloudflared
-          sleep 5
-          systemctl is-active --quiet cloudflared
-          echo STABLE_TUNNEL_OK
-          REMOTE
-          for i in $(seq 1 12); do
-            if curl -fsS --max-time 10 https://ai.aliceq.ru/health >/tmp/public-health.json; then break; fi
-            sleep 5
-          done
-          test -s /tmp/public-health.json
-          curl --fail --silent --show-error --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
-          curl --fail --silent --show-error --max-time 60 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"stable-public"}}' >/tmp/public-alice.json
-          python3 - <<'PY'
-          import json
-          h=json.load(open('/tmp/public-health.json')); c=json.load(open('/tmp/public-chat.json')); a=json.load(open('/tmp/public-alice.json'))
-          assert h.get('ok') and h.get('dispatcher'), h
-          assert c.get('ok') and c.get('result'), c
-          assert a.get('response',{}).get('text'), a
-          print('PUBLIC_HEALTH_OK')
-          print('PUBLIC_CHAT_OK',c.get('result'))
-          print('PUBLIC_ALICE_OK',a.get('response',{}).get('text'))
-          PY
-          rm -rf pages
-          mkdir -p pages
-          cp index.html pages/index.html
-          python3 - <<'PY'
-          import pathlib
-          p=pathlib.Path('pages/index.html')
-          p.write_text(p.read_text().replace('https://ai.aliceq.ru','https://ai.aliceq.ru'))
-          pathlib.Path('api.json').write_text('{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-named-tunnel"}\n')
-          pathlib.Path('pages/api.json').write_text('{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-named-tunnel"}\n')
-          PY
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: pages
-      - uses: actions/deploy-pages@v4
+      - run: echo 'Manual emergency workflow. Canonical deployment owns the production tunnel.'
