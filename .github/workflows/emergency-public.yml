@@ -1,0 +1,93 @@
+name: My AI Unified — emergency public tunnel
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: my-ai-unified-pages
+  cancel-in-progress: true
+jobs:
+  emergency:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy and create emergency public URL
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          node --check "$workdir/local-gateway.js"
+          node --check "$workdir/src/local-ai.js"
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          python3 - <<'PY'
+          import json
+          h=json.load(open('/tmp/health.json')); c=json.load(open('/tmp/chat.json'))
+          assert h.get('ok') and h.get('dispatcher'), h
+          assert c.get('ok') and c.get('result'), c
+          print('LOCAL_CHAIN_OK', c.get('result'))
+          PY
+          pkill -f 'cloudflared tunnel --url http://127.0.0.1:3020' 2>/dev/null || true
+          rm -f /tmp/my-ai-quick-tunnel.log /tmp/my-ai-quick-tunnel.url
+          nohup cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3020 >/tmp/my-ai-quick-tunnel.log 2>&1 </dev/null &
+          for i in $(seq 1 30); do
+            url=$(grep -oE 'https://[-a-z0-9]+\.trycloudflare\.com' /tmp/my-ai-quick-tunnel.log | tail -1 || true)
+            if [ -n "$url" ]; then echo "$url" >/tmp/my-ai-quick-tunnel.url; break; fi
+            sleep 2
+          done
+          test -s /tmp/my-ai-quick-tunnel.url
+          url=$(cat /tmp/my-ai-quick-tunnel.url)
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 "$url/health?t=emergency" >/tmp/public-health.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST "$url/alice" -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"emergency-public"}}' >/tmp/public-alice.json
+          python3 - <<'PY'
+          import json
+          h=json.load(open('/tmp/public-health.json')); c=json.load(open('/tmp/public-chat.json')); a=json.load(open('/tmp/public-alice.json'))
+          assert h.get('ok'), h
+          assert c.get('ok') and c.get('result'), c
+          assert a.get('response',{}).get('text'), a
+          print('PUBLIC_HEALTH_OK')
+          print('PUBLIC_CHAT_OK',c.get('result'))
+          print('PUBLIC_ALICE_OK',a.get('response',{}).get('text'))
+          PY
+          echo "PUBLIC_URL=$url"
+          REMOTE
+          url=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-quick-tunnel.url")
+          test -n "$url"
+          rm -rf pages
+          mkdir -p pages
+          sed "s#https://ai.aliceq.ru#$url#g" index.html > pages/index.html
+          python3 - "$url" <<'PY'
+          import json,pathlib,sys
+          u=sys.argv[1].rstrip('/')
+          data=json.dumps({'ok':True,'api':u,'verified':'emergency-quick-tunnel'},ensure_ascii=False,indent=2)+'\n'
+          pathlib.Path('api.json').write_text(data)
+          pathlib.Path('pages/api.json').write_text(data)
+          PY
+          echo "EMERGENCY_PUBLIC_URL=$url"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+      - uses: actions/deploy-pages@v4
