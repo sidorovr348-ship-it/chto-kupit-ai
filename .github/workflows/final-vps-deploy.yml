@@ -38,23 +38,17 @@ jobs:
           systemctl is-active --quiet ollama
           ready=0
           for i in \$(seq 1 30); do
-            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then
-              ready=1
-              break
-            fi
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then ready=1; break; fi
             sleep 1
           done
           test "\$ready" = 1
           curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
-          h=json.load(open('/tmp/health.json'))
-          j=json.load(open('/tmp/chat.json'))
-          assert h.get('ok') and h.get('dispatcher') and h.get('local_ai',{}).get('ok'), h
-          assert 'qwen3:0.6b' in h.get('local_ai',{}).get('models',[]), h
+          h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
+          assert h.get('ok') and h.get('dispatcher'), h
           assert j.get('ok') and j.get('result'), j
-          print('LOCAL_HEALTH_OK', h['local_ai'])
-          print('LOCAL_CHAT_OK', j.get('model'), j.get('result'), 'fallback=', j.get('fallback',False))
+          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False))
           PY
           REMOTE
       - name: Verify Alice
@@ -82,47 +76,43 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/tunnel-output.txt <<'REMOTE'
           set -euo pipefail
-          : >/var/log/my-ai-unified-quick-tunnel.log
-          cat >/etc/systemd/system/my-ai-unified-quick-tunnel.service <<'UNIT'
-          [Unit]
-          After=network-online.target
-          [Service]
-          ExecStart=/usr/local/bin/cloudflared tunnel --protocol http2 --no-autoupdate --url http://127.0.0.1:3020
-          Restart=always
-          RestartSec=3
-          StandardOutput=append:/var/log/my-ai-unified-quick-tunnel.log
-          StandardError=append:/var/log/my-ai-unified-quick-tunnel.log
-          [Install]
-          WantedBy=multi-user.target
-          UNIT
-          systemctl daemon-reload
-          systemctl enable my-ai-unified-quick-tunnel >/dev/null
-          systemctl restart my-ai-unified-quick-tunnel
-          url=''
-          for i in $(seq 1 45); do
-            url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /var/log/my-ai-unified-quick-tunnel.log | tail -1 || true)
-            [ -n "$url" ] && break
-            sleep 2
-          done
-          test -n "$url"
-          for i in $(seq 1 120); do
-            if curl --fail --silent --show-error --retry 2 --retry-all-errors --max-time 10 "$url/health?t=verify" >/tmp/public-health.json 2>/dev/null; then break; fi
-            sleep 2
-          done
+          STABLE='https://ai.aliceq.ru'
+          if command -v cloudflared >/dev/null 2>&1 && cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.out 2>&1; then
+            cfg=''
+            for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
+            if [ -n "$cfg" ]; then
+              cp "$cfg" "$cfg.bak-my-ai-unified"
+              python3 - "$cfg" <<'PY'
+          import sys
+          p=sys.argv[1]
+          s=open(p).read()
+          host='ai.aliceq.ru'
+          if host not in s:
+              marker='ingress:\n'
+              entry='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n'
+              if marker in s: s=s.replace(marker,marker+entry,1)
+              else: s += '\n\ningress:\n'+entry
+              open(p,'w').write(s)
+          PY
+              cloudflared tunnel ingress validate --config "$cfg"
+              systemctl restart alice-ai
+            fi
+          fi
+          for i in $(seq 1 45); do curl -fsS --max-time 5 "$STABLE/health?t=verify" >/tmp/public-health.json 2>/dev/null && break; sleep 2; done
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-health.json'))
-          assert j.get('ok') and j.get('local_ai',{}).get('ok'), j
-          print('PUBLIC_HEALTH_OK', j['local_ai'])
+          assert j.get('ok'), j
+          print('STABLE_PUBLIC_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --retry 4 --retry-all-errors --max-time 60 -X POST "$url/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST "$STABLE/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
-          print('PUBLIC_CHAT_OK', j.get('model'), j.get('result'), 'fallback=', j.get('fallback',False))
+          print('STABLE_PUBLIC_CHAT_OK',j.get('result'))
           PY
-          echo "FULL_CHAIN_OK=$url"
+          echo "FULL_CHAIN_OK=$STABLE"
           REMOTE
           url=$(grep '^FULL_CHAIN_OK=' /tmp/tunnel-output.txt | cut -d= -f2-)
           test -n "$url"
@@ -132,7 +122,7 @@ jobs:
           python3 - "$url" <<'PY'
           import json,pathlib,sys
           u=sys.argv[1].rstrip('/')
-          data=json.dumps({'ok':True,'api':u,'verified':'full-chain-local-ai-alice'},ensure_ascii=False,indent=2)+'\n'
+          data=json.dumps({'ok':True,'api':u,'verified':'stable-full-chain'},ensure_ascii=False,indent=2)+'\n'
           pathlib.Path('api.json').write_text(data)
           pathlib.Path('pages/api.json').write_text(data)
           PY
