@@ -2,6 +2,9 @@ name: My AI Unified — VPS final deploy
 on:
   push:
     branches: [main]
+concurrency:
+  group: my-ai-unified-final-vps
+  cancel-in-progress: true
 permissions:
   contents: write
   pages: write
@@ -25,7 +28,8 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           test -n "$workdir"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
           set -euo pipefail
           node --check "$workdir/local-gateway.js"
