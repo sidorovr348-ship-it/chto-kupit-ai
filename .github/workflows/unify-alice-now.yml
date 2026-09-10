@@ -1,0 +1,86 @@
+name: Unify Alice with central Dispatcher
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  unify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repair tunnel and verify Alice
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo '=== LOCAL UNIFIED ==='
+          curl --fail --silent --show-error --max-time 20 -X POST http://127.0.0.1:3020/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: ЛОКАЛЬНО_OK"},"session":{"session_id":"unify-local"}}' >/tmp/a-local.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/a-local.json')); print(j)
+          assert j.get('session_state',{}).get('unified') is True, j
+          PY
+          cfg=''
+          execstart=$(systemctl show cloudflared -p ExecStart --value 2>/dev/null || true)
+          for f in $(printf '%s\n' "$execstart" | grep -oE '/[^ ]*cloudflared[^ ]*\.ya?ml' || true); do [ -f "$f" ] && cfg="$f" && break; done
+          if [ -z "$cfg" ]; then for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done; fi
+          test -n "$cfg"
+          echo "CONFIG=$cfg"
+          cp "$cfg" "$cfg.bak-unify-$(date +%s)"
+          python3 - "$cfg" <<'PY'
+          import re,sys
+          p=sys.argv[1]; s=open(p).read()
+          # Remove any existing rules for our two public endpoints, then prepend the correct rules.
+          lines=s.splitlines(True); out=[]; i=0
+          while i < len(lines):
+              if re.match(r'^\s*-\s*hostname:\s*(ai\.aliceq\.ru|aliceq\.ru)\s*$', lines[i]):
+                  host=re.search(r'hostname:\s*([^\s]+)',lines[i]).group(1)
+                  block=[lines[i]]; i+=1
+                  while i<len(lines) and (lines[i].startswith('    ') or lines[i].startswith('      ') or lines[i].strip()==''):
+                      block.append(lines[i]); i+=1
+                  if host in ('ai.aliceq.ru','aliceq.ru') and any('127.0.0.1:3020' in x for x in block):
+                      continue
+                  if host in ('ai.aliceq.ru','aliceq.ru'):
+                      continue
+              out.append(lines[i] if i < len(lines) else '')
+              i+=1
+          s=''.join(out)
+          marker='ingress:\n'
+          if marker not in s: raise SystemExit('No ingress section in cloudflared config')
+          entries=('  - hostname: ai.aliceq.ru\n'
+                   '    service: http://127.0.0.1:3020\n'
+                   '  - hostname: aliceq.ru\n'
+                   '    path: ^/alice$\n'
+                   '    service: http://127.0.0.1:3020\n')
+          s=s.replace(marker,marker+entries,1)
+          open(p,'w').write(s)
+          PY
+          cloudflared tunnel ingress validate --config "$cfg"
+          systemctl restart cloudflared
+          sleep 3
+          echo '=== PUBLIC API ==='
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 https://ai.aliceq.ru/health >/tmp/h-public.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h-public.json')); assert j.get('ok') and j.get('dispatcher'),j
+          print('PUBLIC_API_OK')
+          PY
+          echo '=== PUBLIC ALICE ==='
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"unify-public"}}' >/tmp/a-public.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/a-public.json')); text=str(j.get('response',{}).get('text','')); unified=j.get('session_state',{}).get('unified')
+          print('ALICE_PUBLIC_OK',text); print('ALICE_UNIFIED',unified)
+          assert text and unified is True, j
+          PY
+          echo '=== ALICE_UNIFIED_OK ==='
+          REMOTE
