@@ -4,6 +4,8 @@ on:
     branches: [main]
 permissions:
   contents: read
+  pages: write
+  id-token: write
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -25,3 +27,82 @@ jobs:
           /usr/bin/time -f 'OLLAMA_SECONDS=%e' curl --fail --silent --show-error --max-time 25 -X POST http://127.0.0.1:11434/api/chat -H 'Content-Type: application/json' --data '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Ответь одним словом: ОК"}],"stream":false,"think":false,"options":{"temperature":0.2,"num_predict":16}}'
           echo
           REMOTE
+  live_repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repair and verify My AI Unified and Alice
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          workdir=$(systemctl show -p WorkingDirectory --value my-ai-unified)
+          test -n "$workdir"
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_CHAT_OK',j.get('result'))
+          PY
+          cfg=''
+          for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml /root/.cloudflared/config.yml /root/.cloudflared/config.yaml; do [ -f "$f" ] && cfg="$f" && break; done
+          test -n "$cfg"
+          cp "$cfg" "$cfg.bak-my-ai-unified"
+          python3 - "$cfg" <<'PY'
+          import sys
+          p=sys.argv[1]; s=open(p).read(); marker='ingress:\n'
+          entries='  - hostname: ai.aliceq.ru\n    service: http://127.0.0.1:3020\n  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n'
+          if 'hostname: ai.aliceq.ru' not in s:
+              s=s.replace(marker,marker+entries,1) if marker in s else s+'\n\ningress:\n'+entries
+          elif 'path: ^/alice$' not in s:
+              s=s.replace(marker,marker+'  - hostname: aliceq.ru\n    path: ^/alice$\n    service: http://127.0.0.1:3020\n',1)
+          open(p,'w').write(s)
+          PY
+          cloudflared tunnel route dns alice-ai ai.aliceq.ru >/tmp/dns.txt 2>&1 || true
+          cloudflared tunnel ingress validate --config "$cfg"
+          systemctl restart cloudflared 2>/dev/null || systemctl restart cloudflared.service 2>/dev/null || true
+          for i in $(seq 1 45); do curl -fsS --max-time 5 https://ai.aliceq.ru/health >/tmp/ph.json 2>/dev/null && break; sleep 2; done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ph.json')); assert j.get('ok'),j
+          print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 60 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_CHAT_OK',j.get('result'))
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --max-time 30 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"live-unified-check"}}' >/tmp/pa.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pa.json')); text=str(j.get('response',{}).get('text','')); assert text,j
+          print('ALICE_PUBLIC_OK',text); print('ALICE_UNIFIED',j.get('session_state',{}).get('unified',False))
+          PY
+          REMOTE
+      - name: Publish verified Pages
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          rm -rf pages && mkdir pages
+          cp index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-full-chain"}' > pages/api.json
+          echo 'Pages artifact prepared'
