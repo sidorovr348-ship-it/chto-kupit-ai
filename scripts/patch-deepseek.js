@@ -13,7 +13,9 @@ if (!s.includes('async function callDeepSeek(')) {
   const marker = '\nasync function callOpenRouter(messages, images = []) {';
   const fn = `
 async function callDeepSeek(messages, images = []) {
-  if (!process.env.DEEPSEEK_API_KEY) throw new Error('DEEPSEEK_API_KEY is not configured');
+  const key = String(process.env.DEEPSEEK_API_KEY || '').trim();
+  if (!key) throw new Error('DEEPSEEK_API_KEY is not configured');
+  if (/[\\x00-\\x1F\\x7F-\\uFFFF]/.test(key)) throw new Error('DEEPSEEK_API_KEY contains invalid characters');
   const safeMessages = [{ role: 'system', content: 'Ты My AI Unified. Отвечай по-русски, естественно, точно и кратко. Не называй внутренние модели и сервисы.' }, ...(Array.isArray(messages) ? messages : [])];
   const encoded = (Array.isArray(images) ? images : []).map(normalizeVisionImage).filter(Boolean).slice(0, 4);
   if (encoded.length) {
@@ -23,11 +25,11 @@ async function callDeepSeek(messages, images = []) {
     lastUser.content = [{ type: 'text', text: text || 'Проанализируй изображения подробно.' }, ...encoded.map(url => ({ type: 'image_url', image_url: { url, detail: 'auto' } }))];
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), encoded.length ? 90000 : 60000);
+  const timer = setTimeout(() => controller.abort(), encoded.length ? 90000 : 45000);
   try {
     const response = await fetch(DEEPSEEK_BASE_URL + '/chat/completions', {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + process.env.DEEPSEEK_API_KEY, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: encoded.length ? DEEPSEEK_VISION_MODEL : DEEPSEEK_MODEL, messages: safeMessages, thinking: { type: 'disabled' }, temperature: 0.2 }),
       signal: controller.signal
     });
@@ -47,12 +49,7 @@ const end = s.indexOf('\nasync function synthesizeSpeech(', start);
 if (start < 0 || end < 0) throw new Error('answerForChat markers not found');
 const answerFn = `async function answerForChat(chatMessages, userPrompt, route) {
   if (route === 'chat' || route === 'code') {
-    try { return { result: await callDeepSeek(chatMessages), model: DEEPSEEK_MODEL, local: false, fallback: false, provider: 'deepseek' }; }
-    catch (e) { console.warn('DeepSeek unavailable:', e.message); }
-    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false, fallback: true, provider: 'paralon' }; }
-    catch (e) { console.warn('Paralon unavailable:', e.message); }
-    try { return { result: await callOllama(chatMessages, { timeoutMs: 60000, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true, fallback: true, provider: 'ollama' }; }
-    catch (e) { console.warn('Local AI unavailable:', e.message); }
+    return { result: await callDeepSeek(chatMessages), model: DEEPSEEK_MODEL, local: false, fallback: false, provider: 'deepseek' };
   }
   return null;
 }
