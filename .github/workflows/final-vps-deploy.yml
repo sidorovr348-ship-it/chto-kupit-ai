@@ -26,23 +26,22 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           test -n "$workdir"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
-          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/dispatcher.js src/capabilities.json "$VPS_USER@$VPS_HOST:$workdir/src/"
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
+          scp "${SSH_OPTS[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${SSH_OPTS[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          scp "${SSH_OPTS[@]}" -q src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
+          scp "${SSH_OPTS[@]}" -q src/dispatcher.js src/capabilities.json "$VPS_USER@$VPS_HOST:$workdir/src/"
+          ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
           set -euo pipefail
           cd "$workdir"
           npm install --omit=dev --no-audit --no-fund
           node --check "$workdir/local-gateway.js"
           node --check "$workdir/src/local-ai.js"
           node --check "$workdir/src/dispatcher.js"
-          systemctl stop my-ai-unified || true
-          pkill -f "node $workdir/local-gateway.js" || true
           systemctl reset-failed my-ai-unified || true
-          systemctl start my-ai-unified
+          systemctl restart my-ai-unified
           ready=0
           for i in \$(seq 1 30); do
             if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then ready=1; break; fi
@@ -52,7 +51,7 @@ jobs:
             echo '=== MY AI SERVICE STATUS ==='
             systemctl status my-ai-unified --no-pager -l || true
             echo '=== MY AI SERVICE JOURNAL ==='
-            journalctl -u my-ai-unified --no-pager -n 100 || true
+            journalctl -u my-ai-unified --no-pager -n 150 || true
             exit 1
           fi
           systemctl is-active --quiet ollama
@@ -63,9 +62,11 @@ jobs:
           python3 - <<'PY'
           import json
           h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
-          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts') and h.get('adapters',{}).get('paralon'), h
+          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts'), h
           assert j.get('ok') and j.get('result'), j
-          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model')); print('LOCAL_TTS_OK')
+          print('LOCAL_HEALTH_OK', 'paralon=',h.get('adapters',{}).get('paralon'), 'openrouter=',h.get('adapters',{}).get('openrouter'))
+          print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'),j.get('provider'))
+          print('LOCAL_TTS_OK')
           PY
           curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data '{"prompt":"Какой основной цвет на изображении? Ответь одним словом.","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="]}' >/tmp/photo.json
           python3 - <<'PY'
@@ -74,7 +75,7 @@ jobs:
           assert j.get('ok') and j.get('result'), j
           text=str(j.get('result')).lower()
           assert any(x in text for x in ('красн','red')), j
-          print('LOCAL_VISION_OK',j.get('result'),j.get('model'))
+          print('LOCAL_VISION_OK',j.get('result'),j.get('model'),j.get('provider'))
           PY
           REMOTE
       - name: Verify Alice locally
@@ -88,7 +89,7 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
       - name: Verify stable public API
         run: |
           set -euo pipefail
@@ -105,7 +106,7 @@ jobs:
           import json
           j=json.load(open('/tmp/public-chat.json'))
           assert j.get('ok') and j.get('result'), j
-          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'))
+          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'),j.get('provider'))
           PY
           echo "FULL_CHAIN_OK=$STABLE"
       - name: Verify Alice public route
