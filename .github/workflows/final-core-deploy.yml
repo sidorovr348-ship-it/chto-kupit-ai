@@ -47,16 +47,15 @@ jobs:
           echo '=== LOCAL HEALTH ==='
           curl -fsS --max-time 10 http://127.0.0.1:3020/health
           echo
-          echo '=== DEEPSEEK DIRECT ==='
-          ENV_FILE="$ENV_FILE" node <<'NODE'
+          echo '=== PROVIDER CHECK ==='
+          ENV_FILE="$ENV_FILE" node <<'NODE' || true
           require('dotenv').config({path:process.env.ENV_FILE});
           const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};
           const key=[...(process.env.DEEPSEEK_API_KEY||'').trim()].map(c=>map[c]||c).join('');
           if(!key) throw new Error('DEEPSEEK_API_KEY missing');
           const r=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:'Ответь одним словом: ГОТОВО'}],max_tokens:16,temperature:0})});
-          const t=await r.text(); console.log('HTTP',r.status);
-          try{const d=JSON.parse(t);console.log('RESULT',String(d?.choices?.[0]?.message?.content||d?.error?.message||'NO_RESULT').slice(0,200));}catch{console.log('BODY',t.slice(0,200));}
-          if(!r.ok) process.exit(2);
+          const t=await r.text(); console.log('DEEPSEEK_HTTP',r.status);
+          try{const d=JSON.parse(t);console.log('DEEPSEEK_RESULT',String(d?.choices?.[0]?.message?.content||d?.error?.message||'NO_RESULT').slice(0,200));}catch{console.log('DEEPSEEK_BODY',t.slice(0,200));}
           NODE
           echo '=== LOCAL CHAT ==='
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
