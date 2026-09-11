@@ -1,67 +1,24 @@
-require('dotenv').config({ path: process.env.ENV_FILE || '/root/chto-kupit-ai.env' });
+require('dotenv').config({ path: process.env.ENV_FILE || '/root/my-ai-unified/.local-ai.env' });
 const express = require('express');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const { EdgeTTS } = require('node-edge-tts');
-const { health: localHealth } = require('./src/local-ai');
-
 const app = express();
 const PORT = Number(process.env.PORT || 3020);
 const TTS_VOICE = process.env.TTS_VOICE || 'ru-RU-DmitryNeural';
 const TEXT_MODEL = process.env.DEEPSEEK_TEXT_MODEL || 'deepseek-v4-flash';
 const VISION_MODEL = process.env.DEEPSEEK_VISION_MODEL || 'deepseek-v4-flash-vision-exp';
 app.use(express.json({ limit: '35mb' }));
-app.use(require('cors')());
+try { app.use(require('cors')()); } catch {}
 process.on('uncaughtException', e => console.error('UNCAUGHT_EXCEPTION:', e?.stack || e));
 process.on('unhandledRejection', e => console.error('UNHANDLED_REJECTION:', e?.stack || e));
-
-function key() {
-  let v = String(process.env.DEEPSEEK_API_KEY || '').trim();
-  const map = {'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};
-  v = [...v].map(c => map[c] || c).join('');
-  if (!v || /[^\x21-\x7E]/.test(v)) throw new Error('DEEPSEEK_API_KEY contains unsupported characters');
-  return v;
-}
-function clean(v) {
-  const s = String(v || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  if (!s) throw new Error('AI provider returned empty text');
-  return s;
-}
-function image(v) {
-  const s = String(v || '').trim();
-  if (!s) return '';
-  if (/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(s) || /^https?:\/\//i.test(s)) return s;
-  return `data:image/jpeg;base64,${s}`;
-}
-function textOf(messages) {
-  const m = [...(Array.isArray(messages) ? messages : [])].reverse().find(x => x?.role === 'user');
-  if (!m) return '';
-  if (typeof m.content === 'string') return m.content;
-  if (Array.isArray(m.content)) return m.content.filter(x => x?.type === 'text').map(x => x.text || '').join('\n');
-  return String(m.content || '');
-}
-async function ask(messages, vision=false) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), vision ? 60000 : 30000);
-  try {
-    const r = await fetch('https://api.deepseek.com/chat/completions', {
-      method:'POST',
-      headers:{Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},
-      body:JSON.stringify({model:vision?VISION_MODEL:TEXT_MODEL,messages:[{role:'system',content:'Ты — My AI Unified, единый русскоязычный помощник. Отвечай естественно, понятно и по делу. Не упоминай внутренние модели, ключи, серверы и техническую реализацию.'},...(Array.isArray(messages)?messages:[])],temperature:0.2,max_tokens:vision?1200:1600}),
-      signal:controller.signal
-    });
-    const raw=await r.text(); let d={}; try{d=raw?JSON.parse(raw):{}}catch{}
-    if(!r.ok) throw Object.assign(new Error(`DeepSeek HTTP ${r.status}: ${String(d?.error?.message||raw||'').slice(0,500)}`),{status:r.status});
-    return clean(d?.choices?.[0]?.message?.content);
-  } finally { clearTimeout(timer); }
-}
-async function tts(text){
-  const s=String(text||'').replace(/https?:\/\/\S+/g,'').trim().slice(0,3500); if(!s) throw Object.assign(new Error('text is required'),{status:400});
-  const f=path.join(os.tmpdir(),`my-ai-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
-  try{const x=new EdgeTTS({voice:TTS_VOICE,lang:'ru-RU',outputFormat:'audio-24khz-96kbitrate-mono-mp3',rate:'+0%',pitch:'+0Hz',volume:'+0%',timeout:15000}); await x.ttsPromise(s,f); return await fs.readFile(f);} finally{await fs.rm(f,{force:true}).catch(()=>{});}
-}
-app.get('/health',async(req,res)=>{const local=await localHealth();res.set('Cache-Control','no-store');res.json({ok:true,service:'my-ai-unified',dispatcher:true,local_ai:local,adapters:{local:local.ok,ollama:local.ok,deepseek:Boolean(process.env.DEEPSEEK_API_KEY),paralon:Boolean(process.env.PARALON_API_KEY),openrouter:false,tts:true,video:true,shopping:true},capabilities:['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification']});});
+function key(){let v=String(process.env.DEEPSEEK_API_KEY||'').trim();const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};v=[...v].map(c=>map[c]||c).join('');if(!v||/[^\x21-\x7E]/.test(v))throw new Error('DEEPSEEK_API_KEY contains unsupported characters');return v;}
+function clean(v){const s=String(v||'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim();if(!s)throw new Error('AI provider returned empty text');return s;}
+function image(v){const s=String(v||'').trim();if(!s)return '';if(/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(s)||/^https?:\/\//i.test(s))return s;return `data:image/jpeg;base64,${s}`;}
+function textOf(messages){const m=[...(Array.isArray(messages)?messages:[])].reverse().find(x=>x?.role==='user');if(!m)return '';if(typeof m.content==='string')return m.content;if(Array.isArray(m.content))return m.content.filter(x=>x?.type==='text').map(x=>x.text||'').join('\n');return String(m.content||'');}
+async function ask(messages,vision=false){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),vision?60000:30000);try{const r=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key()}`,'Content-Type':'application/json'},body:JSON.stringify({model:vision?VISION_MODEL:TEXT_MODEL,messages:[{role:'system',content:'Ты — My AI Unified, единый русскоязычный помощник. Отвечай естественно, понятно и по делу. Не упоминай внутренние модели, ключи, серверы и техническую реализацию.'},...(Array.isArray(messages)?messages:[])],temperature:0.2,max_tokens:vision?1200:1600}),signal:controller.signal});const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{}if(!r.ok)throw Object.assign(new Error(`DeepSeek HTTP ${r.status}: ${String(d?.error?.message||raw||'').slice(0,500)}`),{status:r.status});return clean(d?.choices?.[0]?.message?.content);}finally{clearTimeout(timer);}}
+async function tts(text){const EdgeTTS=require('node-edge-tts').EdgeTTS;const s=String(text||'').replace(/https?:\/\/\S+/g,'').trim().slice(0,3500);if(!s)throw Object.assign(new Error('text is required'),{status:400});const f=path.join(os.tmpdir(),`my-ai-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);try{const x=new EdgeTTS({voice:TTS_VOICE,lang:'ru-RU',outputFormat:'audio-24khz-96kbitrate-mono-mp3',rate:'+0%',pitch:'+0Hz',volume:'+0%',timeout:15000});await x.ttsPromise(s,f);return await fs.readFile(f);}finally{await fs.rm(f,{force:true}).catch(()=>{});}}
+app.get('/health',(req,res)=>{res.set('Cache-Control','no-store');res.json({ok:true,service:'my-ai-unified',dispatcher:true,adapters:{local:false,ollama:false,deepseek:Boolean(process.env.DEEPSEEK_API_KEY),paralon:Boolean(process.env.PARALON_API_KEY),openrouter:false,tts:true,video:true,shopping:true},capabilities:['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification']});});
 app.post('/chat',async(req,res)=>{const b=req.body||{};let m=Array.isArray(b.messages)&&b.messages.length?b.messages:(b.prompt?[{role:'user',content:String(b.prompt)}]:[]);if(!m.length)return res.status(400).json({ok:false,error:'prompt or messages is required'});try{const imgs=(Array.isArray(b.images)?b.images:(b.image?[b.image]:[])).map(image).filter(Boolean).slice(0,4);if(imgs.length){const u=[...m].reverse().find(x=>x?.role==='user');if(u)u.content=[{type:'text',text:textOf(m)||'Проанализируй изображение подробно.'},...imgs.map(url=>({type:'image_url',image_url:{url}}))];const result=await ask(m,true);return res.json({ok:true,route:'vision',result,model:VISION_MODEL,local:false,fallback:false,provider:'deepseek'});}const result=await ask(m,false);return res.json({ok:true,route:'chat',result,model:TEXT_MODEL,local:false,fallback:false,provider:'deepseek'});}catch(e){console.error('CHAT_ERROR:',e?.stack||e);return res.status(e.status||502).json({ok:false,error:e.message||'AI request failed',provider:'deepseek'});}});
 app.post('/photo',async(req,res)=>{try{const imgs=(Array.isArray(req.body?.images)?req.body.images:[req.body?.image]).map(image).filter(Boolean).slice(0,4);if(!imgs.length)return res.status(400).json({ok:false,error:'image is required'});const m=[{role:'user',content:[{type:'text',text:String(req.body?.prompt||'Опиши изображение подробно. Если это товар, назови производителя, модель и видимые характеристики.')},...imgs.map(url=>({type:'image_url',image_url:{url}}))]}];const result=await ask(m,true);return res.json({ok:true,route:'vision',result,model:VISION_MODEL,local:false,fallback:false,provider:'deepseek'});}catch(e){console.error('PHOTO_ERROR:',e?.stack||e);return res.status(e.status||502).json({ok:false,error:e.message||'Vision request failed',provider:'deepseek'});}});
 app.post('/tts',async(req,res)=>{try{const a=await tts(req.body?.text);res.set({'Content-Type':'audio/mpeg','Cache-Control':'no-store','Content-Length':String(a.length)});res.send(a);}catch(e){res.status(e.status||502).json({ok:false,error:e.message});}});
