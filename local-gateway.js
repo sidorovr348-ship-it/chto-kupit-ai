@@ -12,9 +12,14 @@ const PORT = Number(process.env.PORT || 3020);
 const LEGACY_URL = process.env.LEGACY_URL || 'http://127.0.0.1:3021';
 const PARALON_BASE_URL = process.env.PARALON_BASE_URL || 'https://paraloncloud.com/v1';
 const PARALON_MODEL = process.env.PARALON_MODEL || 'qwen3.8-27b';
+const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openrouter/free';
 const TTS_VOICE = process.env.TTS_VOICE || 'ru-RU-DmitryNeural';
 app.use(express.json({ limit: '35mb' }));
 app.use(require('cors')());
+
+process.on('uncaughtException', error => console.error('UNCAUGHT_EXCEPTION:', error?.stack || error));
+process.on('unhandledRejection', error => console.error('UNHANDLED_REJECTION:', error?.stack || error));
 
 function textFromMessages(messages) {
   const list = Array.isArray(messages) ? messages : [];
@@ -43,6 +48,45 @@ async function proxy(req, res, timeoutMs = 30000) {
   }
 }
 
+function cleanAiText(value) {
+  const text = String(value || '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (!text || /^<!doctype html/i.test(text) || /^<html/i.test(text)) throw new Error('AI provider returned invalid text');
+  return text;
+}
+
+async function callOpenRouter(messages, images = []) {
+  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured');
+  const safeMessages = [{ role: 'system', content: 'Ты My AI Unified. Отвечай по-русски, естественно, точно и кратко. Не называй внутренние модели и сервисы.' }, ...(Array.isArray(messages) ? messages : [])];
+  const encoded = (Array.isArray(images) ? images : []).map(normalizeVisionImage).filter(Boolean).slice(0, 4);
+  if (encoded.length) {
+    const lastUser = [...safeMessages].reverse().find(m => m?.role === 'user');
+    if (lastUser) {
+      const text = typeof lastUser.content === 'string' ? lastUser.content : textFromMessages([lastUser]);
+      lastUser.content = [{ type: 'text', text: text || 'Проанализируй изображения подробно.' }, ...encoded.map(url => ({ type: 'image_url', image_url: { url } }))];
+    }
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  try {
+    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.APP_PUBLIC_URL || 'https://aliceq.ru',
+        'X-Title': 'My AI Unified'
+      },
+      body: JSON.stringify({ model: OPENROUTER_MODEL, messages: safeMessages, temperature: 0.2 }),
+      signal: controller.signal
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch {}
+    if (!response.ok) throw new Error(`OpenRouter HTTP ${response.status}`);
+    return cleanAiText(data?.choices?.[0]?.message?.content);
+  } finally { clearTimeout(timer); }
+}
+
 async function callParalon(messages) {
   if (!process.env.PARALON_API_KEY) throw new Error('PARALON_API_KEY is not configured');
   const safe = [{ role: 'system', content: 'Ты My AI Unified. Отвечай по-русски, естественно, точно и кратко. Не называй внутренние модели и сервисы.' }, ...(Array.isArray(messages) ? messages : [])];
@@ -59,9 +103,7 @@ async function callParalon(messages) {
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch {}
     if (!response.ok) throw new Error(`Paralon HTTP ${response.status}`);
-    const result = data?.choices?.[0]?.message?.content;
-    if (!result) throw new Error('Paralon returned empty response');
-    return String(result).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    return cleanAiText(data?.choices?.[0]?.message?.content);
   } finally { clearTimeout(timer); }
 }
 
@@ -94,36 +136,18 @@ async function callParalonVision(prompt, images) {
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch {}
     if (!response.ok) throw new Error(`Paralon vision HTTP ${response.status}`);
-    const result = data?.choices?.[0]?.message?.content;
-    if (!result) throw new Error('Paralon vision returned empty response');
-    return String(result).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  } finally { clearTimeout(timer); }
-}
-
-async function callFastRemote(prompt) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12000);
-  try {
-    const url = new URL('https://text.pollinations.ai/');
-    url.searchParams.set('model', 'openai');
-    url.searchParams.set('system', 'Отвечай по-русски кратко и естественно. Ты My AI Unified.');
-    url.searchParams.set('prompt', prompt);
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(`remote HTTP ${response.status}`);
-    const text = (await response.text()).trim();
-    if (!text) throw new Error('remote AI returned empty response');
-    return text;
+    return cleanAiText(data?.choices?.[0]?.message?.content);
   } finally { clearTimeout(timer); }
 }
 
 async function answerForChat(chatMessages, userPrompt, route) {
   if (route === 'chat' || route === 'code') {
-    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false }; }
+    try { return { result: await callOpenRouter(chatMessages), model: OPENROUTER_MODEL, local: false, fallback: false, provider: 'openrouter' }; }
+    catch (e) { console.warn('OpenRouter unavailable:', e.message); }
+    try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false, fallback: true, provider: 'paralon' }; }
     catch (e) { console.warn('Paralon unavailable:', e.message); }
-    try { return { result: await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true, fallback: true }; }
+    try { return { result: await callOllama(chatMessages, { timeoutMs: 4500, numPredict: route === 'code' ? 900 : 180 }), model: OLLAMA_MODEL, local: true, fallback: true, provider: 'ollama' }; }
     catch (e) { console.warn('Local AI unavailable:', e.message); }
-    try { return { result: await callFastRemote(userPrompt), model: 'pollinations-openai', local: false, fallback: true }; }
-    catch (e) { console.warn('Fast remote AI unavailable:', e.message); }
   }
   return null;
 }
@@ -133,36 +157,21 @@ async function synthesizeSpeech(text) {
   if (!clean) throw Object.assign(new Error('text is required'), { status: 400 });
   const file = path.join(os.tmpdir(), `my-ai-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
   try {
-    const tts = new EdgeTTS({
-      voice: TTS_VOICE,
-      lang: 'ru-RU',
-      outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
-      rate: '+0%',
-      pitch: '+0Hz',
-      volume: '+0%',
-      timeout: 15000
-    });
+    const tts = new EdgeTTS({ voice: TTS_VOICE, lang: 'ru-RU', outputFormat: 'audio-24khz-96kbitrate-mono-mp3', rate: '+0%', pitch: '+0Hz', volume: '+0%', timeout: 15000 });
     await tts.ttsPromise(clean, file);
     return await fs.readFile(file);
-  } finally {
-    await fs.rm(file, { force: true }).catch(() => {});
-  }
+  } finally { await fs.rm(file, { force: true }).catch(() => {}); }
 }
 
 app.get('/health', async (req, res) => {
   const local = await health();
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, local_ai: local, adapters: { local: local.ok, ollama: local.ok, paralon: Boolean(process.env.PARALON_API_KEY), tts: true, video: true, shopping: true }, capabilities: ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'] });
+  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, local_ai: local, adapters: { local: local.ok, ollama: local.ok, paralon: Boolean(process.env.PARALON_API_KEY), openrouter: Boolean(process.env.OPENROUTER_API_KEY), tts: true, video: true, shopping: true }, capabilities: ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'] });
 });
 
 app.post('/tts', async (req, res) => {
-  try {
-    const audio = await synthesizeSpeech(req.body?.text);
-    res.set({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'Content-Length': String(audio.length) });
-    return res.send(audio);
-  } catch (error) {
-    return res.status(error.status || 502).json({ ok: false, error: error.message });
-  }
+  try { const audio = await synthesizeSpeech(req.body?.text); res.set({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'Content-Length': String(audio.length) }); return res.send(audio); }
+  catch (error) { return res.status(error.status || 502).json({ ok: false, error: error.message }); }
 });
 
 app.post('/chat', async (req, res) => {
@@ -175,9 +184,11 @@ app.post('/chat', async (req, res) => {
     const answer = await answerForChat(chatMessages, userPrompt, route);
     if (answer) return res.json({ ok: true, route, ...answer });
     if (route === 'vision' && req.body?.image) {
-      try { return res.json({ ok: true, route, result: await callParalonVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: PARALON_MODEL, local: false }); }
+      try { return res.json({ ok: true, route, result: await callOpenRouter([{ role: 'user', content: userPrompt || 'Проанализируй изображение.' }], [req.body.image]), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }
+      catch (e) { console.warn('OpenRouter vision unavailable:', e.message); }
+      try { return res.json({ ok: true, route, result: await callParalonVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: PARALON_MODEL, local: false, fallback: true, provider: 'paralon' }); }
       catch (e) { console.warn('Paralon vision unavailable:', e.message); }
-      try { return res.json({ ok: true, route, result: await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: OLLAMA_MODEL, local: true }); }
+      try { return res.json({ ok: true, route, result: await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: OLLAMA_MODEL, local: true, fallback: true, provider: 'ollama' }); }
       catch (e) { console.warn('Local vision unavailable:', e.message); }
     }
     return proxy(req, res, 30000);
@@ -187,9 +198,11 @@ app.post('/chat', async (req, res) => {
 app.post('/photo', async (req, res) => {
   try {
     const images = Array.isArray(req.body?.images) ? req.body.images : (req.body?.image ? [req.body.image] : []);
-    try { return res.json({ ok: true, route: 'vision', result: await callParalonVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: PARALON_MODEL, local: false }); }
+    try { return res.json({ ok: true, route: 'vision', result: await callOpenRouter([{ role: 'user', content: req.body?.prompt || 'Опиши изображения подробно.' }], images), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }
+    catch (e) { console.warn('OpenRouter photo vision unavailable:', e.message); }
+    try { return res.json({ ok: true, route: 'vision', result: await callParalonVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: PARALON_MODEL, local: false, fallback: true, provider: 'paralon' }); }
     catch (e) { console.warn('Paralon photo vision unavailable:', e.message); }
-    try { return res.json({ ok: true, route: 'vision', result: await callVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: OLLAMA_MODEL, local: true }); }
+    try { return res.json({ ok: true, route: 'vision', result: await callVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: OLLAMA_MODEL, local: true, fallback: true, provider: 'ollama' }); }
     catch (e) { console.warn('Local photo vision unavailable:', e.message); }
     return proxy(req, res, 60000);
   } catch (error) { return res.status(error.status || 502).json({ ok: false, error: error.message, details: error.details }); }
@@ -204,22 +217,13 @@ app.post('/alice', async (req, res) => {
     const answer = await answerForChat([{ role: 'user', content: command }], command, route || 'chat');
     if (answer?.result) {
       const text = String(answer.result).replace(/<think>[\s\S]*?<\/think>/gi, '').trim().slice(0, 1024) || 'Я готов продолжать.';
-      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: true, route, local: answer.local, fallback: Boolean(answer.fallback), model: answer.model } });
+      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: true, route, local: answer.local, fallback: Boolean(answer.fallback), model: answer.model, provider: answer.provider } });
     }
     throw new Error('central dispatcher returned no answer');
   } catch (error) {
-    try {
-      const text = (await callParalon([{ role: 'user', content: command }])).slice(0, 1024);
-      return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true, model: PARALON_MODEL } });
-    } catch (paralonError) {
-      try {
-        const text = (await callFastRemote(command)).slice(0, 1024);
-        return res.json({ version: '1.0', response: { text, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true, model: 'pollinations-openai' } });
-      } catch {
-        const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но AI сейчас недоступен. Повтори вопрос.';
-        return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true } });
-      }
-    }
+    console.warn('Alice central answer failed:', error.message);
+    const quick = /кто тебя создал/iu.test(command) ? 'Меня создал Roman.' : /как тебя зовут/iu.test(command) ? 'Мой AI.' : 'Я получил запрос, но AI сейчас недоступен. Повтори вопрос.';
+    return res.json({ version: '1.0', response: { text: quick, end_session: false }, session_state: { session_id: sessionId, unified: false, fallback: true, error: 'ai_unavailable' } });
   }
 });
 
@@ -228,4 +232,4 @@ app.use((req, res, next) => {
   proxy(req, res);
 });
 
-app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; central=${PARALON_MODEL}; local-fallback=${OLLAMA_MODEL}; tts=${TTS_VOICE}`));
+app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; primary=openrouter:${OPENROUTER_MODEL}; secondary=${PARALON_MODEL}; local-fallback=${OLLAMA_MODEL}; tts=${TTS_VOICE}`));
