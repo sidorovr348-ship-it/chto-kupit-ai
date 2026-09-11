@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'my-ai-unified-core.js'
+      - 'local-gateway.js'
       - '.github/workflows/final-core-deploy.yml'
   workflow_dispatch:
 
@@ -30,17 +31,17 @@ jobs:
           APP_DIR="$(systemctl show -p WorkingDirectory --value my-ai-unified)"
           [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ] || { echo "BAD_WORKING_DIRECTORY=$APP_DIR"; systemctl cat my-ai-unified; exit 1; }
           ENV_FILE="$(systemctl cat my-ai-unified | sed -n 's/.*EnvironmentFile=-\([^ ]*\).*/\1/p' | head -1)"
-          [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ] || ENV_FILE="/root/chto-kupit-ai.env"
+          [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ] || ENV_FILE="/root/my-ai-unified/.local-ai.env"
           [ -f "$ENV_FILE" ] || { echo "ENV_FILE_NOT_FOUND"; exit 1; }
           echo "APP_DIR=$APP_DIR"
           echo "ENV_FILE=$ENV_FILE"
           cd "$APP_DIR"
           cp -f local-gateway.js "local-gateway.js.backup-final-$(date +%Y%m%d-%H%M%S)" || true
-          curl -fsSL --max-time 20 "https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/$SHA/my-ai-unified-core.js?cachebust=$SHA" -o /tmp/my-ai-unified-core.js
-          node --check /tmp/my-ai-unified-core.js
-          install -m 644 /tmp/my-ai-unified-core.js local-gateway.js
+          curl -fsSL --max-time 20 "https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/$SHA/local-gateway.js?cachebust=$SHA" -o /tmp/local-gateway.js
+          node --check /tmp/local-gateway.js
+          install -m 644 /tmp/local-gateway.js local-gateway.js
           systemctl restart my-ai-unified
-          sleep 3
+          sleep 4
           echo '=== SERVICE ==='
           systemctl is-active my-ai-unified
           echo '=== LOCAL HEALTH ==='
