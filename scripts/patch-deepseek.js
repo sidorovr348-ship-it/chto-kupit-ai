@@ -13,9 +13,11 @@ if (!s.includes('async function callDeepSeek(')) {
   const marker = '\nasync function callOpenRouter(messages, images = []) {';
   const fn = `
 async function callDeepSeek(messages, images = []) {
-  const key = String(process.env.DEEPSEEK_API_KEY || '').trim();
+  let key = String(process.env.DEEPSEEK_API_KEY || '').trim();
+  const homoglyphs = { 'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H' };
+  key = [...key].map(ch => homoglyphs[ch] || ch).join('');
   if (!key) throw new Error('DEEPSEEK_API_KEY is not configured');
-  if (/[\\x00-\\x1F\\x7F-\\uFFFF]/.test(key)) throw new Error('DEEPSEEK_API_KEY contains invalid characters');
+  if (/[\\x00-\\x1F\\x7F-\\uFFFF]/.test(key)) throw new Error('DEEPSEEK_API_KEY contains unsupported characters');
   const safeMessages = [{ role: 'system', content: 'Ты My AI Unified. Отвечай по-русски, естественно, точно и кратко. Не называй внутренние модели и сервисы.' }, ...(Array.isArray(messages) ? messages : [])];
   const encoded = (Array.isArray(images) ? images : []).map(normalizeVisionImage).filter(Boolean).slice(0, 4);
   if (encoded.length) {
@@ -61,16 +63,12 @@ s = s.replace(
   "adapters: { local: local.ok, ollama: local.ok, deepseek: Boolean(process.env.DEEPSEEK_API_KEY), paralon: Boolean(process.env.PARALON_API_KEY), openrouter: Boolean(process.env.OPENROUTER_API_KEY),"
 );
 
-const visionChatOld = `      try { return res.json({ ok: true, route, result: await callOpenRouter([{ role: 'user', content: userPrompt || 'Проанализируй изображение.' }], [req.body.image]), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }
-      catch (e) { console.warn('OpenRouter vision unavailable:', e.message); }`;
-const visionChatNew = `      try { return res.json({ ok: true, route, result: await callDeepSeek([{ role: 'user', content: userPrompt || 'Проанализируй изображение.' }], [req.body.image]), model: DEEPSEEK_VISION_MODEL, local: false, provider: 'deepseek' }); }
-      catch (e) { console.warn('DeepSeek vision unavailable:', e.message); }`;
+const visionChatOld = `      try { return res.json({ ok: true, route, result: await callOpenRouter([{ role: 'user', content: userPrompt || 'Проанализируй изображение.' }], [req.body.image]), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }\n      catch (e) { console.warn('OpenRouter vision unavailable:', e.message); }`;
+const visionChatNew = `      try { return res.json({ ok: true, route, result: await callDeepSeek([{ role: 'user', content: userPrompt || 'Проанализируй изображение.' }], [req.body.image]), model: DEEPSEEK_VISION_MODEL, local: false, provider: 'deepseek' }); }\n      catch (e) { console.warn('DeepSeek vision unavailable:', e.message); }`;
 s = s.replace(visionChatOld, visionChatNew);
 
-const photoOld = `    try { return res.json({ ok: true, route: 'vision', result: await callOpenRouter([{ role: 'user', content: req.body?.prompt || 'Опиши изображения подробно.' }], images), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }
-    catch (e) { console.warn('OpenRouter photo vision unavailable:', e.message); }`;
-const photoNew = `    try { return res.json({ ok: true, route: 'vision', result: await callDeepSeek([{ role: 'user', content: req.body?.prompt || 'Опиши изображения подробно.' }], images), model: DEEPSEEK_VISION_MODEL, local: false, provider: 'deepseek' }); }
-    catch (e) { console.warn('DeepSeek photo vision unavailable:', e.message); }`;
+const photoOld = `    try { return res.json({ ok: true, route: 'vision', result: await callOpenRouter([{ role: 'user', content: req.body?.prompt || 'Опиши изображения подробно.' }], images), model: OPENROUTER_MODEL, local: false, provider: 'openrouter' }); }\n    catch (e) { console.warn('OpenRouter photo vision unavailable:', e.message); }`;
+const photoNew = `    try { return res.json({ ok: true, route: 'vision', result: await callDeepSeek([{ role: 'user', content: req.body?.prompt || 'Опиши изображения подробно.' }], images), model: DEEPSEEK_VISION_MODEL, local: false, provider: 'deepseek' }); }\n    catch (e) { console.warn('DeepSeek photo vision unavailable:', e.message); }`;
 s = s.replace(photoOld, photoNew);
 
 fs.writeFileSync(path, s);
