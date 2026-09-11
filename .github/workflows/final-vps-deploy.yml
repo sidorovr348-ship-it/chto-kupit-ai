@@ -45,6 +45,17 @@ jobs:
           node --check "$workdir/local-gateway.js"
           node --check "$workdir/src/local-ai.js"
           node --check "$workdir/src/dispatcher.js"
+          echo '=== DIRECT NODE STARTUP DIAGNOSTIC ==='
+          set +e
+          timeout 12s env PORT=3120 node "$workdir/local-gateway.js" >/tmp/my-ai-manual.log 2>&1
+          manual_rc=\$?
+          set -e
+          cat /tmp/my-ai-manual.log || true
+          echo "DIRECT_NODE_EXIT=\$manual_rc"
+          if [ "\$manual_rc" != 124 ]; then
+            echo 'Direct Node startup failed before timeout.'
+            exit 1
+          fi
           systemctl reset-failed my-ai-unified || true
           systemctl restart my-ai-unified
           ready=0
@@ -53,6 +64,8 @@ jobs:
             sleep 1
           done
           if [ "\$ready" != 1 ]; then
+            echo '=== MY AI SERVICE SHOW ==='
+            systemctl show my-ai-unified -p ActiveState -p SubState -p MainPID -p ExecMainStatus -p ExecMainCode --no-pager || true
             echo '=== MY AI SERVICE STATUS ==='
             systemctl status my-ai-unified --no-pager -l || true
             echo '=== MY AI SERVICE JOURNAL ==='
