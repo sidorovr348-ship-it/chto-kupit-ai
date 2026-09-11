@@ -1,0 +1,68 @@
+name: My AI Unified — final core deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'my-ai-unified-core.js'
+      - '.github/workflows/final-core-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy core and verify end to end
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "SHA=$SHA bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /root/chto-kupit-ai-api
+          cp -f local-gateway.js "local-gateway.js.backup-final-$(date +%Y%m%d-%H%M%S)" || true
+          curl -fsSL --max-time 20 "https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/$SHA/my-ai-unified-core.js?cachebust=$SHA" -o /tmp/my-ai-unified-core.js
+          node --check /tmp/my-ai-unified-core.js
+          install -m 644 /tmp/my-ai-unified-core.js local-gateway.js
+          systemctl restart my-ai-unified
+          sleep 3
+          echo '=== SERVICE ==='
+          systemctl is-active my-ai-unified
+          echo '=== LOCAL HEALTH ==='
+          curl -fsS --max-time 10 http://127.0.0.1:3020/health
+          echo
+          echo '=== DEEPSEEK DIRECT ==='
+          node <<'NODE'
+          require('dotenv').config({path:'/root/chto-kupit-ai.env'});
+          const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};
+          const key=[...(process.env.DEEPSEEK_API_KEY||'').trim()].map(c=>map[c]||c).join('');
+          if(!key) throw new Error('DEEPSEEK_API_KEY missing');
+          const r=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:'Ответь одним словом: ГОТОВО'}],max_tokens:16,temperature:0})});
+          const t=await r.text();
+          console.log('HTTP',r.status);
+          try{const d=JSON.parse(t);console.log('RESULT',String(d?.choices?.[0]?.message?.content||d?.error?.message||'NO_RESULT').slice(0,200));}catch{console.log('BODY',t.slice(0,200));}
+          if(!r.ok) process.exit(2);
+          NODE
+          echo '=== LOCAL CHAT ==='
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo
+          echo '=== PUBLIC HEALTH ==='
+          curl -fsS --max-time 20 https://ai.aliceq.ru/health
+          echo
+          echo '=== PUBLIC CHAT ==='
+          curl -fsS --max-time 45 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo
+          echo '=== PUBLIC ALICE ==='
+          curl -fsS --max-time 45 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"final-core"}}'
+          echo
+          echo '=== SERVICE LOG ==='
+          journalctl -u my-ai-unified -n 40 --no-pager -o cat
+          REMOTE
