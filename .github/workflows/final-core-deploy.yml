@@ -27,7 +27,13 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "SHA=$SHA bash -s" <<'REMOTE'
           set -euo pipefail
-          cd /root/chto-kupit-ai-api
+          APP_DIR="$(find / -maxdepth 6 -type d -name 'chto-kupit-ai-api' -print -quit 2>/dev/null || true)"
+          ENV_FILE="$(find / -maxdepth 5 -type f -name 'chto-kupit-ai.env' -print -quit 2>/dev/null || true)"
+          if [ -z "$APP_DIR" ]; then echo 'APP_DIR_NOT_FOUND'; find /root /home /opt -maxdepth 4 -type d -name '*chto*' -print 2>/dev/null | head -30; exit 1; fi
+          if [ -z "$ENV_FILE" ]; then echo 'ENV_FILE_NOT_FOUND'; find /root /home /opt -maxdepth 4 -type f -name '*chto*env*' -print 2>/dev/null | head -30; exit 1; fi
+          echo "APP_DIR=$APP_DIR"
+          echo "ENV_FILE=$ENV_FILE"
+          cd "$APP_DIR"
           cp -f local-gateway.js "local-gateway.js.backup-final-$(date +%Y%m%d-%H%M%S)" || true
           curl -fsSL --max-time 20 "https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/$SHA/my-ai-unified-core.js?cachebust=$SHA" -o /tmp/my-ai-unified-core.js
           node --check /tmp/my-ai-unified-core.js
@@ -40,8 +46,8 @@ jobs:
           curl -fsS --max-time 10 http://127.0.0.1:3020/health
           echo
           echo '=== DEEPSEEK DIRECT ==='
-          node <<'NODE'
-          require('dotenv').config({path:'/root/chto-kupit-ai.env'});
+          ENV_FILE="$ENV_FILE" node <<'NODE'
+          require('dotenv').config({path:process.env.ENV_FILE});
           const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};
           const key=[...(process.env.DEEPSEEK_API_KEY||'').trim()].map(c=>map[c]||c).join('');
           if(!key) throw new Error('DEEPSEEK_API_KEY missing');
