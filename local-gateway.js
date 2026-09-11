@@ -1,4 +1,5 @@
-require('dotenv').config({ path: process.env.ENV_FILE || '/root/my-ai-unified/.local-ai.env' });
+const dotenv = require('dotenv');
+for (const f of [process.env.ENV_FILE, '/root/my-ai-unified/.local-ai.env', '/root/chto-kupit-ai.env']) { if (f) dotenv.config({ path: f, override: false }); }
 const express = require('express');
 const fs = require('fs/promises');
 const os = require('os');
