@@ -1,5 +1,9 @@
 require('dotenv').config({ path: process.env.ENV_FILE || '/root/chto-kupit-ai.env' });
 const express = require('express');
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
+const { EdgeTTS } = require('node-edge-tts');
 const { dispatch } = require('./src/dispatcher');
 const { callOllama, callVision, health, OLLAMA_MODEL } = require('./src/local-ai');
 
@@ -8,6 +12,7 @@ const PORT = Number(process.env.PORT || 3020);
 const LEGACY_URL = process.env.LEGACY_URL || 'http://127.0.0.1:3021';
 const PARALON_BASE_URL = process.env.PARALON_BASE_URL || 'https://paraloncloud.com/v1';
 const PARALON_MODEL = process.env.PARALON_MODEL || 'qwen3.8-27b';
+const TTS_VOICE = process.env.TTS_VOICE || 'ru-RU-DmitryNeural';
 app.use(express.json({ limit: '35mb' }));
 app.use(require('cors')());
 
@@ -77,8 +82,6 @@ async function callFastRemote(prompt) {
 }
 
 async function answerForChat(chatMessages, userPrompt, route) {
-  // Paralon/Qwen is the confirmed central AI. Do not let the experimental
-  // local qwen3:0.6b model block or degrade the main assistant.
   if (route === 'chat' || route === 'code') {
     try { return { result: await callParalon(chatMessages), model: PARALON_MODEL, local: false }; }
     catch (e) { console.warn('Paralon unavailable:', e.message); }
@@ -90,10 +93,41 @@ async function answerForChat(chatMessages, userPrompt, route) {
   return null;
 }
 
+async function synthesizeSpeech(text) {
+  const clean = String(text || '').replace(/https?:\/\/\S+/g, '').trim().slice(0, 3500);
+  if (!clean) throw Object.assign(new Error('text is required'), { status: 400 });
+  const file = path.join(os.tmpdir(), `my-ai-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+  try {
+    const tts = new EdgeTTS({
+      voice: TTS_VOICE,
+      lang: 'ru-RU',
+      outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
+      rate: '+0%',
+      pitch: '+0Hz',
+      volume: '+0%',
+      timeout: 15000
+    });
+    await tts.ttsPromise(clean, file);
+    return await fs.readFile(file);
+  } finally {
+    await fs.rm(file, { force: true }).catch(() => {});
+  }
+}
+
 app.get('/health', async (req, res) => {
   const local = await health();
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, local_ai: local, adapters: { local: local.ok, ollama: local.ok, paralon: Boolean(process.env.PARALON_API_KEY), video: true, shopping: true }, capabilities: ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'] });
+  res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, local_ai: local, adapters: { local: local.ok, ollama: local.ok, paralon: Boolean(process.env.PARALON_API_KEY), tts: true, video: true, shopping: true }, capabilities: ['chat','vision','image_generation','video','web_search','documents','tables','shopping','voice','code','verification'] });
+});
+
+app.post('/tts', async (req, res) => {
+  try {
+    const audio = await synthesizeSpeech(req.body?.text);
+    res.set({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'Content-Length': String(audio.length) });
+    return res.send(audio);
+  } catch (error) {
+    return res.status(error.status || 502).json({ ok: false, error: error.message });
+  }
 });
 
 app.post('/chat', async (req, res) => {
@@ -151,8 +185,8 @@ app.post('/alice', async (req, res) => {
 });
 
 app.use((req, res, next) => {
-  if (req.path === '/health' || req.path === '/chat' || req.path === '/photo' || req.path === '/alice') return next();
+  if (req.path === '/health' || req.path === '/chat' || req.path === '/photo' || req.path === '/tts' || req.path === '/alice') return next();
   proxy(req, res);
 });
 
-app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; central=${PARALON_MODEL}; local-fallback=${OLLAMA_MODEL}`));
+app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified local gateway on 127.0.0.1:${PORT}; central=${PARALON_MODEL}; local-fallback=${OLLAMA_MODEL}; tts=${TTS_VOICE}`));
