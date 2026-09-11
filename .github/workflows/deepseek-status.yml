@@ -1,0 +1,54 @@
+name: My AI Unified — DeepSeek status
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - diagnostics/deepseek-status.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check DeepSeek without exposing key
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -u
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' > /tmp/status.txt 2>&1 <<'REMOTE'
+          set +e
+          node <<'NODE'
+          const fs=require('fs'); const dotenv=require('dotenv');
+          for(const f of ['/root/my-ai-unified/.local-ai.env','/root/chto-kupit-ai.env']) if(fs.existsSync(f)) dotenv.config({path:f,override:false});
+          const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};
+          const raw=String(process.env.DEEPSEEK_API_KEY||'').trim(); const key=[...raw].map(c=>map[c]||c).join('');
+          console.log('KEY_PRESENT='+(!!key)); console.log('KEY_LENGTH='+key.length); console.log('KEY_ASCII='+/^[\x21-\x7E]+$/.test(key));
+          if(!key) process.exit(3);
+          fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:'Ответь одним словом: ГОТОВО'}],max_tokens:16,temperature:0})}).then(async r=>{const t=await r.text(); console.log('HTTP='+r.status); try{const d=JSON.parse(t); console.log('MESSAGE='+String(d?.error?.message||d?.choices?.[0]?.message?.content||'NO_MESSAGE').replace(/[\r\n]+/g,' ').slice(0,500));}catch{console.log('BODY='+t.replace(/[\r\n]+/g,' ').slice(0,500));} }).catch(e=>{console.log('FETCH_ERROR='+String(e).slice(0,500)); process.exitCode=4});
+          setTimeout(()=>{},1500)
+          NODE
+          echo 'LOCAL_CHAT:'
+          curl -sS --max-time 35 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}' 2>&1 | head -c 1000
+          echo
+          REMOTE
+          cat /tmp/status.txt
+          printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > diagnostics/deepseek-status.txt
+          cat /tmp/status.txt | sed -E 's/[[:space:]]+$//' >> diagnostics/deepseek-status.txt
+      - name: Publish status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics/deepseek-status.txt
+          git commit -m "Record sanitized DeepSeek status" || exit 0
+          git push
