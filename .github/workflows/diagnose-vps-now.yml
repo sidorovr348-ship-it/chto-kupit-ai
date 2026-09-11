@@ -19,14 +19,24 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set +e
           echo '=== STATUS ==='
           systemctl status my-ai-unified --no-pager -l
           echo '=== PORT 3020 ==='
           ss -lntp | grep ':3020' || true
+          echo '=== RESOURCES ==='
+          df -h / || true
+          free -h || true
+          echo '=== OLLAMA MODELS ==='
+          ollama list || true
+          echo '=== ENV PRESENCE ==='
+          awk -F= '/^[A-Z][A-Z0-9_]*=/{print $1}' /root/chto-kupit-ai.env 2>/dev/null | sort -u | grep -E '^(OPENROUTER|PARALON|OLLAMA|TTS|APP_)' || true
           echo '=== HEALTH ==='
           curl -i --max-time 8 http://127.0.0.1:3020/health || true
+          echo '=== CHAT ==='
+          curl -sS --max-time 70 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' || true
+          echo
           echo '=== JOURNAL ==='
           journalctl -u my-ai-unified -n 80 --no-pager -o cat
           echo '=== FILE ==='
