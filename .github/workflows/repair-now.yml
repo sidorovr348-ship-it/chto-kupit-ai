@@ -1,7 +1,6 @@
 name: My AI Unified — production repair
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 concurrency:
   group: my-ai-unified-production-repair
   cancel-in-progress: true
@@ -47,7 +46,6 @@ jobs:
           assert j.get('ok') and j.get('result'), j
           print('LOCAL_CHAT_OK',j.get('result'))
           PY
-
           echo '=== STOP ANY SYSTEMD QUICK-TUNNEL UNITS ==='
           while read -r unit; do
             [ -n "$unit" ] || continue
@@ -59,19 +57,16 @@ jobs:
                 ;;
             esac
           done < <(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -i cloudflared || true)
-
           echo '=== KILL ALL STRAY QUICK TUNNELS ==='
           for n in 1 2 3; do
             pgrep -af 'cloudflared.*--url' || true
             pkill -9 -f 'cloudflared.*--url' || true
             sleep 1
           done
-
           echo '=== START ONLY NAMED TUNNEL ==='
           systemctl restart cloudflared
           sleep 6
           systemctl is-active --quiet cloudflared
-
           echo '=== VERIFY ONLY NAMED TUNNEL REMAINS ==='
           stray=$(pgrep -af 'cloudflared.*--url' || true)
           if [ -n "$stray" ]; then
@@ -80,7 +75,6 @@ jobs:
             exit 1
           fi
           ps aux | grep '[c]loudflared' || true
-
           echo '=== PUBLIC HEALTH ==='
           ok=0
           for i in $(seq 1 30); do
@@ -94,7 +88,6 @@ jobs:
           assert j.get('ok') and j.get('dispatcher'), j
           print('PUBLIC_HEALTH_OK')
           PY
-
           echo '=== PUBLIC CHAT ==='
           curl -fsS --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
           python3 - <<'PY'
@@ -103,7 +96,6 @@ jobs:
           assert j.get('ok') and j.get('result'), j
           print('PUBLIC_CHAT_OK',j.get('result'))
           PY
-
           echo '=== PUBLIC ALICE ==='
           curl -fsS --retry 10 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production-check"}}' >/tmp/pa.json
           python3 - <<'PY'
