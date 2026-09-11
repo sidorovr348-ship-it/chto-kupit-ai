@@ -29,10 +29,13 @@ jobs:
           workdir=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           test -n "$workdir"
           scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
           scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
           scp -q -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes src/dispatcher.js src/capabilities.json "$VPS_USER@$VPS_HOST:$workdir/src/"
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
           set -euo pipefail
+          cd "$workdir"
+          npm install --omit=dev --no-audit --no-fund
           node --check "$workdir/local-gateway.js"
           node --check "$workdir/src/local-ai.js"
           node --check "$workdir/src/dispatcher.js"
@@ -54,12 +57,15 @@ jobs:
           fi
           systemctl is-active --quiet ollama
           curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3
+          file /tmp/tts.mp3 | grep -Eqi 'audio|MPEG|MP3' || { echo 'TTS output is not audio'; exit 1; }
           python3 - <<'PY'
           import json
           h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
-          assert h.get('ok') and h.get('dispatcher'), h
+          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts'), h
           assert j.get('ok') and j.get('result'), j
-          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'))
+          print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model')); print('LOCAL_TTS_OK')
           PY
           REMOTE
       - name: Verify Alice locally
