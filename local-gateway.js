@@ -65,6 +65,41 @@ async function callParalon(messages) {
   } finally { clearTimeout(timer); }
 }
 
+function normalizeVisionImage(image) {
+  const value = String(image || '').trim();
+  if (!value) return '';
+  if (/^(data:image\/(png|jpe?g|webp|gif);base64,|https?:\/\/)/i.test(value)) return value;
+  return `data:image/jpeg;base64,${value.replace(/^data:/i, '')}`;
+}
+
+async function callParalonVision(prompt, images) {
+  if (!process.env.PARALON_API_KEY) throw new Error('PARALON_API_KEY is not configured');
+  const encoded = (Array.isArray(images) ? images : []).map(normalizeVisionImage).filter(Boolean).slice(0, 2);
+  if (!encoded.length) throw Object.assign(new Error('image is required'), { status: 400 });
+  const content = [
+    { type: 'text', text: String(prompt || 'Проанализируй изображение подробно. Определи, что на нём изображено, прочитай видимый текст и укажи важные детали.') },
+    ...encoded.map(url => ({ type: 'image_url', image_url: { url } }))
+  ];
+  const safe = [{ role: 'system', content: 'Ты — визуальный модуль My AI Unified. Отвечай по-русски. Внимательно анализируй изображения, не выдумывай то, чего не видно. Если это товар, по возможности назови производителя, модель, тип и видимые характеристики.' }, { role: 'user', content }];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(`${PARALON_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.PARALON_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: PARALON_MODEL, messages: safe }),
+      signal: controller.signal
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch {}
+    if (!response.ok) throw new Error(`Paralon vision HTTP ${response.status}`);
+    const result = data?.choices?.[0]?.message?.content;
+    if (!result) throw new Error('Paralon vision returned empty response');
+    return String(result).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  } finally { clearTimeout(timer); }
+}
+
 async function callFastRemote(prompt) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
@@ -140,6 +175,8 @@ app.post('/chat', async (req, res) => {
     const answer = await answerForChat(chatMessages, userPrompt, route);
     if (answer) return res.json({ ok: true, route, ...answer });
     if (route === 'vision' && req.body?.image) {
+      try { return res.json({ ok: true, route, result: await callParalonVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: PARALON_MODEL, local: false }); }
+      catch (e) { console.warn('Paralon vision unavailable:', e.message); }
       try { return res.json({ ok: true, route, result: await callVision(userPrompt || 'Проанализируй изображение.', [req.body.image]), model: OLLAMA_MODEL, local: true }); }
       catch (e) { console.warn('Local vision unavailable:', e.message); }
     }
@@ -150,6 +187,8 @@ app.post('/chat', async (req, res) => {
 app.post('/photo', async (req, res) => {
   try {
     const images = Array.isArray(req.body?.images) ? req.body.images : (req.body?.image ? [req.body.image] : []);
+    try { return res.json({ ok: true, route: 'vision', result: await callParalonVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: PARALON_MODEL, local: false }); }
+    catch (e) { console.warn('Paralon photo vision unavailable:', e.message); }
     try { return res.json({ ok: true, route: 'vision', result: await callVision(req.body?.prompt || 'Опиши изображение подробно.', images), model: OLLAMA_MODEL, local: true }); }
     catch (e) { console.warn('Local photo vision unavailable:', e.message); }
     return proxy(req, res, 60000);
