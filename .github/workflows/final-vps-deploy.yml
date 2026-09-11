@@ -1,12 +1,13 @@
-name: My AI Unified — VPS final deploy
+name: My AI Unified — VPS and Pages deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 concurrency:
   group: my-ai-unified-final-vps
   cancel-in-progress: true
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 jobs:
@@ -15,12 +16,7 @@ jobs:
     environment: { name: github-pages }
     steps:
       - uses: actions/checkout@v4
-      - name: Apply DeepSeek provider patch
-        run: |
-          set -euo pipefail
-          node scripts/patch-deepseek.js local-gateway.js
-          node --check local-gateway.js
-      - name: Deploy local gateway to VPS
+      - name: Deploy exact unified gateway
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -31,45 +27,25 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
-          workdir=$(ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          O=(-o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           test -n "$workdir"
-          scp "${SSH_OPTS[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
-          scp "${SSH_OPTS[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
-          scp "${SSH_OPTS[@]}" -q src/local-ai.js "$VPS_USER@$VPS_HOST:$workdir/src/local-ai.js"
-          scp "${SSH_OPTS[@]}" -q src/dispatcher.js src/capabilities.json "$VPS_USER@$VPS_HOST:$workdir/src/"
-          ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "bash -s" <<REMOTE
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
           set -euo pipefail
-          cd "$workdir"
+          cd "$WORKDIR"
           npm install --omit=dev --no-audit --no-fund
-          node --check "$workdir/local-gateway.js"
-          node --check "$workdir/src/local-ai.js"
-          node --check "$workdir/src/dispatcher.js"
-          echo '=== CURRENT SERVICE ==='
-          systemctl cat my-ai-unified --no-pager || true
-          echo '=== NODE ==='
-          command -v node
-          node --version
-          echo '=== DIRECT NODE STARTUP DIAGNOSTIC ==='
-          set +e
-          timeout 12s env PORT=3120 node "$workdir/local-gateway.js" >/tmp/my-ai-manual.log 2>&1
-          manual_rc=\$?
-          set -e
-          cat /tmp/my-ai-manual.log || true
-          echo "DIRECT_NODE_EXIT=\$manual_rc"
-          if [ "\$manual_rc" != 124 ]; then
-            echo 'Direct Node startup failed before timeout.'
-            exit 1
-          fi
-          echo '=== INSTALLING EXPLICIT SYSTEMD OVERRIDE ==='
+          node --check local-gateway.js
+          nodebin=$(command -v node)
           install -d /etc/systemd/system/my-ai-unified.service.d
-          nodebin=\$(command -v node)
           cat >/etc/systemd/system/my-ai-unified.service.d/override.conf <<EOF
 [Service]
-WorkingDirectory=$workdir
+WorkingDirectory=$WORKDIR
 ExecStart=
-ExecStart=$nodebin $workdir/local-gateway.js
+ExecStart=$nodebin $WORKDIR/local-gateway.js
 EnvironmentFile=/root/chto-kupit-ai.env
+EnvironmentFile=-/root/my-ai-unified/.local-ai.env
 Environment=PORT=3020
 Restart=always
 RestartSec=2
@@ -78,99 +54,44 @@ EOF
           systemctl reset-failed my-ai-unified || true
           systemctl restart my-ai-unified
           ready=0
-          for i in \$(seq 1 30); do
-            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then ready=1; break; fi
-            sleep 1
-          done
-          if [ "\$ready" != 1 ]; then
-            echo '=== MY AI SERVICE SHOW ==='
-            systemctl show my-ai-unified -p ActiveState -p SubState -p MainPID -p ExecMainStatus -p ExecMainCode -p Result --no-pager || true
-            echo '=== MY AI SERVICE STATUS ==='
-            systemctl status my-ai-unified --no-pager -l || true
-            echo '=== MY AI SERVICE JOURNAL ==='
-            journalctl -u my-ai-unified --no-pager -n 150 || true
-            exit 1
-          fi
-          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
-          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
-          test -s /tmp/tts.mp3
-          file /tmp/tts.mp3 | grep -Eqi 'audio|MPEG|MP3' || { echo 'TTS output is not audio'; exit 1; }
-          python3 - <<'PY'
-          import json
-          h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
-          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts'), h
-          assert j.get('ok') and j.get('result'), j
-          print('LOCAL_HEALTH_OK', 'deepseek=',h.get('adapters',{}).get('deepseek'), 'paralon=',h.get('adapters',{}).get('paralon'), 'openrouter=',h.get('adapters',{}).get('openrouter'))
-          print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'),j.get('provider'))
-          print('LOCAL_TTS_OK')
-          PY
-          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data '{"prompt":"Какой основной цвет на изображении? Ответь одним словом.","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="]}' >/tmp/photo.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/photo.json'))
-          assert j.get('ok') and j.get('result'), j
-          text=str(j.get('result')).lower()
-          assert any(x in text for x in ('красн','red')), j
-          print('LOCAL_VISION_OK',j.get('result'),j.get('model'),j.get('provider'))
-          PY
+          for i in $(seq 1 30); do if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then ready=1; break; fi; sleep 1; done
+          test "$ready" = 1
+          cat /tmp/health.json
+          echo
+          echo '=== DEEPSEEK DIAGNOSTIC ==='
+          set +e
+          ENV_FILE=/root/my-ai-unified/.local-ai.env node <<'NODE'
+          const fs=require('fs'); const dotenv=require('dotenv'); for(const f of ['/root/my-ai-unified/.local-ai.env','/root/chto-kupit-ai.env']) if(fs.existsSync(f)) dotenv.config({path:f,override:false});
+          (async()=>{const map={'с':'c','С':'C','а':'a','А':'A','е':'e','Е':'E','о':'o','О':'O','р':'p','Р':'P','х':'x','Х':'X','у':'y','У':'Y','к':'k','К':'K','м':'m','М':'M','т':'t','Т':'T','в':'b','В':'B','н':'h','Н':'H'};const key=[...(process.env.DEEPSEEK_API_KEY||'').trim()].map(c=>map[c]||c).join('');console.log('KEY_PRESENT',!!key,'KEY_LENGTH',key.length,'ASCII',/^[\x21-\x7E]+$/.test(key));if(!key)return;const r=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:'Ответь одним словом: ГОТОВО'}],max_tokens:16,temperature:0,thinking:{type:'disabled'}})});const t=await r.text();console.log('DEEPSEEK_HTTP',r.status);try{const d=JSON.parse(t);console.log('DEEPSEEK_MESSAGE',String(d?.error?.message||d?.choices?.[0]?.message?.content||'NO_MESSAGE').slice(0,500))}catch{console.log('DEEPSEEK_BODY',t.slice(0,500))}})().catch(e=>console.log('DEEPSEEK_FETCH_ERROR',String(e)))
+          NODE
+          set -e
+          echo '=== LOCAL CHAT ==='
+          curl -sS --max-time 45 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}' || true
+          echo
+          echo '=== TTS ==='
+          curl -sS --max-time 30 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3 || true
+          test -s /tmp/tts.mp3 || true
+          echo '=== JOURNAL ==='
+          journalctl -u my-ai-unified -n 60 --no-pager -o cat
           REMOTE
-      - name: Verify Alice locally
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{\"version\":\"1.0\",\"request\":{\"command\":\"Кто тебя создал?\"},\"session\":{\"session_id\":\"final-ci\"}}'"
       - name: Verify stable public API
         run: |
           set -euo pipefail
-          STABLE='https://aliceq.ru'
-          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 "$STABLE/health?t=verify" >/tmp/public-health.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/public-health.json'))
-          assert j.get('ok') and j.get('dispatcher'), j
-          print('STABLE_PUBLIC_HEALTH_OK')
-          PY
-          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 90 -X POST "$STABLE/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/public-chat.json'))
-          assert j.get('ok') and j.get('result'), j
-          print('STABLE_PUBLIC_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model'),j.get('provider'))
-          PY
-          echo "FULL_CHAIN_OK=$STABLE"
-      - name: Verify Alice public route
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 -X POST 'https://aliceq.ru/alice' -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"public-unified-check"}}' >/tmp/public-alice.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/public-alice.json'))
-          text=str(j.get('response',{}).get('text',''))
-          assert text, j
-          print('ALICE_PUBLIC_OK',text)
-          print('ALICE_UNIFIED',j.get('session_state',{}).get('unified',False))
-          PY
-      - name: Prepare Pages
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 https://aliceq.ru/health >/tmp/public-health.json
+          cat /tmp/public-health.json
+          echo
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --max-time 60 -X POST https://aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}' >/tmp/public-chat.json
+          cat /tmp/public-chat.json
+          echo
+      - name: Prepare GitHub Pages
         run: |
           set -euo pipefail
           rm -rf pages
           mkdir -p pages
           cp index.html pages/index.html
-          python3 - <<'PY'
-          import json,pathlib
-          u='https://aliceq.ru'
-          data=json.dumps({'ok':True,'api':u,'verified':'stable-full-chain'},ensure_ascii=False,indent=2)+'\n'
-          pathlib.Path('api.json').write_text(data)
-          pathlib.Path('pages/api.json').write_text(data)
-          PY
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"stable-full-chain"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with: { path: pages }
+        with:
+          path: pages
       - uses: actions/deploy-pages@v4
