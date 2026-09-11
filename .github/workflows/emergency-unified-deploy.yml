@@ -1,0 +1,50 @@
+name: My AI Unified — deterministic deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy and verify
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          APP_DIR="$(systemctl show -p WorkingDirectory --value my-ai-unified)"
+          [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ] || exit 1
+          cd "$APP_DIR"
+          cp -f local-gateway.js "local-gateway.js.backup-emergency-$(date +%Y%m%d-%H%M%S)" || true
+          curl -fsSL --max-time 20 'https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main/local-gateway.js?cachebust='"$(date +%s%N)" -o /tmp/local-gateway.js
+          node --check /tmp/local-gateway.js
+          install -m 644 /tmp/local-gateway.js local-gateway.js
+          systemctl restart my-ai-unified
+          sleep 4
+          systemctl is-active my-ai-unified
+          echo 'HEALTH'
+          curl -fsS --max-time 10 http://127.0.0.1:3020/health
+          echo
+          echo 'CHAT'
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo
+          echo 'PUBLIC'
+          curl -fsS --max-time 20 https://aliceq.ru/health
+          echo
+          curl -fsS --max-time 40 -X POST https://aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo
+          echo 'ALICE'
+          curl -fsS --max-time 40 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"emergency"}}'
+          echo
+          REMOTE
