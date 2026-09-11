@@ -28,48 +28,45 @@ Controller: port 3010.
 Alice service: /root/alice-ai, systemd alice-ai.service, listener 127.0.0.1:3011.
 Ollama: 127.0.0.1:11434, local reserve model qwen3:0.6b.
 
-## 4. CURRENT DEPLOYMENT TRUTH — 2026-09-11
-Latest clean final deploy before the current vision change: run #76, ID 34566551660, commit 400f7bfca71819aaf6b92d7a951af63f322ad643. It succeeded.
-Vision implementation was committed after that. The canonical final deploy for the new vision code has NOT yet completed successfully.
-The latest failed repair attempt hit an SSH connection reset from GitHub Actions to the VPS on port 22 before remote diagnostics could run. Do not treat that failure as a vision failure.
-The canonical final deploy workflow now contains local TTS and Vision smoke tests, but those tests only count as verified when the corresponding workflow run actually passes.
+## 4. GLOBAL CHECKPOINT — STABILITY / PROVIDER FAILOVER DECISION — 2026-09-11
+IMPORTANT: this checkpoint must not be forgotten.
+The project is being stabilized around a provider-failover architecture rather than depending on one external AI provider.
+The obsolete anonymous Pollinations fallback is removed from the gateway because it returned invalid HTML instead of AI answers in a real failure case.
+A guarded OpenRouter fallback using the OpenRouter Free Models Router (`openrouter/free`) has been implemented in `local-gateway.js`. It is used only when an OpenRouter key already exists on the VPS; no new paid AI foundation is to be created without explicit user approval.
+OpenRouter responses are validated so empty/HTML/non-JSON AI results do not get passed to the user as successful answers.
+Process-level handlers for uncaught exceptions and unhandled promise rejections were added to improve fault visibility and prevent silent process loss.
+Alice failure handling was hardened so provider failure returns a clean Russian response instead of crashing the central gateway.
+CRITICAL HONESTY RULE: OpenRouter is a fallback candidate, not yet proven production-ready. The current deployment must pass real VPS smoke tests before this checkpoint is considered operationally verified.
+Do not forget the architectural requirement: stable app = primary provider + independent fallback(s) + local reserve + clean failure behavior, with no invalid provider output reaching the user.
 
-## 5. AI ROUTING
-Current proven main chat path historically used:
+## 5. CURRENT DEPLOYMENT TRUTH — 2026-09-11
+Latest clean final deploy before the current vision/provider changes: run #76, ID 34566551660, commit 400f7bfca71819aaf6b92d7a951af63f322ad643. It succeeded.
+Vision implementation was committed after that. The canonical final deploy for the new vision/provider code has NOT yet been confirmed successful at the time of this checkpoint.
+The latest active post-change deployment is run ID 34568131855, commit 0cbe3c1ea9c0fde45697fad81b43fbc7c08d70ae. It must be rechecked before claiming success.
+A previous repair attempt hit an SSH connection reset from GitHub Actions to the VPS before remote diagnostics could run. Do not treat that failure alone as a Vision or provider-code failure.
+The canonical final deploy workflow contains local TTS and Vision smoke tests, but those tests only count as verified when the corresponding workflow run actually passes.
+
+## 6. AI ROUTING
+Historical proven main chat path:
 My AI Unified -> 127.0.0.1:3020 -> ParalonCloud -> qwen3.8-27b.
+Current gateway fallback order after the 2026-09-11 stability change: OpenRouter (only when configured) -> ParalonCloud -> local Ollama reserve, with guarded failure handling.
 Local qwen3:0.6b is a reserve/fallback, not the preferred main intelligence.
 HF is NOT the main backend and must not be silently restored as the foundation.
 Cloud.ru is NOT the main backend and must not replace the Dispatcher.
 No new paid AI foundation without explicit user approval.
 
-## 6. DISPATCHER CAPABILITIES
-Current central dispatcher routes for:
-- chat
-- vision
-- image_generation
-- video
-- web_search
-- documents
-- tables
-- shopping
-- voice
-- code
-- verification
-Known routing code is in src/dispatcher.js.
-
 ## 7. TTS / VOICE — CURRENT STATUS
 The frontend has been changed from browser speechSynthesis (механическое системное озвучивание) to backend /tts playback.
 Backend local-gateway.js contains a TTS endpoint using node-edge-tts and Russian neural voice ru-RU-DmitryNeural.
 package.json includes node-edge-tts.
-The canonical final deploy workflow now contains a deterministic /tts smoke test: HTTP request, non-empty MP3 check and audio/MPEG/MP3 type check.
+The canonical final deploy workflow contains a deterministic /tts smoke test: HTTP request, non-empty MP3 check and audio/MPEG/MP3 type check.
 HONEST STATUS: the code and smoke test exist, but the new smoke test is not yet verified by a successful post-change final deploy. iPhone Safari audible playback is also not yet separately verified.
 
 ## 8. VISION / PHOTO — CURRENT STATUS
 The previous local qwen3:0.6b vision path remains unavailable (501) because that local model is text-only.
 A new ParalonCloud qwen3.8-27b multimodal path has been implemented in local-gateway.js for /photo and /chat vision requests, using OpenAI-compatible image_url content. It limits one request to two images because that is the supported request size.
-The canonical final deploy workflow now contains a deterministic Vision smoke test using a 1x1 red PNG and expects «красный»/red.
-HONEST STATUS: the new Vision implementation is in Git, but its real VPS execution is NOT yet verified because the post-change deployment was interrupted by the SSH connection-reset failure. Do not call Vision production-ready until the smoke test passes.
-Future required feature: the product wants up to four photos, so after core Vision is verified the gateway must batch/synthesize four images rather than silently dropping images 3-4.
+The canonical final deploy workflow contains a deterministic Vision smoke test using a 1x1 red PNG and expects «красный»/red.
+HONEST STATUS: the new Vision implementation is in Git, but its real VPS execution is NOT yet verified until the current post-change deployment passes. Future required feature: the product wants up to four photos, so after core Vision is verified the gateway must batch/synthesize four images rather than silently dropping images 3-4.
 
 ## 9. FRONTEND / IPHONE
 Frontend is a single-page mobile-first application.
@@ -82,7 +79,6 @@ Final required product capabilities include rear camera, camera on/off, «Что
 ## 10. SHOPPING MODULE — «ЧТОКУПИТЬ AI»
 Shopping is a module inside My AI Unified.
 Required: Russian stores first, current prices, real availability, links, store cards/logos and clear price indication.
-No Puter auth/redirect.
 Known historical bugs that still require regression testing:
 - Wildberries 595 ₽ was parsed as 1 ₽ in one case.
 - Markdown links were produced incorrectly in one path.
@@ -96,11 +92,11 @@ Video support exists in routing but a prior HTTP 400 limitation is known; it nee
 ## 12. ALICE / «МОЙ AI»
 Published Yandex Alice skill «Мой AI» must not be broken or replaced.
 Named Cloudflare tunnel: alice-ai
-Tunnel ID: 536ea937-55d5-4b46-ad52-2fe55750bd9f
+Tunnel ID: 536ea937-55d5-4b16-ad52-2fe55750bd9f
 Domain: aliceq.ru
 DNS root CNAME points to the named tunnel.
 Do not rotate its token or reinstall cloudflared unnecessarily.
-Alice chain: Alice -> /alice adapter -> Alice service :3011 -> ParalonCloud -> qwen3.8-27b -> Alice, with fast fallback where required by webhook timing.
+Alice chain: Alice -> /alice adapter -> Alice service :3011 -> provider/fallback gateway -> Alice, with fast fallback where required by webhook timing.
 Current deployment workflow contains Alice local/public checks, but live central Dispatcher routing should still be treated as a separate capability to prove, not assumed from fallback responses.
 
 ## 13. PENDING QUESTIONS TO RETURN TO AFTER CORE STABILITY
@@ -143,14 +139,15 @@ Archive/checkpoint marker every 5 assistant messages:
 🟢 ready; 🟡 process; 🔴 problem; 🔵 next step; 🟣 important decision; ⚪ context.
 
 ## 18. CURRENT PRIORITY QUEUE
-1. Finish the post-vision final deployment and verify the Vision + TTS smoke tests.
+1. Recheck and finish post-vision/provider final deployment run 34568131855 and verify Vision + TTS smoke tests.
 2. If SSH reset recurs, harden the deploy connection/retry path rather than changing unrelated project architecture.
-3. After core stability, verify shopping parsing, relevance and Russian-store-first results.
-4. Fix video HTTP 400 and implement required frame processing.
-5. Prove Alice -> Dispatcher live routing while preserving fast fallback.
-6. Continue mobile/iPhone verification.
-7. Only after core chain is stable: return to the saved ChatGPT/OpenAI + Gemini integration questions.
-8. Only after core chain is stable: package for App Store / Google Play.
+3. Verify whether OPENROUTER_API_KEY is actually configured on the VPS without exposing its value; if absent, do not pretend the OpenRouter fallback is active.
+4. After core stability, verify shopping parsing, relevance and Russian-store-first results.
+5. Fix video HTTP 400 and implement required frame processing.
+6. Prove Alice -> Dispatcher live routing while preserving fast fallback.
+7. Continue mobile/iPhone verification.
+8. Only after core chain is stable: return to the saved ChatGPT/OpenAI + Gemini integration questions.
+9. Only after core chain is stable: package for App Store / Google Play.
 
 ## 19. BACKUP POLICY
 Every significant working milestone must be represented by:
@@ -158,6 +155,7 @@ A) a Git commit in main;
 B) this PROJECT_STATE.md updated with factual status;
 C) no secrets in either.
 Never delete old working commits or backups unless explicitly requested.
+This stability/provider-failover checkpoint is a significant milestone and is now explicitly recorded here.
 
 ## 20. HONEST PROJECT STATUS
 🟢 Code repository and Git history are preserved.
@@ -165,7 +163,8 @@ Never delete old working commits or backups unless explicitly requested.
 🟢 Main backend/public checks from that deployment succeeded.
 🟢 Alice service/path checks from that deployment succeeded.
 🟢 Pages deployment succeeded.
-🟡 Post-vision final deployment pending verification because GitHub Actions hit an SSH connection reset.
+🟡 Post-vision/provider deployment 34568131855 requires final verification.
 🟡 Neural TTS code and smoke test are in the repository; post-change verification remains.
 🟡 ParalonCloud Vision code and smoke test are in the repository; post-change verification remains.
+🟡 OpenRouter fallback code is committed but its VPS key/configuration and live success are not yet verified.
 🟡 Shopping and video still have known issues requiring regression/fixes.
