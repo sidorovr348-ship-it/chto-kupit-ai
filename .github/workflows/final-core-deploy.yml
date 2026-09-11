@@ -27,10 +27,11 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "SHA=$SHA bash -s" <<'REMOTE'
           set -euo pipefail
-          APP_DIR="$(find / -maxdepth 6 -type d -name 'chto-kupit-ai-api' -print -quit 2>/dev/null || true)"
-          ENV_FILE="$(find / -maxdepth 5 -type f -name 'chto-kupit-ai.env' -print -quit 2>/dev/null || true)"
-          if [ -z "$APP_DIR" ]; then echo 'APP_DIR_NOT_FOUND'; find /root /home /opt -maxdepth 4 -type d -name '*chto*' -print 2>/dev/null | head -30; exit 1; fi
-          if [ -z "$ENV_FILE" ]; then echo 'ENV_FILE_NOT_FOUND'; find /root /home /opt -maxdepth 4 -type f -name '*chto*env*' -print 2>/dev/null | head -30; exit 1; fi
+          APP_DIR="$(systemctl show -p WorkingDirectory --value my-ai-unified)"
+          [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ] || { echo "BAD_WORKING_DIRECTORY=$APP_DIR"; systemctl cat my-ai-unified; exit 1; }
+          ENV_FILE="$(systemctl cat my-ai-unified | sed -n 's/.*EnvironmentFile=-\([^ ]*\).*/\1/p' | head -1)"
+          [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ] || ENV_FILE="/root/chto-kupit-ai.env"
+          [ -f "$ENV_FILE" ] || { echo "ENV_FILE_NOT_FOUND"; exit 1; }
           echo "APP_DIR=$APP_DIR"
           echo "ENV_FILE=$ENV_FILE"
           cd "$APP_DIR"
@@ -52,8 +53,7 @@ jobs:
           const key=[...(process.env.DEEPSEEK_API_KEY||'').trim()].map(c=>map[c]||c).join('');
           if(!key) throw new Error('DEEPSEEK_API_KEY missing');
           const r=await fetch('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:'deepseek-v4-flash',messages:[{role:'user',content:'Ответь одним словом: ГОТОВО'}],max_tokens:16,temperature:0})});
-          const t=await r.text();
-          console.log('HTTP',r.status);
+          const t=await r.text(); console.log('HTTP',r.status);
           try{const d=JSON.parse(t);console.log('RESULT',String(d?.choices?.[0]?.message?.content||d?.error?.message||'NO_RESULT').slice(0,200));}catch{console.log('BODY',t.slice(0,200));}
           if(!r.ok) process.exit(2);
           NODE
