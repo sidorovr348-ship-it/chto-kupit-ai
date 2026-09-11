@@ -60,12 +60,22 @@ jobs:
           curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3
           file /tmp/tts.mp3 | grep -Eqi 'audio|MPEG|MP3' || { echo 'TTS output is not audio'; exit 1; }
+          RED='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
           python3 - <<'PY'
-          import json
+          import json,os
           h=json.load(open('/tmp/health.json')); j=json.load(open('/tmp/chat.json'))
-          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts'), h
+          assert h.get('ok') and h.get('dispatcher') and h.get('adapters',{}).get('tts') and h.get('adapters',{}).get('paralon'), h
           assert j.get('ok') and j.get('result'), j
           print('LOCAL_HEALTH_OK'); print('LOCAL_CHAT_OK',j.get('result'),j.get('fallback',False),j.get('model')); print('LOCAL_TTS_OK')
+          PY
+          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"prompt\":\"Какой основной цвет на изображении? Ответь одним словом.\",\"images\":[\"data:image/png;base64,$RED\"]}" >/tmp/photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.json'))
+          assert j.get('ok') and j.get('result'), j
+          text=str(j.get('result')).lower()
+          assert any(x in text for x in ('красн','red')), j
+          print('LOCAL_VISION_OK',j.get('result'),j.get('model'))
           PY
           REMOTE
       - name: Verify Alice locally
