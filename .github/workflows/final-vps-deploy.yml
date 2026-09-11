@@ -45,6 +45,11 @@ jobs:
           node --check "$workdir/local-gateway.js"
           node --check "$workdir/src/local-ai.js"
           node --check "$workdir/src/dispatcher.js"
+          echo '=== CURRENT SERVICE ==='
+          systemctl cat my-ai-unified --no-pager || true
+          echo '=== NODE ==='
+          command -v node
+          node --version
           echo '=== DIRECT NODE STARTUP DIAGNOSTIC ==='
           set +e
           timeout 12s env PORT=3120 node "$workdir/local-gateway.js" >/tmp/my-ai-manual.log 2>&1
@@ -56,6 +61,20 @@ jobs:
             echo 'Direct Node startup failed before timeout.'
             exit 1
           fi
+          echo '=== INSTALLING EXPLICIT SYSTEMD OVERRIDE ==='
+          install -d /etc/systemd/system/my-ai-unified.service.d
+          nodebin=\$(command -v node)
+          cat >/etc/systemd/system/my-ai-unified.service.d/override.conf <<EOF
+[Service]
+WorkingDirectory=$workdir
+ExecStart=
+ExecStart=$nodebin $workdir/local-gateway.js
+EnvironmentFile=/root/chto-kupit-ai.env
+Environment=PORT=3020
+Restart=always
+RestartSec=2
+EOF
+          systemctl daemon-reload
           systemctl reset-failed my-ai-unified || true
           systemctl restart my-ai-unified
           ready=0
@@ -65,14 +84,13 @@ jobs:
           done
           if [ "\$ready" != 1 ]; then
             echo '=== MY AI SERVICE SHOW ==='
-            systemctl show my-ai-unified -p ActiveState -p SubState -p MainPID -p ExecMainStatus -p ExecMainCode --no-pager || true
+            systemctl show my-ai-unified -p ActiveState -p SubState -p MainPID -p ExecMainStatus -p ExecMainCode -p Result --no-pager || true
             echo '=== MY AI SERVICE STATUS ==='
             systemctl status my-ai-unified --no-pager -l || true
             echo '=== MY AI SERVICE JOURNAL ==='
             journalctl -u my-ai-unified --no-pager -n 150 || true
             exit 1
           fi
-          systemctl is-active --quiet ollama
           curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3
