@@ -1,7 +1,7 @@
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 // VPS currently has qwen3:0.6b installed. Keep this default aligned with the verified model.
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:0.6b';
-const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 20000);
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 60000);
 const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсальный AI-помощник пользователя. Отвечай по-русски, если пользователь пишет по-русски. Не называй себя ChatGPT, OpenAI, Qwen или Ollama: это внутренние технологии. Не выдумывай выполненные действия. Будь естественным, понятным и полезным. Отвечай кратко, если вопрос простой.`;
 
 async function callOllama(messages, options = {}) {
@@ -9,7 +9,7 @@ async function callOllama(messages, options = {}) {
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
-    const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, think: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 180) } };
+    const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, think: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 120) } };
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
     const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!response.ok) throw Object.assign(new Error(`Local AI error (${response.status})`), { status: 502, details: data });
