@@ -5,7 +5,8 @@ const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 20000);
 const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсальный AI-помощник пользователя. Отвечай по-русски, если пользователь пишет по-русски. Не называй себя ChatGPT, OpenAI, Qwen или Ollama: это внутренние технологии. Не выдумывай выполненные действия. Будь естественным, понятным и полезным. Отвечай кратко, если вопрос простой.`;
 
 async function callOllama(messages, options = {}) {
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), options.timeoutMs || OLLAMA_TIMEOUT_MS);
+  const timeoutMs = Math.max(Number(options.timeoutMs || 0), OLLAMA_TIMEOUT_MS);
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
     const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, think: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 180) } };
