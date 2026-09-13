@@ -1,10 +1,112 @@
-name: My AI Unified — legacy live repair
+name: My AI Unified — safe canonical deploy
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+concurrency:
+  group: my-ai-unified-safe-canonical-deploy
+  cancel-in-progress: true
 permissions:
   contents: read
+  pages: write
+  id-token: write
 jobs:
-  disabled:
+  live_repair:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - run: echo 'Legacy workflow disabled. Use emergency-unified-deploy.yml for production deployment.'
+      - uses: actions/checkout@v4
+      - name: Deploy and verify My AI Unified
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$WORKDIR"
+          npm install --omit=dev --no-audit --no-fund
+          node --check local-gateway.js
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
+          assert j.get('adapters',{}).get('groq'), j
+          assert j.get('adapters',{}).get('groqVision'), j
+          assert j.get('adapters',{}).get('tts'), j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_CHAT_OK',j.get('result'))
+          PY
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3
+          echo 'LOCAL_TTS_OK'
+          systemctl is-active --quiet cloudflared
+          REMOTE
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j
+          assert j.get('adapters',{}).get('groq'),j
+          assert j.get('adapters',{}).get('groqVision'),j
+          print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_CHAT_OK')
+          PY
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/public-photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-photo.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/public-tts.mp3
+          test -s /tmp/public-tts.mp3
+          echo 'PUBLIC_TTS_OK'
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}' >/tmp/alice.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/alice.json')); assert j.get('response',{}).get('text'),j
+          print('ALICE_PUBLIC_OK')
+          PY
+          echo 'FULL_CHAIN_OK'
+      - name: Publish verified Pages
+        run: |
+          set -euo pipefail
+          rm -rf pages && mkdir pages
+          cp index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"full-chain"}' > pages/api.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: pages }
+      - uses: actions/deploy-pages@v4
