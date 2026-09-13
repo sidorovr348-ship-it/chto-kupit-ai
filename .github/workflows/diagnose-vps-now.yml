@@ -7,55 +7,39 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Inspect My AI Unified
+      - name: Repair and verify My AI Unified
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          set -e
+          set -euo pipefail
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set +e
-          echo '=== STATUS ==='
+          echo '=== BEFORE ==='
           systemctl status my-ai-unified --no-pager -l
-          echo '=== PORT 3020 ==='
           ss -lntp | grep ':3020' || true
-          echo '=== RESOURCES ==='
-          nproc || true
-          lscpu | grep -E 'Model name|CPU\(s\)|Thread|Core' || true
-          df -h / || true
-          free -h || true
-          uptime || true
-          echo '=== OLLAMA VERSION ==='
-          ollama --version || true
-          echo '=== OLLAMA MODELS ==='
-          ollama list || true
-          echo '=== OLLAMA SHOW ==='
-          ollama show qwen3:0.6b | head -100 || true
-          echo '=== ENV PRESENCE ==='
-          awk -F= '/^[A-Z][A-Z0-9_]*=/{print $1}' /root/chto-kupit-ai.env 2>/dev/null | sort -u | grep -E '^(OPENROUTER|PARALON|OLLAMA|TTS|APP_)' || true
+          echo '=== RESTART ==='
+          systemctl restart my-ai-unified
+          sleep 4
+          echo '=== AFTER ==='
+          systemctl status my-ai-unified --no-pager -l
+          ss -lntp | grep ':3020' || true
           echo '=== HEALTH ==='
-          curl -i --max-time 8 http://127.0.0.1:3020/health || true
-          echo '=== DIRECT OLLAMA CHAT 180s ==='
-          time curl -sS --max-time 180 -X POST http://127.0.0.1:11434/api/chat -H 'Content-Type: application/json' --data '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Ответь одним словом: ОК"}],"stream":false,"think":false,"options":{"temperature":0,"num_predict":32}}' || true
+          curl -sS -i --max-time 10 http://127.0.0.1:3020/health || true
           echo
-          echo '=== DIRECT OLLAMA GENERATE 180s ==='
-          time curl -sS --max-time 180 -X POST http://127.0.0.1:11434/api/generate -H 'Content-Type: application/json' --data '{"model":"qwen3:0.6b","prompt":"Ответь одним словом: ОК","stream":false,"think":false,"options":{"temperature":0,"num_predict":32}}' || true
+          echo '=== CHAT ==='
+          curl -sS -i --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' || true
           echo
-          echo '=== OLLAMA PS ==='
-          ollama ps || true
-          echo '=== CHAT 90s ==='
-          curl -sS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' || true
-          echo
+          echo '=== TTS ==='
+          curl -sS -i --max-time 60 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/tts.headers -D - || true
+          ls -lh /tmp/tts.headers 2>/dev/null || true
           echo '=== JOURNAL ==='
-          journalctl -u my-ai-unified -n 120 --no-pager -o cat
-          echo '=== FILE ==='
-          wd=$(systemctl show -p WorkingDirectory --value my-ai-unified)
-          echo "$wd"
-          sed -n '1,320p' "$wd/local-gateway.js"
+          journalctl -u my-ai-unified -n 160 --no-pager -o cat
           REMOTE
