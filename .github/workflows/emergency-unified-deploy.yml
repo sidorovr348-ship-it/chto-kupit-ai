@@ -102,3 +102,4 @@ EOF
           echo
           curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}'
           echo
+# trigger unified deployment
