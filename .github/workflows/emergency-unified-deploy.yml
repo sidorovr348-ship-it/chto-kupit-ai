@@ -83,23 +83,72 @@ EOF
 
           echo '=== LOCAL HEALTH ==='
           cat /tmp/health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/health.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
+          assert j.get('adapters',{}).get('groq'), j
+          assert j.get('adapters',{}).get('groqVision'), j
+          assert j.get('adapters',{}).get('tts'), j
+          print('LOCAL_HEALTH_ASSERTIONS_OK')
+          PY
           echo
           echo '=== LOCAL CHAT ==='
-          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
-          echo
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}' >/tmp/local-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/local-chat.json')); assert j.get('ok') and j.get('result'), j
+          print('LOCAL_CHAT_OK',j.get('result'))
+          PY
+          echo '=== LOCAL PHOTO ==='
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/local-photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/local-photo.json')); assert j.get('ok') and j.get('result'), j
+          print('LOCAL_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
           echo '=== LOCAL TTS ==='
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3
+          file /tmp/tts.mp3
           ls -lh /tmp/tts.mp3
+          echo '=== JOURNAL ==='
+          journalctl -u my-ai-unified -n 60 --no-pager -o cat
           REMOTE
 
       - name: Verify public API
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health
-          echo
-          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
-          echo
-          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}'
-          echo
-# trigger unified deployment
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'), j
+          assert j.get('adapters',{}).get('groq'), j
+          assert j.get('adapters',{}).get('groqVision'), j
+          print('PUBLIC_HEALTH_ASSERTIONS_OK')
+          PY
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}' >/tmp/public-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'), j
+          print('PUBLIC_CHAT_OK')
+          PY
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/public-photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-photo.json')); assert j.get('ok') and j.get('result'), j
+          print('PUBLIC_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/public-tts.mp3
+          test -s /tmp/public-tts.mp3
+          echo 'PUBLIC_TTS_OK'
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}' >/tmp/public-alice.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-alice.json')); text=str(j.get('response',{}).get('text',''))
+          assert text, j
+          print('PUBLIC_ALICE_OK',text)
+          PY
+          echo 'FULL_CHAIN_OK'
