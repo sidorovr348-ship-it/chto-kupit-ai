@@ -5,12 +5,21 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: my-ai-unified-deterministic-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy and verify
+
+      - name: Deploy exact gateway and verify full chain
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -20,31 +29,76 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=20 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+
+          for attempt in 1 2 3 4 5; do
+            if ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'echo SSH_OK' >/tmp/ssh-ok.txt 2>/tmp/ssh-err.txt; then
+              cat /tmp/ssh-ok.txt
+              break
+            fi
+            cat /tmp/ssh-err.txt || true
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep $((attempt * 3))
+          done
+
+          WORKDIR=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$WORKDIR"
+
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$WORKDIR/local-gateway.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$WORKDIR/package.json"
+
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$WORKDIR' bash -s" <<'REMOTE'
           set -euo pipefail
-          APP_DIR="$(systemctl show -p WorkingDirectory --value my-ai-unified)"
-          [ -n "$APP_DIR" ] && [ -d "$APP_DIR" ] || exit 1
-          cd "$APP_DIR"
-          cp -f local-gateway.js "local-gateway.js.backup-emergency-$(date +%Y%m%d-%H%M%S)" || true
-          curl -fsSL --max-time 20 'https://raw.githubusercontent.com/sidorovr348-ship-it/chto-kupit-ai/main/local-gateway.js?cachebust='"$(date +%s%N)" -o /tmp/local-gateway.js
-          node --check /tmp/local-gateway.js
-          install -m 644 /tmp/local-gateway.js local-gateway.js
+          cd "$WORKDIR"
+          cp -f local-gateway.js "local-gateway.js.backup-production-$(date +%Y%m%d-%H%M%S)" || true
+          npm install --omit=dev --no-audit --no-fund
+          node --check local-gateway.js
+          NODEBIN=$(command -v node)
+          install -d /etc/systemd/system/my-ai-unified.service.d
+          cat >/etc/systemd/system/my-ai-unified.service.d/override.conf <<EOF
+[Service]
+WorkingDirectory=$WORKDIR
+ExecStart=
+ExecStart=$NODEBIN $WORKDIR/local-gateway.js
+EnvironmentFile=/root/chto-kupit-ai.env
+EnvironmentFile=-/root/my-ai-unified/.local-ai.env
+Environment=PORT=3020
+Restart=always
+RestartSec=2
+EOF
+          systemctl daemon-reload
+          systemctl reset-failed my-ai-unified || true
           systemctl restart my-ai-unified
-          sleep 4
-          systemctl is-active my-ai-unified
-          echo 'HEALTH'
-          curl -fsS --max-time 10 http://127.0.0.1:3020/health
+
+          ready=0
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+          echo '=== LOCAL HEALTH ==='
+          cat /tmp/health.json
           echo
-          echo 'CHAT'
-          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo '=== LOCAL CHAT ==='
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
           echo
-          echo 'PUBLIC'
-          curl -fsS --max-time 20 https://aliceq.ru/health
-          echo
-          curl -fsS --max-time 40 -X POST https://aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
-          echo
-          echo 'ALICE'
-          curl -fsS --max-time 40 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"emergency"}}'
-          echo
+          echo '=== LOCAL TTS ==='
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3
+          ls -lh /tmp/tts.mp3
           REMOTE
+
+      - name: Verify public API
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health
+          echo
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          echo
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}'
+          echo
