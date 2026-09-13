@@ -32,17 +32,19 @@ jobs:
           test -n "$workdir"
           scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
           scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
-          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$WORKDIR"
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
           echo '=== LOCAL BACKEND ==='
           systemctl restart my-ai-unified
+          health_ok=0
           for i in $(seq 1 30); do
-            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then health_ok=1; break; fi
             sleep 1
           done
+          test "$health_ok" = 1
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json'))
