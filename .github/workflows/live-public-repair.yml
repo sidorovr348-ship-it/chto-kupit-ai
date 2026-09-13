@@ -57,9 +57,9 @@ jobs:
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
           print('LOCAL_CHAT_OK',j.get('result'))
           PY
-          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+          PHOTO_DATA='/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD50ooor8MP9Uz/2Q=='
           set +e
-          curl -sS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/photo.json 2>/tmp/photo.err
+          curl -sS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"data:image/jpeg;base64,$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/photo.json 2>/tmp/photo.err
           PHOTO_RC=$?
           set -e
           echo "LOCAL_PHOTO_RC=$PHOTO_RC"
@@ -96,8 +96,8 @@ jobs:
           j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j
           print('PUBLIC_CHAT_OK')
           PY
-          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
-          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/public-photo.json
+          PHOTO_DATA='/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVVldZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD50ooor8MP9Uz/2Q=='
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"data:image/jpeg;base64,$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/public-photo.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-photo.json')); assert j.get('ok') and j.get('result'),j
