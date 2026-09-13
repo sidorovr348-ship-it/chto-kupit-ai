@@ -1,5 +1,5 @@
 # chto-kupit-ai
 
-My AI Unified — final VPS deployment trigger.
+My AI Unified — canonical production deployment and full-chain verification.
 
-Local AI deployment verification trigger: 2026-09-10.
+Production verification includes: health, chat, photo, TTS (голос), public API and Alice.
