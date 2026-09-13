@@ -15,7 +15,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          PHOTO_DATA: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=
+          PHOTO_DATA: iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
@@ -23,13 +23,16 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" "PHOTO_DATA='$PHOTO_DATA' bash -s" <<'REMOTE'
-          set +e
+          set -euo pipefail
           echo '=== LOCAL PHOTO ==='
-          curl -sS -i --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}"
+          curl --fail-with-body -sS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}"
           echo
           echo '=== PUBLIC PHOTO ==='
-          curl -sS -i --max-time 90 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}"
+          curl --fail-with-body -sS --max-time 90 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}"
+          echo
+          echo '=== HEALTH ==='
+          curl --fail -sS --max-time 10 http://127.0.0.1:3020/health
           echo
           echo '=== JOURNAL ==='
-          journalctl -u my-ai-unified -n 100 --no-pager -o cat
+          journalctl -u my-ai-unified -n 80 --no-pager -o cat
           REMOTE
