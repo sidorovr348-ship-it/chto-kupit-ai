@@ -1,0 +1,33 @@
+name: Verify My AI Unified features
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public photo and TTS
+        env:
+          PHOTO_DATA: iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=
+        run: |
+          set -euo pipefail
+          echo '=== PHOTO ==='
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 \
+            -X POST https://ai.aliceq.ru/photo \
+            -H 'Content-Type: application/json' \
+            --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}"
+          echo
+          echo '=== TTS ==='
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 60 \
+            -X POST https://ai.aliceq.ru/tts \
+            -H 'Content-Type: application/json' \
+            --data '{"text":"Привет. Это проверка голоса."}' \
+            -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3
+          file /tmp/tts.mp3
+          ls -lh /tmp/tts.mp3
