@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const src=fs.readFileSync('local-gateway.js','utf8');
+assert.doesNotMatch(src,/OPENAI_API_KEY\s*[:=]\s*["'][^"']+/i);
+assert.match(src,/app\.post\('\/chat'/);
+assert.match(src,/app\.post\('\/photo'/);
+assert.match(src,/app\.post\('\/shopping'/);
+assert.match(src,/app\.post\('\/document'/);
+assert.match(src,/app\.post\('\/generate-image'/);
+assert.match(src,/app\.post\('\/tts'/);
+assert.match(src,/qwen\/qwen3\.6-27b/);
+console.log('SOURCE_SMOKE_OK');
