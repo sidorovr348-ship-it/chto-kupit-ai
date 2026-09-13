@@ -7,9 +7,9 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Repair and verify My AI Unified
+      - name: Verify My AI Unified locally and publicly
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -21,25 +21,48 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
-          set +e
-          echo '=== BEFORE ==='
-          systemctl status my-ai-unified --no-pager -l
-          ss -lntp | grep ':3020' || true
-          echo '=== RESTART ==='
+          set -euo pipefail
           systemctl restart my-ai-unified
-          sleep 4
-          echo '=== AFTER ==='
-          systemctl status my-ai-unified --no-pager -l
-          ss -lntp | grep ':3020' || true
-          echo '=== HEALTH ==='
-          curl -sS -i --max-time 10 http://127.0.0.1:3020/health || true
-          echo
-          echo '=== CHAT ==='
-          curl -sS -i --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' || true
-          echo
-          echo '=== TTS ==='
-          curl -sS -i --max-time 60 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/tts.headers -D - || true
-          ls -lh /tmp/tts.headers 2>/dev/null || true
-          echo '=== JOURNAL ==='
-          journalctl -u my-ai-unified -n 160 --no-pager -o cat
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
+          assert j.get('adapters',{}).get('groq'), j
+          assert j.get('adapters',{}).get('groqVision'), j
+          assert j.get('adapters',{}).get('tts'), j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_CHAT_OK')
+          PY
           REMOTE
+          echo '=== PUBLIC HEALTH ==='
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/ph.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ph.json')); assert j.get('ok') and j.get('dispatcher'),j
+          assert j.get('adapters',{}).get('groq'),j
+          assert j.get('adapters',{}).get('groqVision'),j
+          print('PUBLIC_HEALTH_OK')
+          PY
+          echo '=== PUBLIC CHAT ==='
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: PUBLIC_OK"}' >/tmp/pc.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_CHAT_OK',j.get('result'))
+          PY
+          echo '=== PUBLIC ALICE ==='
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}' >/tmp/pa.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pa.json')); assert j.get('response',{}).get('text'),j
+          print('ALICE_PUBLIC_OK')
+          PY
