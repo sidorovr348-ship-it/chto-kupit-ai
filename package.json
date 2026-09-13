@@ -1,13 +1,13 @@
 {
   "name": "my-ai-unified",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "Universal AI dispatcher and multi-tool assistant",
   "main": "local-gateway.js",
   "scripts": {
     "start": "node local-gateway.js",
     "start:legacy": "PORT=3021 node server.js",
-    "test": "node --test"
+    "test": "node --test test-local-gateway.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
