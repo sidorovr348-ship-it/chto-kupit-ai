@@ -14,6 +14,8 @@ jobs:
   live_repair:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
       - name: Deploy and verify My AI Unified
