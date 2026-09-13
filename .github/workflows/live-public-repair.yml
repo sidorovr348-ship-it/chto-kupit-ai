@@ -57,7 +57,7 @@ jobs:
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
           print('LOCAL_CHAT_OK',j.get('result'))
           PY
-          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
           set +e
           curl -sS --max-time 90 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/photo.json 2>/tmp/photo.err
           PHOTO_RC=$?
@@ -96,7 +96,7 @@ jobs:
           j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j
           print('PUBLIC_CHAT_OK')
           PY
-          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAwMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg=='
+          PHOTO_DATA='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь на изображении.\"}" >/tmp/public-photo.json
           python3 - <<'PY'
           import json
