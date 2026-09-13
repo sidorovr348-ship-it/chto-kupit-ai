@@ -1,5 +1,7 @@
 name: My AI Unified — production repair
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 concurrency:
   group: my-ai-unified-production-repair
@@ -25,8 +27,16 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          O=(-o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
+          cd "$WORKDIR"
+          npm install --omit=dev --no-audit --no-fund
+          node --check local-gateway.js
           echo '=== LOCAL BACKEND ==='
           systemctl restart my-ai-unified
           for i in $(seq 1 30); do
@@ -37,7 +47,7 @@ jobs:
           import json
           j=json.load(open('/tmp/h.json'))
           assert j.get('ok') and j.get('dispatcher'), j
-          print('LOCAL_HEALTH_OK')
+          print('LOCAL_HEALTH_OK',j)
           PY
           curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
@@ -86,7 +96,7 @@ jobs:
           import json
           j=json.load(open('/tmp/ph.json'))
           assert j.get('ok') and j.get('dispatcher'), j
-          print('PUBLIC_HEALTH_OK')
+          print('PUBLIC_HEALTH_OK',j)
           PY
           echo '=== PUBLIC CHAT ==='
           curl -fsS --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
