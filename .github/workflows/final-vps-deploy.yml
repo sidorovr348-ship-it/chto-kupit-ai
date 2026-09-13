@@ -95,3 +95,4 @@ EOF
         with:
           path: pages
       - uses: actions/deploy-pages@v4
+      # trigger final VPS deploy
