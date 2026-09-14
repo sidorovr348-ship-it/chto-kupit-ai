@@ -52,6 +52,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path('local-gateway.js'); s=p.read_text()
+          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
           s=s.replace("body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens","body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;body.max_completion_tokens=256;delete body.max_tokens",1)
           marker="if(!vision)for(const [kn,url,model,name] of[['OPENAI_API_KEY'"
           if marker in s and "MISTRAL_VISION_MODEL" not in s:
