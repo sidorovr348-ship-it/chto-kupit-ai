@@ -55,10 +55,20 @@ jobs:
           ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$WORKDIR"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('local-gateway.js')
+          s=p.read_text()
+          old="body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens"
+          new="body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;delete body.max_tokens"
+          if old not in s: raise SystemExit('VISION_PROVIDER_PATCH_TARGET_NOT_FOUND')
+          p.write_text(s.replace(old,new,1))
+          print('VISION_PROVIDER_PATCH_OK')
+          PY
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
           systemctl restart my-ai-unified
-          rm -f /tmp/h.json /tmp/c.json /tmp/tts.mp3
+          rm -f /tmp/h.json /tmp/c.json /tmp/p.json /tmp/tts.mp3
           for i in $(seq 1 30); do
             if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
             sleep 1
@@ -69,13 +79,7 @@ jobs:
           j=json.load(open('/tmp/h.json'))
           assert j.get('ok') and j.get('dispatcher'), j
           a=j.get('adapters',{})
-          assert a.get('groq'), j
-          assert a.get('groqVision'), j
-          assert a.get('tts'), j
-          assert a.get('stt'), j
-          assert a.get('search'), j
-          assert a.get('documents'), j
-          assert a.get('video'), j
+          assert a.get('groq') and a.get('groqVision') and a.get('tts') and a.get('stt') and a.get('search') and a.get('documents') and a.get('video'), j
           print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
@@ -83,6 +87,12 @@ jobs:
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
           print('LOCAL_CHAT_OK')
+          PY
+          curl -fsS --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data '{"images":["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q=="],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/p.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/p.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_PHOTO_OK')
           PY
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3
@@ -104,6 +114,12 @@ jobs:
           import json
           j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j
           print('PUBLIC_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data '{"images":["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q=="],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/public-photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-photo.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_PHOTO_OK')
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/public-tts.mp3
           test -s /tmp/public-tts.mp3
