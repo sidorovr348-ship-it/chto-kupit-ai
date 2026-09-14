@@ -1,4 +1,4 @@
-name: My AI Unified — safe canonical deploy
+name: My AI Unified — verified deploy
 on:
   push:
     branches: [main]
@@ -13,7 +13,7 @@ permissions:
 jobs:
   live_repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment:
       name: github-pages
     steps:
@@ -24,6 +24,18 @@ jobs:
           node --version
           node --check local-gateway.js
           node --test test-local-gateway.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const html=fs.readFileSync('index.html','utf8');
+          if(!html.includes('app-version') || !html.includes('https://ai.aliceq.ru')) throw new Error('frontend markers missing');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+          if(!scripts.length) throw new Error('frontend script missing');
+          for(const s of scripts) new Function(s[1]);
+          if(html.includes('finally{clearTimeout(tm)}},body:JSON.stringify')) throw new Error('known corrupted post() tail still present');
+          if(html.includes('const t=await r.text();let j={};try{j=JSON.parse(t)}catch{}if(!r.ok)throw Error(j.error||\'Ошибка сервера HTTP \' +r.status);return j}catch')) throw new Error('duplicate broken fetch block still present');
+          for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!html.includes('id="'+id+'"')) throw new Error('missing UI control '+id);
+          console.log('FRONTEND_JS_OK');
+          NODE
       - name: Deploy and verify My AI Unified
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -46,37 +58,45 @@ jobs:
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
           systemctl restart my-ai-unified
+          rm -f /tmp/h.json /tmp/c.json /tmp/tts.mp3
           for i in $(seq 1 30); do
             if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
             sleep 1
           done
+          test -s /tmp/h.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json'))
           assert j.get('ok') and j.get('dispatcher'), j
-          assert j.get('adapters',{}).get('groq'), j
-          assert j.get('adapters',{}).get('groqVision'), j
-          assert j.get('adapters',{}).get('tts'), j
+          a=j.get('adapters',{})
+          assert a.get('groq'), j
+          assert a.get('groqVision'), j
+          assert a.get('tts'), j
+          assert a.get('stt'), j
+          assert a.get('search'), j
+          assert a.get('documents'), j
+          assert a.get('video'), j
           print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j
-          print('LOCAL_CHAT_OK',j.get('result'))
+          print('LOCAL_CHAT_OK')
           PY
-          echo 'LOCAL_PHOTO_SMOKE_DEFERRED_TO_CI'
-          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Я My AI Unified."}' -o /tmp/tts.mp3
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3
           echo 'LOCAL_TTS_OK'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3020/transcribe -H 'Content-Type: application/json' --data '{}')" != "404"
+          echo 'LOCAL_STT_ROUTE_OK'
           systemctl is-active --quiet cloudflared
           REMOTE
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j
-          assert j.get('adapters',{}).get('groq'),j
-          assert j.get('adapters',{}).get('groqVision'),j
+          a=j.get('adapters',{})
+          assert a.get('groq') and a.get('groqVision') and a.get('stt') and a.get('search'),j
           print('PUBLIC_HEALTH_OK')
           PY
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
@@ -85,10 +105,11 @@ jobs:
           j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j
           print('PUBLIC_CHAT_OK')
           PY
-          echo 'PUBLIC_PHOTO_SMOKE_VERIFIED_SEPARATELY_IN_CI'
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/public-tts.mp3
           test -s /tmp/public-tts.mp3
           echo 'PUBLIC_TTS_OK'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST https://ai.aliceq.ru/transcribe -H 'Content-Type: application/json' --data '{}')" != "404"
+          echo 'PUBLIC_STT_ROUTE_OK'
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"production"}}' >/tmp/alice.json
           python3 - <<'PY'
           import json
@@ -101,7 +122,7 @@ jobs:
           set -euo pipefail
           rm -rf pages && mkdir pages
           cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"core-chain"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"core-chain+frontend-syntax"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: pages }
