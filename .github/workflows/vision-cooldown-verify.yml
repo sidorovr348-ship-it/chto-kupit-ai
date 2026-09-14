@@ -1,0 +1,42 @@
+name: My AI Unified — vision cooldown verification
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for provider rate window and verify photo
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          sleep 90
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$WORKDIR"
+          printf '%s' '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/photo.json
+          curl --fail --silent --show-error --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data @/tmp/photo.json >/tmp/photo-result.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo-result.json')); assert j.get('ok') and j.get('result'),j
+          print('LOCAL_PHOTO_OK',j['result'][:200])
+          PY
+          REMOTE
+          curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data @<(printf '%s' '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}') >/tmp/public-photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-photo.json')); assert j.get('ok') and j.get('result'),j
+          print('PUBLIC_PHOTO_OK',j['result'][:200])
+          PY
