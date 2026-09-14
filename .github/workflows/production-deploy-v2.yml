@@ -55,6 +55,9 @@ jobs:
           s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
           s=s.replace("body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens","body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;body.max_completion_tokens=256;delete body.max_tokens",1)
           marker="if(!vision)for(const [kn,url,model,name] of[['OPENAI_API_KEY'"
+          if marker in s and "PARALON_VISION_MODEL" not in s:
+              ins="if(vision){const pk=keyOf('PARALON_API_KEY');if(pk)try{const model=process.env.PARALON_VISION_MODEL||'qwen3.8-27b';return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,model,messages,60000,true),provider:'paralon',model}}catch(e){errors.push(`Paralon Vision: ${e.message}`)}}"
+              s=s.replace(marker,ins+marker,1)
           if marker in s and "MISTRAL_VISION_MODEL" not in s:
               ins="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)try{const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral Vision: ${e.message}`)}}"
               s=s.replace(marker,ins+marker,1)
