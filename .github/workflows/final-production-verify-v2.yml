@@ -11,11 +11,14 @@ jobs:
   verify:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Install browser
-        run: npx --yes playwright@1.55.0 install --with-deps chromium
+        run: |
+          npm init -y
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
       - name: Verify real production API
         run: |
           set -euo pipefail
@@ -66,6 +69,7 @@ jobs:
         run: node browser-smoke.mjs
       - name: Verify Pages is current
         run: |
+          set -euo pipefail
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 "https://sidorovr348-ship-it.github.io/chto-kupit-ai/?verify=$(date +%s)" -o /tmp/live.html
           grep -q 'app-version' /tmp/live.html
           grep -q 'https://ai.aliceq.ru' /tmp/live.html
