@@ -1,0 +1,100 @@
+name: My AI Unified — production deploy v2
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: my-ai-unified-production-v2
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate frontend and backend
+        run: |
+          set -euo pipefail
+          node --check local-gateway.js
+          node --test test-local-gateway.js
+          node - <<'NODE'
+          const fs=require('fs'); const html=fs.readFileSync('index.html','utf8');
+          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+          if(!scripts.length) throw new Error('frontend script missing');
+          for(const s of scripts) new Function(s[1]);
+          for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!html.includes('id="'+id+'"')) throw new Error('missing UI control '+id);
+          console.log('SOURCE_OK');
+          NODE
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$WORKDIR"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('local-gateway.js'); s=p.read_text()
+          s=s.replace("body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens","body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;body.max_completion_tokens=256;delete body.max_tokens",1)
+          marker="if(!vision)for(const [kn,url,model,name] of[['OPENAI_API_KEY'"
+          if marker in s and "MISTRAL_VISION_MODEL" not in s:
+              ins="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)try{const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral Vision: ${e.message}`)}}"
+              s=s.replace(marker,ins+marker,1)
+          p.write_text(s)
+          print('RUNTIME_VISION_PATCH_OK')
+          PY
+          npm install --omit=dev --no-audit --no-fund
+          node --check local-gateway.js
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video'),j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_CHAT_OK')
+          PY
+          curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
+          REMOTE
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/public-tts.mp3
+          test -s /tmp/public-tts.mp3; echo PUBLIC_TTS_OK
+      - name: Publish Pages
+        run: |
+          rm -rf pages && mkdir pages && cp index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2"}' > pages/api.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: pages }
+      - uses: actions/deploy-pages@v4
