@@ -26,7 +26,7 @@ jobs:
           const x=h.match(/<script>([\s\S]*?)<\/script>/i);
           if(!x) throw Error('script missing');
           new Function(x[1]);
-          for(const s of ['MediaRecorder','/transcribe','getUserMedia','Слушаю…']) if(!h.includes(s)) throw Error('missing '+s);
+          for(const s of ['MediaRecorder','/transcribe','getUserMedia','Остановить']) if(!h.includes(s)) throw Error('missing '+s);
           console.log('CURRENT_FRONTEND_OK');
           NODE
       - name: Publish current frontend
@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           rm -rf pages && mkdir pages
           cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"ey-2026-09-15"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"ey-2026-09-15-voice-fix"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
