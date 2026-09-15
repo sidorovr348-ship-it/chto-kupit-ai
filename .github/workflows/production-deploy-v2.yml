@@ -63,7 +63,7 @@ jobs:
               marker="app.get('/health'"
               if marker not in s: raise SystemExit('MEMORY_ROUTE_TARGET_NOT_FOUND')
               s=s.replace(marker,"app.use(memoryMiddleware);\nmemoryRoutes(app);\n"+marker,1)
-          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
           s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
           sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; если пользователь просто общается — общайся, а не превращай ответ в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
           s=re.sub(r"const sys='[^']*';",sys,s,count=1)
