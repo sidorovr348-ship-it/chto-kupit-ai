@@ -34,7 +34,7 @@ jobs:
           mv "$tmp" "$ENV"
           python3 - <<'PY'
           from pathlib import Path
-          p=Path(WORKDIR)/'local-gateway.js'
+          p=Path('/root/my-ai-unified/local-gateway.js')
           s=p.read_text()
           start=s.index('async function generateImage(prompt){')
           end=s.index('\nasync function ',start+10)
