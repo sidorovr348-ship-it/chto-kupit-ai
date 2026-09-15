@@ -1,4 +1,4 @@
-name: My AI Unified — production deploy v4 verified
+name: My AI Unified — production deploy v5 verified
 on:
   push:
     branches: [main]
@@ -56,17 +56,14 @@ jobs:
           cd "$WORKDIR"
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p=Path('local-gateway.js'); s=p.read_text()
-          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
-          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.8-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
-          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'",1)
-          s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'",1)
+          s=re.sub(r"const GROQ_VISION_MODEL=[^;]+;", "const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.8-27b';", s, count=1)
           p.write_text(s)
           env=Path('/root/my-ai-unified/.local-ai.env')
           if env.exists():
-              e=env.read_text(); import re
-              e=re.sub(r'^GROQ_VISION_MODEL=.*$', 'GROQ_VISION_MODEL=qwen/qwen3.6-27b', e, flags=re.M)
-              if 'GROQ_VISION_MODEL=' not in e: e+='\nGROQ_VISION_MODEL=qwen/qwen3.6-27b\n'
+              e=env.read_text(); e=re.sub(r'^GROQ_VISION_MODEL=.*$', 'GROQ_VISION_MODEL=qwen/qwen3.8-27b', e, flags=re.M)
+              if 'GROQ_VISION_MODEL=' not in e: e+='\nGROQ_VISION_MODEL=qwen/qwen3.8-27b\n'
               env.write_text(e)
           PY
           npm install --omit=dev --no-audit --no-fund
@@ -77,8 +74,7 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
-          print('LOCAL_HEALTH_OK')
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j; print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
