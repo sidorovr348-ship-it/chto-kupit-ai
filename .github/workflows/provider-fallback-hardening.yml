@@ -6,6 +6,7 @@ on:
     paths:
       - 'local-gateway.js'
       - '.github/workflows/provider-fallback-hardening.yml'
+      - '.deploy-trigger'
   workflow_dispatch:
 
 permissions:
