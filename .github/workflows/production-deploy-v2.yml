@@ -1,4 +1,4 @@
-name: My AI Unified — production deploy v3 smart
+name: My AI Unified — production deploy v4 verified
 on:
   push:
     branches: [main]
@@ -18,7 +18,7 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Validate smart frontend and backend
+      - name: Validate source
         run: |
           set -euo pipefail
           node --check local-gateway.js
@@ -31,10 +31,10 @@ jobs:
           new Function(x[1]);
           for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!h.includes('id="'+id+'"')) throw Error('missing '+id);
           for(const s of ['MediaRecorder','/transcribe','.zip','getUserMedia']) if(!h.includes(s)) throw Error('missing capability '+s);
-          console.log('SMART_FRONTEND_OK');
+          console.log('SOURCE_OK');
           NODE
           node --test test-local-gateway.js
-      - name: Deploy backend to VPS and patch archive support
+      - name: Deploy and verify VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -56,27 +56,18 @@ jobs:
           cd "$WORKDIR"
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p=Path('local-gateway.js'); s=p.read_text()
-          s=s.replace("const path=require('path');", "const path=require('path');\nconst {memoryMiddleware,memoryRoutes}=require('./memory-map');", 1) if "require('./memory-map')" not in s else s
-          if "app.use(memoryMiddleware);" not in s:
-              marker="app.get('/health'"
-              if marker not in s: raise SystemExit('MEMORY_ROUTE_TARGET_NOT_FOUND')
-              s=s.replace(marker,"app.use(memoryMiddleware);\nmemoryRoutes(app);\n"+marker,1)
-          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
-          s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
-          sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; если пользователь просто общается — общайся, а не превращай ответ в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
-          s=re.sub(r"const sys='[^']*';",sys,s,count=1)
-          zipfn="""async function extractZip(buf){const {spawn}=require('child_process');return await new Promise((resolve,reject)=>{const py=`import sys,zipfile,io,json\ndata=sys.stdin.buffer.read()\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n out=[]\n for info in z.infolist():\n  n=info.filename\n  if info.is_dir() or n.startswith('/') or '..' in n.split('/'):\n   continue\n  size=info.file_size\n  item={'name':n,'size':size}\n  low=n.lower()\n  if size<=1000000 and low.endswith(('.txt','.md','.csv','.tsv','.json','.xml','.html','.js','.css','.log','.py')):\n   try:item['text']=z.read(info).decode('utf-8','replace')[:120000]\n   except Exception as e:item['text']='[не удалось прочитать текст: '+str(e)+']'\n  out.append(item)\n print(json.dumps(out,ensure_ascii=False))`;const p=spawn('python3',['-c',py]);let o='',e='';p.stdout.on('data',d=>o+=d);p.stderr.on('data',d=>e+=d);p.on('error',reject);p.on('close',code=>{if(code||!o)return reject(Error('Не удалось открыть ZIP: '+(e||'python3 error')));try{resolve(JSON.parse(o))}catch(x){reject(x)}});p.stdin.end(buf)})}"""
-          if 'async function extractZip(' not in s:
-              pos=s.index('async function extractDocument(')
-              s=s[:pos]+zipfn+'\n'+s[pos:]
-          old="const buf=Buffer.from(m[2],'base64'),mime=m[1],name=String(b.name||'').toLowerCase();"
-          new="const buf=Buffer.from(m[2],'base64'),mime=m[1],name=String(b.name||'').toLowerCase();if(/zip|\\.zip$/i.test(mime+' '+name)){const entries=await extractZip(buf);const listed=entries.map(x=>`ФАЙЛ: ${x.name} (${x.size} байт)${x.text?'\\n'+x.text:''}`).join('\\n\\n');return ('СОДЕРЖИМОЕ ZIP-АРХИВА:\\n\\n'+listed).slice(0,180000)}"
-          if old not in s: raise SystemExit('ZIP_TARGET_NOT_FOUND')
-          s=s.replace(old,new,1)
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
+          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.8-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
+          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'",1)
           p.write_text(s)
-          print('SMART_RUNTIME_PATCH_OK')
+          env=Path('/root/my-ai-unified/.local-ai.env')
+          if env.exists():
+              e=env.read_text(); import re
+              e=re.sub(r'^GROQ_VISION_MODEL=.*$', 'GROQ_VISION_MODEL=qwen/qwen3.6-27b', e, flags=re.M)
+              if 'GROQ_VISION_MODEL=' not in e: e+='\nGROQ_VISION_MODEL=qwen/qwen3.6-27b\n'
+              env.write_text(e)
           PY
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
@@ -86,7 +77,7 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video'),j
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
           print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
@@ -94,46 +85,90 @@ jobs:
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_CHAT_OK')
           PY
+          python3 - <<'PY'
+          import base64,json
+          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000040000000400806000000aa6971de0000000d49444154789c6360a001000000ffff03000006000557bf9b0000000049454e44ae426082')).decode()
+          open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Опиши изображение одним коротким предложением.'},ensure_ascii=False))
+          PY
+          PHOTO_CODE=$(curl -sS --max-time 120 -o /tmp/photo.json.out -w '%{http_code}' -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json)
+          cat /tmp/photo.json.out
+          test "$PHOTO_CODE" = 200
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.json.out')); assert j.get('ok') and j.get('result'),j; print('LOCAL_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
-          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"smoke-memory","prompt":"Эй, запомни правило: отвечай по-русски"}' >/tmp/m.json
+          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/search -H 'Content-Type: application/json' --data '{"query":"iPhone 18 Pro Москва цена"}' >/tmp/search.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/m.json')); assert j.get('ok') and 'Запомнил' in j.get('result',''),j; print('LOCAL_MEMORY_SAVE_OK')
+          j=json.load(open('/tmp/search.json')); assert j.get('ok') and j.get('results'),j; print('LOCAL_SEARCH_OK')
           PY
-          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"smoke-memory","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          curl -fsS --max-time 120 -X POST http://127.0.0.1:3020/shopping -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shop.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/m2.json')); assert 'по-русски' in j.get('result',''),j; print('LOCAL_MEMORY_READ_OK')
+          j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('LOCAL_SHOPPING_OK',len(j['results']))
+          PY
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/document -H 'Content-Type: application/json' --data '{"name":"smoke.txt","mime":"text/plain","text":"Это тестовый документ. Ответь одним словом: ДОК_OK"}' >/tmp/doc.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/doc.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_DOCUMENT_OK')
+          PY
+          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"final-smoke","prompt":"Эй, запомни правило: smoke-memory-OK"}' >/tmp/m.json
+          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"final-smoke","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/m.json')); b=json.load(open('/tmp/m2.json')); assert a.get('ok') and b.get('ok') and 'smoke-memory-OK' in b.get('result',''),(a,b); print('LOCAL_MEMORY_OK')
           PY
           REMOTE
       - name: Verify public API
         run: |
           set -euo pipefail
           sleep 10
-          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/h.json
+          API=https://ai.aliceq.ru
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/h.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
-          print('PUBLIC_HEALTH_OK')
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j; print('PUBLIC_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
           PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
-          test -s /tmp/t.mp3; echo PUBLIC_TTS_OK
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"memoryId":"public-smoke","prompt":"Эй, запомни правило: smoke-memory-OK"}' >/tmp/m.json
           python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/m.json')); assert j.get('ok') and 'Запомнил' in j.get('result',''),j; print('PUBLIC_MEMORY_SAVE_OK')
+          import base64,json
+          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000040000000400806000000aa6971de0000000d49444154789c6360a001000000ffff03000006000557bf9b0000000049454e44ae426082')).decode()
+          open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Опиши изображение одним коротким предложением.'},ensure_ascii=False))
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"memoryId":"public-smoke","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/p.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/m2.json')); assert 'smoke-memory-OK' in j.get('result',''),j; print('PUBLIC_MEMORY_READ_OK')
+          j=json.load(open('/tmp/p.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST "$API/tts" -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
+          test -s /tmp/t.mp3; echo PUBLIC_TTS_OK
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST "$API/search" -H 'Content-Type: application/json' --data '{"query":"iPhone 18 Pro Москва цена"}' >/tmp/s.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('results'),j; print('PUBLIC_SEARCH_OK')
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 120 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shop.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('PUBLIC_SHOPPING_OK',len(j['results']))
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/document" -H 'Content-Type: application/json' --data '{"name":"smoke.txt","mime":"text/plain","text":"Это тестовый документ. Ответь одним словом: ДОК_OK"}' >/tmp/d.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/d.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_DOCUMENT_OK')
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"memoryId":"public-final-smoke","prompt":"Эй, запомни правило: public-memory-OK"}' >/tmp/m.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"memoryId":"public-final-smoke","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/m.json')); b=json.load(open('/tmp/m2.json')); assert a.get('ok') and b.get('ok') and 'public-memory-OK' in b.get('result',''),(a,b); print('PUBLIC_MEMORY_OK')
           PY
       - name: Publish smart Pages
         run: |
@@ -149,7 +184,7 @@ jobs:
           PY
           rm -rf pages && mkdir pages
           cp smart-index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15-memory-map"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"verified-2026-09-15"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
