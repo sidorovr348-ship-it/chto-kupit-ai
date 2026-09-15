@@ -1,0 +1,40 @@
+name: My AI Unified — fix image generation provider
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set image model and verify live endpoint
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          ENV=/root/my-ai-unified/.local-ai.env
+          cp -a "$ENV" "$ENV.backup.image.$(date +%Y%m%d-%H%M%S)"
+          tmp=$(mktemp)
+          grep -v '^OPENAI_IMAGE_MODEL=' "$ENV" > "$tmp" || true
+          printf '%s\n' 'OPENAI_IMAGE_MODEL=gpt-image-1-mini' >> "$tmp"
+          mv "$tmp" "$ENV"
+          systemctl restart my-ai-unified
+          sleep 30
+          curl --fail --silent --show-error --max-time 180 -X POST http://127.0.0.1:3020/generate-image -H 'Content-Type: application/json' --data '{"prompt":"Минималистичный синий круг на белом фоне, без текста."}' >/tmp/image.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/image.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j
+          print('LIVE_IMAGE_GENERATION_OK')
+          PY
+          REMOTE
