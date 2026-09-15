@@ -1,12 +1,14 @@
 name: My AI Unified — repair live and verify
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — production deploy v2"]
+    types: [completed]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   repair:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
