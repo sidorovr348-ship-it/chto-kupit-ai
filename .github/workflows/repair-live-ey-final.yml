@@ -40,8 +40,11 @@ jobs:
           else:
               import re
               s=re.sub(r"const sys='[^']*';",new,s,count=1)
+          marker="const e=Error(errors.join(' | ')||'AI provider is not configured');e.status=502;throw e"
+          fallback="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN','PARALON_API_TOKEN');if(pk)try{return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,vision?'qwen3.8-27b':'qwen3.8-27b',messages,vision?60000:30000,vision),provider:'paralon',model:'qwen3.8-27b'}}catch(e){errors.push(`Paralon: ${e.message}`);console.error('PARALON_ERROR:',e.message)}"+marker
+          if marker in s and 'PARALON_API_KEY' not in s: s=s.replace(marker,fallback,1)
           p.write_text(s)
-          print('LIVE_PROVIDER_AND_EY_PERSONALITY_FIXED')
+          print('LIVE_PROVIDER_EY_PARALON_FIXED')
           PY
           node --check local-gateway.js
           systemctl restart my-ai-unified
