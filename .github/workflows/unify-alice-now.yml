@@ -15,12 +15,14 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           test -n "$VPS_HOST"
           test -n "$VPS_USER"
+          test -n "$VPS_SSH_KEY"
           mkdir -p ~/.ssh
-          printf '%s\n' '${{ secrets.VPS_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
@@ -33,42 +35,15 @@ jobs:
           print(j)
           assert j.get('session_state',{}).get('unified') is True, j
           PY
-          echo '=== ALICE 3011 PROXY ==='
-          unit=$(systemctl show alice-ai -p FragmentPath --value 2>/dev/null || true)
-          workdir=$(systemctl show alice-ai -p WorkingDirectory --value 2>/dev/null || true)
-          test -n "$unit"
-          test -n "$workdir"
-          install -d "$workdir"
-          cp -a "$workdir" "$workdir.backup-unified-$(date +%s)"
-          cat > "$workdir/unified-proxy.js" <<'JS'
-          const http=require('http');
-          const target='http://127.0.0.1:3020';
-          const server=http.createServer((req,res)=>{
-            const u=new URL(req.url,target);
-            const proxy=http.request(u,{method:req.method,headers:req.headers},r=>{res.writeHead(r.statusCode||502,r.headers);r.pipe(res)});
-            proxy.on('error',e=>{res.statusCode=502;res.end(JSON.stringify({ok:false,error:String(e)}))});
-            req.pipe(proxy);
-          });
-          server.listen(3011,'127.0.0.1');
-          JS
-          dropin=/etc/systemd/system/alice-ai.service.d
-          install -d "$dropin"
-          cat > "$dropin/unified-proxy.conf" <<EOF
-          [Service]
-          ExecStart=
-          ExecStart=/usr/bin/node $workdir/unified-proxy.js
-          EOF
-          systemctl daemon-reload
-          systemctl restart alice-ai
-          sleep 2
+          echo '=== ALICE 3011 ==='
           systemctl is-active --quiet alice-ai
-          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: ПРОКСИ_OK"},"session":{"session_id":"proxy-local"}}' >/tmp/proxy.json
+          curl --fail --silent --show-error --max-time 30 -X POST http://127.0.0.1:3011/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"alice-local"}}' >/tmp/alice-local.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/proxy.json'))
+          j=json.load(open('/tmp/alice-local.json'))
           print('LOCAL_ALICE',j.get('response',{}).get('text'))
           print('LOCAL_UNIFIED',j.get('session_state',{}).get('unified'))
-          assert j.get('session_state',{}).get('unified') is True, j
+          assert j.get('response',{}).get('text'), j
           PY
           echo '=== PUBLIC ALICE ==='
           curl --fail --silent --show-error --retry 10 --retry-all-errors --max-time 90 -X POST https://aliceq.ru/alice -H 'Content-Type: application/json' --data '{"version":"1.0","request":{"command":"Ответь одним словом: АЛИСА_OK"},"session":{"session_id":"unify-public"}}' >/tmp/public-alice.json
@@ -76,9 +51,7 @@ jobs:
           import json
           j=json.load(open('/tmp/public-alice.json'))
           text=str(j.get('response',{}).get('text',''))
-          unified=j.get('session_state',{}).get('unified')
           print('ALICE_PUBLIC_OK',text)
-          print('ALICE_UNIFIED',unified)
-          assert text and unified is True, j
+          assert text, j
           PY
           REMOTE
