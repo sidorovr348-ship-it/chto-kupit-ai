@@ -1,4 +1,4 @@
-name: My AI Unified — iPhone audio unlock
+name: My AI Unified — publish current iPhone frontend
 on:
   workflow_run:
     workflows: ["My AI Unified — production deploy v3 smart"]
@@ -17,42 +17,24 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Add iPhone Safari audio unlock
+      - name: Validate current frontend
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('smart-index.html'); s=p.read_text()
-          marker='SMART_AUDIO_UNLOCK_V1'
-          if marker not in s:
-              old="let sound=true,player=null,stream=null,busy=false,messages=[],recorder=null,voiceChunks=[];"
-              new="let sound=true,player=null,audioEl=new Audio(),audioUnlocked=false,stream=null,busy=false,messages=[],recorder=null,voiceChunks=[];"
-              if old not in s: raise SystemExit('audio state target not found')
-              s=s.replace(old,new,1)
-              old2="function stop(){if(player){try{player.pause()}catch{}const u=player.src;player=null;try{URL.revokeObjectURL(u)}catch{}}if('speechSynthesis'in window)speechSynthesis.cancel()}"
-              new2="function unlockAudio(){if(audioUnlocked)return;try{const silent='data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';audioEl.src=silent;audioEl.muted=true;const p=audioEl.play();if(p&&p.then)p.then(()=>{if(audioEl.src===silent){audioEl.pause();audioEl.currentTime=0;audioEl.muted=false}audioUnlocked=true}).catch(()=>{})}catch{}}\nfunction stop(){if(player){try{player.pause()}catch{}const u=player.src;player=null;try{URL.revokeObjectURL(u)}catch{}}try{audioEl.pause()}catch{}if('speechSynthesis'in window)speechSynthesis.cancel()}"
-              if old2 not in s: raise SystemExit('stop target not found')
-              s=s.replace(old2,new2,1)
-              old3="const u=URL.createObjectURL(blob);player=new Audio(u);player.onended=()=>{URL.revokeObjectURL(u);player=null};await player.play()"
-              new3="const u=URL.createObjectURL(blob);audioEl.muted=false;audioEl.src=u;player=audioEl;audioEl.onended=()=>{URL.revokeObjectURL(u);player=null};await audioEl.play()"
-              if old3 not in s: raise SystemExit('speak target not found')
-              s=s.replace(old3,new3,1)
-              old4="$('#send').onclick=send;"
-              new4="document.addEventListener('click',unlockAudio,{passive:true});document.addEventListener('keydown',unlockAudio,{passive:true});$('#send').onclick=send;"
-              if old4 not in s: raise SystemExit('click target not found')
-              s=s.replace(old4,new4,1)
-              s=s.replace('</script>','/* SMART_AUDIO_UNLOCK_V1 */</script>',1)
-              p.write_text(s)
-          PY
           node - <<'NODE'
-          const fs=require('fs'); const h=fs.readFileSync('smart-index.html','utf8'); const x=h.match(/<script>([\s\S]*?)<\/script>/i); if(!x) throw Error('script missing'); new Function(x[1]); for(const z of ['SMART_AUDIO_UNLOCK_V1','audioEl','unlockAudio']) if(!h.includes(z)) throw Error('missing '+z); console.log('AUDIO_UNLOCK_OK');
+          const fs=require('fs');
+          const h=fs.readFileSync('index.html','utf8');
+          const x=h.match(/<script>([\s\S]*?)<\/script>/i);
+          if(!x) throw Error('script missing');
+          new Function(x[1]);
+          for(const s of ['MediaRecorder','/transcribe','getUserMedia','Слушаю…']) if(!h.includes(s)) throw Error('missing '+s);
+          console.log('CURRENT_FRONTEND_OK');
           NODE
-      - name: Publish patched Pages
+      - name: Publish current frontend
         run: |
           set -euo pipefail
           rm -rf pages && mkdir pages
-          cp smart-index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15-audio-unlock"}' > pages/api.json
+          cp index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"ey-2026-09-15"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
