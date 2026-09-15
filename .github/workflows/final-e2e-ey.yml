@@ -1,5 +1,7 @@
 name: My AI Unified — final browser verification
 on:
+  push:
+    branches: [main]
   workflow_run:
     workflows: ["My AI Unified — repair live and verify"]
     types: [completed]
@@ -8,7 +10,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
