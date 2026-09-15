@@ -20,31 +20,39 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Patch frontend time handling
+      - name: Patch frontend time and location handling
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p=Path('index.html')
           s=p.read_text()
-          marker='CURRENT_TIME_UI_V1'
+          marker='CURRENT_TIME_LOCATION_UI_V2'
           if marker not in s:
-              needle="async function send(){const text=input.value.trim();if(!text||busy)return;add(text,'user');"
-              replacement="""async function send(){const text=input.value.trim();if(!text||busy)return;
+              s=s.replace("const API='https://ai.aliceq.ru';", "const API='https://ai.aliceq.ru';let userLocation=null,locationState='unknown';async function requestUserLocation(){if(!navigator.geolocation){locationState='unsupported';return null}return await new Promise(resolve=>navigator.geolocation.getCurrentPosition(pos=>{userLocation={latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy};locationState='granted';resolve(userLocation)},()=>{locationState='denied';resolve(null)},{enableHighAccuracy:true,maximumAge:60000,timeout:10000}))}")
+              s=s.replace("async function send(){const text=input.value.trim();if(!text||busy)return;add(text,'user');input.value='';messages.push({role:'user',content:text});const w=add('⏳ Выполняю…');busy=true;try{const j=purchase(text)?await post('/shopping',{query:text},120000):await post('/chat',{prompt:text,messages},120000);", "async function send(){const text=input.value.trim();if(!text||busy)return;add(text,'user');input.value='';messages.push({role:'user',content:text});const w=add('⏳ Выполняю…');busy=true;try{if(locationState==='unknown')await requestUserLocation();const locationContext=userLocation?`\n\nТочное местоположение пользователя: широта ${userLocation.latitude}, долгота ${userLocation.longitude}, точность около ${Math.round(userLocation.accuracy)} м. Используй его для локальных рекомендаций, погоды, ближайших мест и других задач, где местоположение важно.`:'';const j=purchase(text)?await post('/shopping',{query:text,location:userLocation},120000):await post('/chat',{prompt:text+locationContext,messages},120000);")
+              needle="if(/\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(text))"
+              if needle in s:
+                  pass
+              else:
+                  needle2="async function send(){const text=input.value.trim();if(!text||busy)return;"
+                  replacement2="""async function send(){const text=input.value.trim();if(!text||busy)return;
           if(/\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(text)){
           add(text,'user');input.value='';const now=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());const result=`Сейчас в Москве ${now}.`;messages.push({role:'user',content:text},{role:'assistant',content:result});rich(result);speak(result);return;
           }
           add(text,'user');"""
-              if needle not in s: raise SystemExit('SEND_TARGET_NOT_FOUND')
-              s=s.replace(needle,replacement,1)
-              s=s.replace("<meta name=\"app-version\" content=\"2026-09-15-voice-fix\">","<meta name=\"app-version\" content=\"2026-09-15-voice-fix-time\">",1)
-              s=s.replace('</script></body>','const CURRENT_TIME_UI_V1=true;</script></body>',1)
+                  if needle2 not in s: raise SystemExit('SEND_TARGET_NOT_FOUND')
+                  s=s.replace(needle2,replacement2,1)
+              s=s.replace("<div class=\"status\" id=\"status\">🟡 Проверяю сервер…</div>","<div class=\"status\" id=\"status\">🟡 Проверяю сервер…</div><div class=\"diag\" id=\"locationStatus\">📍 Местоположение: запрашивается…</div>",1)
+              s=s.replace("check();</script></body></html>","requestUserLocation().then(()=>{const el=document.querySelector('#locationStatus');if(el)el.textContent=locationState==='granted'?'🟢 Местоположение доступно ассистенту':'🟡 Местоположение не разрешено — разреши его в Safari для локальных запросов'});check();const CURRENT_TIME_LOCATION_UI_V2=true;</script></body></html>",1)
               p.write_text(s)
-              print('CURRENT_TIME_UI_PATCH_OK')
+              print('CURRENT_TIME_LOCATION_PATCH_OK')
           else:
-              print('CURRENT_TIME_UI_ALREADY_PRESENT')
+              print('CURRENT_TIME_LOCATION_ALREADY_PRESENT')
           PY
-          grep -q 'CURRENT_TIME_UI_V1' index.html
+          grep -q 'CURRENT_TIME_LOCATION_UI_V2' index.html
+          grep -q 'navigator.geolocation' index.html
+          grep -q 'https://ai.aliceq.ru' index.html
           grep -q 'Europe/Moscow' index.html
       - name: Publish patched Pages
         run: |
@@ -52,7 +60,7 @@ jobs:
           rm -rf pages
           mkdir pages
           cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2-time-ui"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2-time-location-internet"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -63,6 +71,7 @@ jobs:
           set -euo pipefail
           sleep 5
           curl --fail --silent --show-error --retry 10 --retry-delay 2 --max-time 60 https://sidorovr348-ship-it.github.io/chto-kupit-ai/ -o /tmp/index.html
-          grep -q 'CURRENT_TIME_UI_V1' /tmp/index.html
+          grep -q 'CURRENT_TIME_LOCATION_UI_V2' /tmp/index.html
+          grep -q 'navigator.geolocation' /tmp/index.html
           grep -q 'Europe/Moscow' /tmp/index.html
-          echo 'PUBLIC_TIME_UI_OK'
+          echo 'PUBLIC_TIME_LOCATION_OK'
