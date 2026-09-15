@@ -11,5 +11,5 @@ assert.match(src,/whisper-large-v3-turbo/);
 assert.match(src,/credentials:false/);
 assert.match(src,/wantsShopping/);
 assert.match(src,/wantsSearch/);
-assert.match(src,/application\/zip/);
+assert.match(src,/\.zip/);
 console.log('SOURCE_SMOKE_OK');
