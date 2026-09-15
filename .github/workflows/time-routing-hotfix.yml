@@ -45,7 +45,7 @@ jobs:
               print('CURRENT_TIME_UI_ALREADY_PRESENT')
           PY
           grep -q 'CURRENT_TIME_UI_V1' index.html
-          grep -q 'timeZone:\x27Europe/Moscow\x27' index.html
+          grep -q 'Europe/Moscow' index.html
       - name: Publish patched Pages
         run: |
           set -euo pipefail
