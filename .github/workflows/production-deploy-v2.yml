@@ -86,16 +86,15 @@ jobs:
           from pathlib import Path
           import re
           p=Path('local-gateway.js'); s=p.read_text()
-          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
-          s=s.replace("body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens","body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;body.max_completion_tokens=256;delete body.max_tokens",1)
+          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
+          new_sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; можно шутить и высказывать мнение, если это уместно. Если пользователь просто общается — общайся, не превращай разговор в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
+          s=re.sub(r"const sys='[^']*';",new_sys,s,count=1)
           marker="if(!vision)for(const [kn,url,model,name] of[['OPENAI_API_KEY'"
-          if marker in s and "PARALON_VISION_MODEL" not in s:
-              ins="if(vision){const pk=keyOf('PARALON_API_KEY');if(pk)try{const model=process.env.PARALON_VISION_MODEL||'qwen3.8-27b';return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,model,messages,60000,true),provider:'paralon',model}}catch(e){errors.push(`Paralon Vision: ${e.message}`)}}"
+          if marker in s and "PARALON_API_KEY" not in s:
+              ins="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN','PARALON_API_TOKEN');if(pk)try{return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,'qwen3.8-27b',messages,vision?60000:30000,vision),provider:'paralon',model:'qwen3.8-27b'}}catch(e){errors.push(`Paralon: ${e.message}`);console.error('PARALON_ERROR:',e.message)}"
               s=s.replace(marker,ins+marker,1)
-          if marker in s and "MISTRAL_VISION_MODEL" not in s:
-              ins="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)try{const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral Vision: ${e.message}`)}}"
-              s=s.replace(marker,ins+marker,1)
-          s=s.replace("imageGeneration:!!keyOf('OPENAI_API_KEY')","imageGeneration:!!(keyOf('OPENAI_API_KEY')||keyOf('MISTRAL_API_KEY'))",1)
           p.write_text(s)
           print('RUNTIME_PATCH_OK')
           PY
@@ -106,10 +105,10 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video') and a.get('imageGeneration'),j
+          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video'),j
           print('LOCAL_HEALTH_OK')
           PY
-          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_CHAT_OK')
@@ -120,7 +119,7 @@ jobs:
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; assert j.get('adapters',{}).get('imageGeneration'),j; print('PUBLIC_HEALTH_OK')
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
