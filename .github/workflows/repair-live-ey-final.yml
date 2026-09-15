@@ -1,0 +1,76 @@
+name: My AI Unified — repair live and verify
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Repair live VPS and verify end to end
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$WORKDIR"
+          cp local-gateway.js "local-gateway.js.backup-$(date +%Y%m%d-%H%M%S)"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('local-gateway.js'); s=p.read_text()
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
+          old="const sys='Ты — My AI Unified, единый русскоязычный помощник. Отвечай естественно, понятно и по делу. Не упоминай внутренние модели, ключи и серверы. Не выдумывай факты, цены, наличие или характеристики.';"
+          new="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Главная цель — естественный живой диалог, а не сухие ответы на вопросы. Понимай контекст предыдущих сообщений и продолжай разговор без просьб повторить уже сказанное. Отвечай по-русски, дружелюбно, уверенно и человеческим языком; допускай лёгкий юмор и мнение, когда это уместно. Если пользователь просто общается — общайся, не превращай беседу в поиск. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и ясно отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи, серверы и техническую кухню, если пользователь прямо не спрашивает. Не начинай каждый ответ одинаково и не повторяй вопрос пользователя без необходимости.';"
+          if old in s: s=s.replace(old,new,1)
+          else:
+              import re
+              s=re.sub(r"const sys='[^']*';",new,s,count=1)
+          p.write_text(s)
+          print('LIVE_PROVIDER_AND_EY_PERSONALITY_FIXED')
+          PY
+          node --check local-gateway.js
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json'))
+          assert j.get('ok') and j.get('dispatcher'),j
+          assert j.get('adapters',{}).get('groqVision'),j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and str(j.get('result','')).strip(),j
+          print('LOCAL_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
+          test -s /tmp/t.mp3
+          echo LOCAL_TTS_OK
+          REMOTE
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/ph.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ph.json')); assert j.get('ok') and j.get('dispatcher'),j; assert j.get('adapters',{}).get('groqVision'),j
+          print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and str(j.get('result','')).strip(),j
+          print('PUBLIC_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/pt.mp3
+          test -s /tmp/pt.mp3
+          echo PUBLIC_TTS_OK
