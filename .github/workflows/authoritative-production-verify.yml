@@ -11,11 +11,15 @@ jobs:
   verify:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Install Chromium
-        run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Install Playwright package and Chromium
+        run: |
+          set -euo pipefail
+          npm init -y
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
       - name: Cool down provider and verify API features
         run: |
           set -euo pipefail
@@ -25,20 +29,25 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
-          print('HEALTH_OK')
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','imageGeneration']),j
+          print('HEALTH_OK',a)
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/search" -H 'Content-Type: application/json' --data '{"query":"iPhone 18 Pro Москва цена"}' >/tmp/s.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('results'),j; print('SEARCH_OK')
           PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shop.json
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shop.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('SHOPPING_OK')
+          j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('SHOPPING_OK',len(j['results']))
           PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/document" -H 'Content-Type: application/json' --data '{"name":"smoke.txt","mime":"text/plain","text":"Это тестовый документ. Ответь одним словом: ДОК_OK"}' >/tmp/d.json
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/photo" -H 'Content-Type: application/json' --data '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/photo.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.json')); assert j.get('ok') and j.get('result'),j; print('PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/document" -H 'Content-Type: application/json' --data '{"name":"smoke.txt","mime":"text/plain","text":"Это тестовый документ. Ответь одним словом: ДОК_OK"}' >/tmp/d.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/d.json')); assert j.get('ok') and j.get('result'),j; print('DOCUMENT_OK')
@@ -49,6 +58,12 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 2 --retry-all-errors --retry-delay 3 --max-time 210 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Минималистичный синий круг на белом фоне, без текста."}' >/tmp/img.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/img.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j; print('IMAGE_GENERATION_OK')
+          if j.get('dataUrl'): assert j['dataUrl'].startswith('data:image/'), 'bad dataUrl'
           PY
       - name: Verify actual browser, camera and photo
         env:
