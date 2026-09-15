@@ -1,0 +1,49 @@
+name: My AI Unified — photo diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose live vision endpoint
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          ENV=/root/my-ai-unified/.local-ai.env
+          tmp=$(mktemp)
+          grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.8-27b' >> "$tmp"
+          mv "$tmp" "$ENV"
+          systemctl restart my-ai-unified
+          sleep 6
+          echo '=== HEALTH ==='
+          curl -sS --max-time 20 http://127.0.0.1:3020/health || true
+          echo
+          echo '=== PHOTO REQUEST ==='
+          python3 - <<'PY'
+          import base64,json
+          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c6360606000000004000105f7f7d80000000049454e44ae426082')).decode()
+          open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Что на изображении? Ответь кратко.'},ensure_ascii=False))
+          PY
+          curl -sS -i --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json || true
+          echo
+          echo '=== SERVICE STATUS ==='
+          systemctl --no-pager --full status my-ai-unified || true
+          echo '=== RECENT LOGS ==='
+          journalctl -u my-ai-unified -n 120 --no-pager || true
+          REMOTE
