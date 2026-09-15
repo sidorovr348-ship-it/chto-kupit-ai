@@ -76,7 +76,6 @@ jobs:
         run: |
           mkdir -p pages
           cp smart-index.html pages/index.html
-          cp -r . pages/repo 2>/dev/null || true
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
