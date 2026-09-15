@@ -1,13 +1,15 @@
 name: My AI Unified — current time routing hotfix
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — authoritative production verification"]
+    types: [completed]
   workflow_dispatch:
 concurrency:
   group: my-ai-unified-time-hotfix
   cancel-in-progress: true
 jobs:
   patch:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
