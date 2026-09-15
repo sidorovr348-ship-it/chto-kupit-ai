@@ -8,10 +8,10 @@ permissions:
 jobs:
   fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Set image model and verify live endpoint
+      - name: Repair and verify live image generation
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -23,14 +23,44 @@ jobs:
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
+          sleep 90
+          WORKDIR=$(systemctl show -p WorkingDirectory --value my-ai-unified)
+          test -n "$WORKDIR"
           ENV=/root/my-ai-unified/.local-ai.env
           cp -a "$ENV" "$ENV.backup.image.$(date +%Y%m%d-%H%M%S)"
           tmp=$(mktemp)
           grep -v '^OPENAI_IMAGE_MODEL=' "$ENV" > "$tmp" || true
           printf '%s\n' 'OPENAI_IMAGE_MODEL=gpt-image-1-mini' >> "$tmp"
           mv "$tmp" "$ENV"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path(WORKDIR)/'local-gateway.js'
+          s=p.read_text()
+          start=s.index('async function generateImage(prompt){')
+          end=s.index('\nasync function ',start+10)
+          fn='''async function generateImage(prompt){
+          const text=String(prompt||'').slice(0,4000);
+          const k=keyOf('OPENAI_API_KEY');
+          if(k){
+            try{
+              const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${k}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1-mini',prompt:text,size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)});
+              const d=await r.json().catch(()=>({}));
+              if(r.ok){const x=d?.data?.[0];if(x?.b64_json)return {dataUrl:`data:image/png;base64,${x.b64_json}`};if(x?.url)return {url:x.url};}
+              console.error('OPENAI_IMAGE_ERROR:',r.status,String(d?.error?.message||''));
+            }catch(e){console.error('OPENAI_IMAGE_ERROR:',e.message)}
+          }
+          const url=`https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?width=1024&height=1024&nologo=true&safe=true`;
+          const r=await fetch(url,{method:'GET',signal:AbortSignal.timeout(120000)});
+          if(!r.ok)throw Object.assign(Error(`Генерация изображения: HTTP ${r.status}`),{status:503});
+          return {url};
+          }'''
+          p.write_text(s[:start]+fn+s[end:])
+          print('IMAGE_FALLBACK_PATCH_OK')
+          PY
+          cd "$WORKDIR"
+          node --check local-gateway.js
           systemctl restart my-ai-unified
-          sleep 30
+          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
           curl --fail --silent --show-error --max-time 180 -X POST http://127.0.0.1:3020/generate-image -H 'Content-Type: application/json' --data '{"prompt":"Минималистичный синий круг на белом фоне, без текста."}' >/tmp/image.json
           python3 - <<'PY'
           import json
