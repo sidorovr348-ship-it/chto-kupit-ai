@@ -116,3 +116,5 @@ jobs:
         with:
           path: pages
       - uses: actions/deploy-pages@v4
+
+# Final verification trigger: validate current main, not a stale run.
