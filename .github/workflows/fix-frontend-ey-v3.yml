@@ -1,0 +1,48 @@
+name: My AI Unified — robust Эй voice patch v3
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch frontend safely
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('index.html'); s=p.read_text()
+          if 'EY_HANDSFREE_V3' in s:
+              print('ALREADY_FIXED'); raise SystemExit(0)
+          s=s.replace('<h1>🧠 My AI Unified</h1>','<h1>👋 Эй</h1>',1)
+          s=s.replace('<button id="voice">🎙️ Голос</button>','<button id="voice">🎙️ Эй</button>',1)
+          s=s.replace("add('🎙️ '+text,'user');input.value=text;await send()","input.value=text;await send()",1)
+          voice="""async function startVoice(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return add('🔴 Safari не поддерживает голосовой режим «Эй» на этом устройстве.');if(recorder?.recognition)return;try{const r=new SR();r.lang='ru-RU';r.continuous=true;r.interimResults=false;r.maxAlternatives=1;recorder={state:'recording',recognition:r,wake:true};let restarting=false;r.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){if(!e.results[i].isFinal)continue;const raw=String(e.results[i][0]?.transcript||'').trim();const m=raw.match(/^\\s*эй[,:;.!?\\-\\s]*(.*)$/iu);if(m){const command=String(m[1]||'').trim();if(command&&!busy){input.value=command;send()}}}};r.onerror=e=>{const code=e?.error||'unknown';if(code==='not-allowed'||code==='service-not-allowed'){add('🔴 Safari не дал доступ к микрофону. Разреши микрофон для Safari.');stopVoice()}else if(code!=='aborted'&&code!=='no-speech'){diag.textContent='Голос: '+code}};r.onend=()=>{if(recorder?.recognition!==r||restarting)return;if(document.visibilityState==='visible'){restarting=true;setTimeout(()=>{restarting=false;try{r.start()}catch{}},350)}};r.start();$('#voice').textContent='🟢 Слушаю «Эй»';$('#voice').classList.add('active');diag.textContent='Голос: скажи «Эй» и затем вопрос.'}catch(e){recorder=null;add('🔴 Не удалось включить голос: '+e.message)}}"""
+          def replace_func(name, repl):
+              global s
+              pat=rf'{name}\(\)\{{.*?\n\}}'
+              s,n=re.subn(pat,lambda m: repl,s,count=1,flags=re.S)
+              print(name,n)
+          replace_func('async function startVoice',voice)
+          stop="""function stopVoice(){if(recorder?.recognition){try{recorder.recognition.onend=null;recorder.recognition.stop()}catch{}recorder=null;$('#voice').textContent='🎙️ Эй';$('#voice').classList.remove('active');diag.textContent='';return}if(recorder?.media){try{recorder.media.stop()}catch{}recorder=null;$('#voice').textContent='🎙️ Эй';$('#voice').classList.remove('active')}}"""
+          replace_func('function stopVoice',stop)
+          post="""async function post(path,body,timeout=120000){let last=null;for(let attempt=0;attempt<5;attempt++){const c=new AbortController(),tm=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store',mode:'cors',signal:c.signal});const t=await r.text();let j={};try{j=JSON.parse(t)}catch{}if(!r.ok){const e=Error(j.error||('Ошибка сервера HTTP '+r.status));if((r.status>=500||r.status===429)&&attempt<4){last=e;await new Promise(x=>setTimeout(x,[1200,2500,5000,9000][attempt]||12000));continue}throw e}return j}catch(e){last=e;if(attempt<4){await new Promise(x=>setTimeout(x,[1200,2500,5000,9000][attempt]||12000));continue}if(e.name==='AbortError')throw Error('Сервер не ответил вовремя.');if(/Load failed|Failed to fetch|NetworkError/i.test(e.message))throw Error('Не удаётся связаться с AI-сервером. Проверь интернет/VPN и повтори.');throw e}finally{clearTimeout(tm)}}throw last||Error('Не удалось выполнить запрос.')}"""
+          replace_func('async function post',post)
+          s=s.replace("$('#voice').onclick=()=>recorder&&((recorder.state&&recorder.state!=='inactive')||recorder.recognition)?stopVoice():startVoice();","$('#voice').onclick=()=>recorder?.recognition?stopVoice():startVoice();",1)
+          s=s.replace('</script>','/* EY_HANDSFREE_V3 */</script>',1)
+          p.write_text(s)
+          print('PATCH_OK')
+          PY
+          node - <<'NODE'
+          const fs=require('fs'); const h=fs.readFileSync('index.html','utf8'); const x=h.match(/<script>([\s\S]*?)<\/script>/i); if(!x) throw Error('script missing'); new Function(x[1]); if(!h.includes('EY_HANDSFREE_V3')) throw Error('marker missing'); if(!h.includes('👋 Эй')) throw Error('name missing'); console.log('SYNTAX_OK');
+          NODE
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'fix: robust Эй voice UX' && git push
