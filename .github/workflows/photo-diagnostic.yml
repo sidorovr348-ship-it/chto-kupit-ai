@@ -11,33 +11,37 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Test live photo endpoint
+      - name: Diagnose live vision provider and photo endpoint
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
-          for i in $(seq 1 18); do
-            if curl --fail --silent --show-error --max-time 10 https://ai.aliceq.ru/health >/tmp/h.json; then break; fi
-            sleep 5
-          done
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/h.json'))
-          assert j.get('ok') and j.get('dispatcher'),j
-          assert j.get('adapters',{}).get('groqVision'),j
-          print('PHOTO_PUBLIC_HEALTH_OK')
-          PY
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          ENV=/root/my-ai-unified/.local-ai.env
+          set -a
+          . "$ENV"
+          set +a
           python3 - <<'PY'
           import base64,json
-          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c6360606000000004000105f7f7d80000000049454e44ae426082')).decode()
+          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000020000000200802000000fc18eda30000000949444154789c636060f8cf00000004000101e0a35e0000000049454e44ae426082')).decode()
+          body={'messages':[{'role':'user','content':[{'type':'text','text':'Что изображено? Ответь кратко.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,'+png}}]}],'model':'qwen/qwen3.6-27b','temperature':0.7,'max_completion_tokens':256,'reasoning_effort':'none','reasoning_format':'hidden'}
+          open('/tmp/v.json','w').write(json.dumps(body,ensure_ascii=False))
           open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Что на изображении? Ответь кратко.'},ensure_ascii=False))
           PY
-          for i in $(seq 1 3); do
-            if curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out; then break; fi
-            sleep 5
-          done
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/photo.out'))
-          assert j.get('ok') and str(j.get('result','')).strip(),j
-          print('PHOTO_PUBLIC_OK')
-          print('PHOTO_RESULT:',str(j['result'])[:500])
-          PY
+          echo '=== DIRECT GROQ VISION ==='
+          curl -sS --max-time 90 -X POST https://api.groq.com/openai/v1/chat/completions -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' --data-binary @/tmp/v.json -o /tmp/groq.out -w 'HTTP:%{http_code}\n'
+          cat /tmp/groq.out | head -c 2000
+          echo
+          echo '=== LOCAL PHOTO ==='
+          curl -sS --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json -o /tmp/photo.out -w 'HTTP:%{http_code}\n'
+          cat /tmp/photo.out | head -c 3000
+          echo
+          REMOTE
