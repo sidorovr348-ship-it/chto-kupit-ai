@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Enforce supported vision model and verify
+      - name: Enforce supported vision model
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -30,13 +30,13 @@ jobs:
           test -f "$ENV"
           tmp=$(mktemp)
           grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
-          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.8-27b' >> "$tmp"
           mv "$tmp" "$ENV"
           python3 - <<'PY'
           p='/root/my-ai-unified/local-gateway.js'
           s=open(p,encoding='utf-8').read()
-          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
-          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.8-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
+          import re
+          s=re.sub(r"const GROQ_VISION_MODEL=[^;]+;", "const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.8-27b';", s, count=1)
           open(p,'w',encoding='utf-8').write(s)
           PY
           systemctl restart my-ai-unified
