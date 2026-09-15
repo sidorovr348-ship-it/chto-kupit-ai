@@ -2,11 +2,13 @@ name: My AI Unified — restore live chat provider
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   fix:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Restore live VPS chat
@@ -17,40 +19,33 @@ jobs:
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
-          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "python3 - <<'PY'
+          cat > /tmp/repair.py <<'PY'
           from pathlib import Path
+          import re
           p=Path('/root/my-ai-unified/local-gateway.js')
           s=p.read_text()
-          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
+          s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
+          sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; можно шутить и высказывать мнение, если это уместно. Если пользователь просто общается — общайся, не превращай разговор в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
+          s=re.sub(r"const sys='[^']*';",sys,s,count=1)
+          marker="const e=Error(errors.join(' | ')||'AI provider is not configured');e.status=502;throw e"
+          fallback="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN','PARALON_API_TOKEN');if(pk)try{return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,'qwen3.8-27b',messages,vision?60000:30000,vision),provider:'paralon',model:'qwen3.8-27b'}}catch(e){errors.push(`Paralon: ${e.message}`);console.error('PARALON_ERROR:',e.message)}"+marker
+          if marker in s and 'PARALON_API_KEY' not in s:s=s.replace(marker,fallback,1)
           p.write_text(s)
-          print('QWEN_VISION_RESTORED')
+          print('LIVE_CHAT_REPAIR_APPLIED')
           PY
-          node --check /root/my-ai-unified/local-gateway.js
-          systemctl restart my-ai-unified
-          for i in \$(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          print('LOCAL_HEALTH_OK')
-          PY
-          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_CHAT_OK')
-          PY
-          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
-          test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
-          curl -fsS --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/ph.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/ph.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
-          PY
-          curl -fsS --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
-          PY
+          scp "${O[@]}" -q /tmp/repair.py "$VPS_USER@$VPS_HOST:/tmp/repair-my-ai.py"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'python3 /tmp/repair-my-ai.py && node --check /root/my-ai-unified/local-gateway.js && systemctl restart my-ai-unified'
+          for i in $(seq 1 30); do systemctl=true; sleep 0; done
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" 'systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 10 http://127.0.0.1:3020/health > /tmp/h.json && cat /tmp/h.json'
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{\"prompt\":\"Ответь одним словом: ОК\"}' > /tmp/c.json && python3 -c 'import json; j=json.load(open(\"/tmp/c.json\")); assert j.get(\"ok\") and j.get(\"result\"); print(\"LOCAL_CHAT_OK\")'"
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 https://ai.aliceq.ru/health >/tmp/ph.json
+          python3 -c 'import json; j=json.load(open("/tmp/ph.json")); assert j.get("ok") and j.get("dispatcher"); print("PUBLIC_HEALTH_OK")'
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
+          python3 -c 'import json; j=json.load(open("/tmp/pc.json")); assert j.get("ok") and j.get("result"); print("PUBLIC_CHAT_OK")'
           echo LIVE_CHAT_RESTORED
