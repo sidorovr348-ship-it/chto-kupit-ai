@@ -12,22 +12,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Persist stable vision source
         run: |
-          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('local-gateway.js')
-          s=p.read_text()
-          s=s.replace('if(groq&&!vision)try{','if(groq)try{',1)
-          s=s.replace('qwen/qwen3.6-27b','qwen/qwen3.8-27b')
+          p=Path('local-gateway.js'); s=p.read_text()
+          s=s.replace('if(groq&&!vision)try{','if(groq)try{',1).replace('qwen/qwen3.6-27b','qwen/qwen3.8-27b')
+          marker="provider:'paralon'"
+          if marker not in s:
+              s=s.replace("const hf=keyOf(","const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');if(vision&&pk)try{return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,'qwen3.8-27b',messages,60000,true),provider:'paralon',model:'qwen3.8-27b'}}catch(e){errors.push('Paralon: '+e.message)};const hf=keyOf(",1)
           p.write_text(s)
           PY
-          if ! git diff --quiet -- local-gateway.js; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add local-gateway.js
-            git commit -m 'Restore Groq vision routing'
-            git push
-          fi
+          if ! git diff --quiet -- local-gateway.js; then git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com; git add local-gateway.js; git commit -m 'Add vision fallback'; git push; fi
       - name: Wait for production deploy
         run: sleep 60
       - name: Patch live VPS vision routing
@@ -41,4 +35,12 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'cd /root/my-ai-unified && sed -i "s/if(groq\\&\\&!vision)try{/if(groq)try{/" local-gateway.js && sed -i "s/qwen\\/qwen3\\.6-27b/qwen\\/qwen3.8-27b/g" local-gateway.js && node --check local-gateway.js && systemctl restart my-ai-unified && for i in $(seq 1 30); do if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h; then cat /tmp/h; exit 0; fi; sleep 1; done; exit 1'
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'cd /root/my-ai-unified && python3 - <<"PY"
+from pathlib import Path
+p=Path("local-gateway.js"); s=p.read_text()
+s=s.replace("if(groq&&!vision)try{","if(groq)try{",1).replace("qwen/qwen3.6-27b","qwen/qwen3.8-27b")
+if "provider:\u0027paralon\u0027" not in s:
+ s=s.replace("const hf=keyOf(","const pk=keyOf(\u0027PARALON_API_KEY\u0027,\u0027PARALON_KEY\u0027,\u0027PARALON_TOKEN\u0027);if(vision&&pk)try{return{text:await provider(\u0027https://paraloncloud.com/v1/chat/completions\u0027,pk,\u0027qwen3.8-27b\u0027,messages,60000,true),provider:\u0027paralon\u0027,model:\u0027qwen3.8-27b\u0027}}catch(e){errors.push(\u0027Paralon: \u0027+e.message)};const hf=keyOf(",1)
+p.write_text(s)
+PY
+node --check local-gateway.js && systemctl restart my-ai-unified && for i in $(seq 1 30); do if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h; then cat /tmp/h; exit 0; fi; sleep 1; done; exit 1'
