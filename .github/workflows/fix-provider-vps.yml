@@ -1,6 +1,7 @@
 name: My AI Unified — keep live high-capability provider
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,26 +11,35 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Keep live AI on high-capability text and vision models
+      - name: Keep live AI on supported high-capability models and verify photo
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
+          sleep 25
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
           ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
-          ENV=/root/my-ai-unified/.local-ai.env
+          APP=/root/my-ai-unified
+          ENV=$APP/.local-ai.env
           test -f "$ENV"
           cp -a "$ENV" "$ENV.backup.$(date +%Y%m%d-%H%M%S)"
           tmp=$(mktemp)
           grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
           printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.8-27b' >> "$tmp"
           mv "$tmp" "$ENV"
+          python3 - <<'PY'
+          p='/root/my-ai-unified/local-gateway.js'
+          s=open(p,encoding='utf-8').read()
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL='qwen/qwen3.8-27b'")
+          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.8-27b'")
+          open(p,'w',encoding='utf-8').write(s)
+          PY
           systemctl restart my-ai-unified
           sleep 5
           systemctl is-active --quiet my-ai-unified
@@ -47,4 +57,5 @@ jobs:
           PY
           curl --fail --silent --show-error --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json
           echo
+          echo 'LOCAL_PHOTO_OK'
           REMOTE
