@@ -8,21 +8,20 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - name: Wait for deployment and verify smart Pages
         run: |
           set -euo pipefail
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 'https://sidorovr348-ship-it.github.io/chto-kupit-ai/?smoke='"$i" -o /tmp/live.html 2>/dev/null && grep -q '2026-09-15-smart-v1' /tmp/live.html; then
-              echo SMART_PAGES_OK
-              break
-            fi
+          for i in $(seq 1 36); do
+            if curl -fsS --max-time 10 'https://sidorovr348-ship-it.github.io/chto-kupit-ai/?smoke='"$i" -o /tmp/live.html 2>/dev/null && grep -q 'My AI Unified' /tmp/live.html; then echo SMART_PAGES_OK; break; fi
             sleep 5
           done
+          test -s /tmp/live.html
           grep -q 'MediaRecorder' /tmp/live.html
           grep -q '.zip' /tmp/live.html
+          grep -q 'memoryId' /tmp/live.html
       - name: Verify public API
         run: |
           set -euo pipefail
@@ -30,13 +29,31 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          assert all(j.get('adapters',{}).get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
+          assert all(j.get('adapters',{}).get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','zip']),j
           print('HEALTH_OK')
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/chat.json')); assert j.get('ok') and j.get('result'),j; print('CHAT_OK')
+          PY
+      - name: Verify smart routing
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Кто ты?"}' >/tmp/who.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/who.json')); assert j.get('ok') and j.get('route')=='chat' and j.get('result'),j; print('CHAT_ROUTE_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди iPhone 18 Pro в Москве где купить дешевле"}' >/tmp/buy.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/buy.json')); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j; print('SHOPPING_ROUTE_OK',len(j['results']))
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди свежую информацию о погоде в Москве сегодня"}' >/tmp/search.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/search.json')); assert j.get('ok') and j.get('route')=='search' and j.get('sources'),j; print('SEARCH_ROUTE_OK',len(j['sources']))
           PY
       - name: Verify ZIP archive reading
         run: |
