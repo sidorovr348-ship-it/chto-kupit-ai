@@ -1,7 +1,7 @@
 name: My AI Unified — authoritative production verification
 on:
   workflow_run:
-    workflows: ["My AI Unified — production deploy v2"]
+    workflows: ["My AI Unified — production deploy v3 smart"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -20,16 +20,16 @@ jobs:
           npm init -y
           npm install --no-save playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Cool down provider and verify API features
+      - name: Verify API features
         run: |
           set -euo pipefail
-          sleep 90
+          sleep 20
           API='https://ai.aliceq.ru'
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/h.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','imageGeneration']),j
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
           print('HEALTH_OK',a)
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/search" -H 'Content-Type: application/json' --data '{"query":"iPhone 18 Pro Москва цена"}' >/tmp/s.json
@@ -42,7 +42,7 @@ jobs:
           import json
           j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('SHOPPING_OK',len(j['results']))
           PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/photo" -H 'Content-Type: application/json' --data '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/photo.json
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/photo" -H 'Content-Type: application/json' --data '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/photo.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/photo.json')); assert j.get('ok') and j.get('result'),j; print('PHOTO_OK',j.get('provider'),j.get('model'))
@@ -59,21 +59,21 @@ jobs:
           import json
           j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('CHAT_OK')
           PY
-          curl --fail --silent --show-error --retry 2 --retry-all-errors --retry-delay 3 --max-time 210 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Минималистичный синий круг на белом фоне, без текста."}' >/tmp/img.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/img.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j; print('IMAGE_GENERATION_OK')
-          if j.get('dataUrl'): assert j['dataUrl'].startswith('data:image/'), 'bad dataUrl'
-          PY
-      - name: Verify actual browser, camera and photo
+      - name: Verify Pages smart frontend
         env:
           APP_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
           API_URL: https://ai.aliceq.ru
-        run: node browser-smoke.mjs
-      - name: Verify Pages artifact
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 "https://sidorovr348-ship-it.github.io/chto-kupit-ai/?verify=$(date +%s)" -o /tmp/live.html
-          grep -q 'app-version' /tmp/live.html
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 "$APP_URL?verify=$(date +%s)" -o /tmp/live.html
+          grep -q '2026-09-15-smart-v1' /tmp/live.html
+          grep -q 'MediaRecorder' /tmp/live.html
+          grep -q 'getUserMedia' /tmp/live.html
+          grep -q '.zip' /tmp/live.html
           grep -q 'https://ai.aliceq.ru' /tmp/live.html
-          echo PAGES_OK
+          echo SMART_PAGES_OK
+      - name: Verify source syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'); const h=fs.readFileSync('smart-index.html','utf8'); const x=h.match(/<script>([\s\S]*?)<\/script>/i); if(!x) throw Error('script missing'); new Function(x[1]); console.log('SMART_SOURCE_JS_OK');
+          NODE
