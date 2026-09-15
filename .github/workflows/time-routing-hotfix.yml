@@ -1,0 +1,71 @@
+name: My AI Unified — current time routing hotfix
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: my-ai-unified-time-hotfix
+  cancel-in-progress: true
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch live gateway
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          WORKDIR=$(systemctl show -p WorkingDirectory --value my-ai-unified)
+          cd "$WORKDIR"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('local-gateway.js')
+          s=p.read_text()
+          marker="CURRENT_TIME_ROUTING_V1"
+          if marker not in s:
+              target="app.post('/chat',async(req,res)=>"
+              patch="""const CURRENT_TIME_ROUTING_V1=true;
+          function isCurrentTimeQuestion(q){return /\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(String(q||''));}
+          function currentMoscowTime(){return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());}
+          app.post('/chat',async(req,res)=>"""
+              if target not in s: raise SystemExit('CHAT_ROUTE_NOT_FOUND')
+              s=s.replace(target,patch,1)
+              old="const z=wantsSearch(textOf(m))&&keyOf('SERPER_API_KEY','SERPER_KEY')?await answerWithSearch(m):await ask(m);"
+              new="const userText=textOf(m);if(isCurrentTimeQuestion(userText)){return res.json({ok:true,route:'time',result:`Сейчас в Москве ${currentMoscowTime()}.`});}const z=wantsSearch(userText)&&keyOf('SERPER_API_KEY','SERPER_KEY')?await answerWithSearch(m):await ask(m);"
+              if old not in s: raise SystemExit('CHAT_BODY_TARGET_NOT_FOUND')
+              s=s.replace(old,new,1)
+              p.write_text(s)
+              print('TIME_ROUTING_PATCH_OK')
+          else:
+              print('TIME_ROUTING_ALREADY_PRESENT')
+          PY
+          node --check local-gateway.js
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          test -s /tmp/h.json
+          curl -fsS --max-time 30 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"А сколько времени в Москве?"}' >/tmp/time.json
+          python3 - <<'PY'
+          import json,re
+          j=json.load(open('/tmp/time.json')); assert j.get('ok') and j.get('route')=='time',j
+          assert re.search(r'Сейчас в Москве \d{2}:\d{2}:\d{2}',j.get('result','')),j
+          print('LOCAL_TIME_ROUTE_OK:',j['result'])
+          PY
+          curl -fsS --max-time 30 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"А сколько времени в Москве?"}' >/tmp/public-time.json
+          python3 - <<'PY'
+          import json,re
+          j=json.load(open('/tmp/public-time.json')); assert j.get('ok') and j.get('route')=='time',j
+          assert re.search(r'Сейчас в Москве \d{2}:\d{2}:\d{2}',j.get('result','')),j
+          print('PUBLIC_TIME_ROUTE_OK:',j['result'])
+          PY
+          REMOTE
