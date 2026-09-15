@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Keep live AI on the high-capability text model and verify
+      - name: Keep live AI on high-capability text and vision models
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -28,7 +28,7 @@ jobs:
           cp -a "$ENV" "$ENV.backup.$(date +%Y%m%d-%H%M%S)"
           tmp=$(mktemp)
           grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
-          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.8-27b' >> "$tmp"
           mv "$tmp" "$ENV"
           systemctl restart my-ai-unified
           sleep 5
