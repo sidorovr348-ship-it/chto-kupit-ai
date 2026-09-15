@@ -22,6 +22,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check local-gateway.js
+          node --check memory-map.js
           node - <<'NODE'
           const fs=require('fs');
           const h=fs.readFileSync('smart-index.html','utf8');
@@ -48,6 +49,7 @@ jobs:
           workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           test -n "$workdir"
           scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q memory-map.js "$VPS_USER@$VPS_HOST:$workdir/memory-map.js"
           scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
           ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
           set -euo pipefail
@@ -56,6 +58,11 @@ jobs:
           from pathlib import Path
           import re
           p=Path('local-gateway.js'); s=p.read_text()
+          s=s.replace("const path=require('path');", "const path=require('path');\nconst {memoryMiddleware,memoryRoutes}=require('./memory-map');", 1) if "require('./memory-map')" not in s else s
+          if "app.use(memoryMiddleware);" not in s:
+              marker="app.get('/health'"
+              if marker not in s: raise SystemExit('MEMORY_ROUTE_TARGET_NOT_FOUND')
+              s=s.replace(marker,"app.use(memoryMiddleware);\nmemoryRoutes(app);\n"+marker,1)
           s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
           s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
           sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; если пользователь просто общается — общайся, а не превращай ответ в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
@@ -73,6 +80,7 @@ jobs:
           PY
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
+          node --check memory-map.js
           systemctl restart my-ai-unified
           for i in $(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
           python3 - <<'PY'
@@ -88,6 +96,16 @@ jobs:
           PY
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
+          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"smoke-memory","prompt":"Эй, запомни правило: отвечай по-русски"}' >/tmp/m.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/m.json')); assert j.get('ok') and 'Запомнил' in j.get('result',''),j; print('LOCAL_MEMORY_SAVE_OK')
+          PY
+          curl -fsS --max-time 20 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"memoryId":"smoke-memory","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/m2.json')); assert 'по-русски' in j.get('result',''),j; print('LOCAL_MEMORY_READ_OK')
+          PY
           REMOTE
       - name: Verify public API
         run: |
@@ -107,12 +125,31 @@ jobs:
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
           test -s /tmp/t.mp3; echo PUBLIC_TTS_OK
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"memoryId":"public-smoke","prompt":"Эй, запомни правило: smoke-memory-OK"}' >/tmp/m.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/m.json')); assert j.get('ok') and 'Запомнил' in j.get('result',''),j; print('PUBLIC_MEMORY_SAVE_OK')
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"memoryId":"public-smoke","prompt":"Эй, что ты обо мне запомнил?"}' >/tmp/m2.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/m2.json')); assert 'smoke-memory-OK' in j.get('result',''),j; print('PUBLIC_MEMORY_READ_OK')
+          PY
       - name: Publish smart Pages
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('smart-index.html'); x=p.read_text()
+          if 'my-ai-memory-id-v1' not in x:
+              x=x.replace("const API='https://ai.aliceq.ru'", "const API='https://ai.aliceq.ru',MEMORY_KEY='my-ai-memory-id-v1',MEMORY_ID=localStorage.getItem(MEMORY_KEY)||(crypto.randomUUID?crypto.randomUUID():(Date.now().toString(36)+Math.random().toString(36).slice(2)));localStorage.setItem(MEMORY_KEY,MEMORY_ID)",1)
+          if 'memoryId:MEMORY_ID' not in x:
+              x=x.replace("api('/chat',{prompt:t,messages}","api('/chat',{prompt:t,messages,memoryId:MEMORY_ID}",1)
+          p.write_text(x)
+          PY
           rm -rf pages && mkdir pages
           cp smart-index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15-memory-map"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
