@@ -18,6 +18,36 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+      - name: Patch frontend before validation and publication
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text()
+          marker='MY_AI_UNIFIED_CLEAN_UI_V4'
+          if marker not in s:
+              old="function rich(text,sources=[]){const d=add('','ai');for(const p of String(text??'').split(/(https?:\\/\\/[^\\s]+)/g)){if(/^https?:\\/\\//i.test(p)){const a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener noreferrer';a.textContent=p;d.appendChild(a)}else d.appendChild(document.createTextNode(p))}for(const s of sources||[]){if(/^https?:\\/\\//i.test(String(s?.link||''))){const a=document.createElement('a');a.href=s.link;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Источник: '+(s.title||s.link);d.appendChild(a)}}return d}"
+              new="function rich(text,sources=[]){const d=add('','ai');for(const p of String(text??'').split(/(https?:\\/\\/[^\\s]+)/g)){if(/^https?:\\/\\//i.test(p)){const a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener noreferrer';a.textContent=p;d.appendChild(a)}else d.appendChild(document.createTextNode(p))}return d}"
+              if old not in s: raise SystemExit('RICH_TARGET_NOT_FOUND')
+              s=s.replace(old,new,1)
+              old2="if(x.evidence){const ev=document.createElement('div');ev.className='muted';ev.textContent='Источник: '+x.evidence;d.appendChild(ev)}"
+              s=s.replace(old2,'',1)
+              marker_send="async function send(){const text=input.value.trim();if(!text||busy)return;"
+              if marker_send not in s: raise SystemExit('SEND_TARGET_NOT_FOUND')
+              timeblock="""async function send(){const text=input.value.trim();if(!text||busy)return;
+          if(/\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(text)){
+            add(text,'user'); input.value='';
+            const now=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
+            const result=`Сейчас в Москве ${now}.`;
+            messages.push({role:'user',content:text},{role:'assistant',content:result});
+            rich(result); speak(result); return;
+          }
+          add(text,'user');"""
+              s=s.replace(marker_send,timeblock,1)
+              p.write_text(s)
+              print('MY_AI_UNIFIED_CLEAN_UI_V4_OK')
+          else: print('MY_AI_UNIFIED_CLEAN_UI_V4_ALREADY_PRESENT')
+          PY
       - name: Validate frontend and backend
         run: |
           set -euo pipefail
@@ -29,7 +59,10 @@ jobs:
           if(!scripts.length) throw new Error('frontend script missing');
           for(const s of scripts) new Function(s[1]);
           for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!html.includes('id="'+id+'"')) throw new Error('missing UI control '+id);
-          console.log('SOURCE_OK');
+          if(html.includes("Источник: '+(s.title||s.link)")) throw new Error('source links still rendered');
+          if(html.includes("Источник: '+x.evidence")) throw new Error('shopping evidence still rendered');
+          if(!html.includes('Europe/Moscow')) throw new Error('Moscow time handler missing');
+          console.log('SOURCE_OK_CLEAN_UI');
           NODE
       - name: Deploy to VPS
         env:
@@ -62,10 +95,6 @@ jobs:
           if marker in s and "MISTRAL_VISION_MODEL" not in s:
               ins="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)try{const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral Vision: ${e.message}`)}}"
               s=s.replace(marker,ins+marker,1)
-          old="async function generateImage(prompt){const k=keyOf('OPENAI_API_KEY');if(!k)throw Object.assign(Error('Генерация изображений не настроена: нужен доступ к сервису изображений.'),{status:503});const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${k}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)}),d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(`Генерация изображения: HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,300)}`),{status:r.status});const x=d?.data?.[0];if(!x)throw Error('Сервис изображений не вернул результат');return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null}"
-          new="async function generateImage(prompt){const ok=keyOf('OPENAI_API_KEY');if(ok){const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${ok}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)}),d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(`Генерация изображения: HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,300)}`),{status:r.status});const x=d?.data?.[0];if(!x)throw Error('Сервис изображений не вернул результат');return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null}const mk=keyOf('MISTRAL_API_KEY');if(!mk)throw Object.assign(Error('Генерация изображений не настроена: нет ключа OpenAI или Mistral.'),{status:503});const create=await fetch('https://api.mistral.ai/v1/agents',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({model:process.env.MISTRAL_IMAGE_MODEL||'mistral-medium-latest',name:'My AI Image Agent',description:'Image generation agent for My AI Unified',instructions:'Use the image_generation tool to generate the requested image. Return the generated image file.',tools:[{type:'image_generation'}],completion_args:{temperature:.3,top_p:.95}}),signal:AbortSignal.timeout(60000)});const ca=await create.json().catch(()=>({}));if(!create.ok)throw Object.assign(Error(`Mistral image agent HTTP ${create.status}: ${String(ca?.message||ca?.error?.message||'').slice(0,300)}`),{status:create.status});const agentId=ca?.id;if(!agentId)throw Error('Mistral не вернул ID агента генерации');const conv=await fetch('https://api.mistral.ai/v1/conversations',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({inputs:String(prompt).slice(0,4000),stream:false,agent_id:agentId}),signal:AbortSignal.timeout(180000)});const cv=await conv.json().catch(()=>({}));if(!conv.ok)throw Object.assign(Error(`Mistral image conversation HTTP ${conv.status}: ${String(cv?.message||cv?.error?.message||'').slice(0,300)}`),{status:conv.status});let fileId='';for(const out of (cv?.outputs||[])){for(const chunk of (out?.content||[])){if(chunk&&typeof chunk==='object'&&(chunk.file_id||chunk.fileId))fileId=chunk.file_id||chunk.fileId}}if(!fileId)throw Error('Mistral не вернул файл изображения');const fr=await fetch(`https://api.mistral.ai/v1/files/${encodeURIComponent(fileId)}/content`,{headers:{Authorization:`Bearer ${mk}`,Accept:'application/octet-stream'},signal:AbortSignal.timeout(60000)});if(!fr.ok)throw Object.assign(Error(`Mistral image file HTTP ${fr.status}`),{status:fr.status});const bytes=Buffer.from(await fr.arrayBuffer());if(!bytes.length)throw Error('Mistral вернул пустой файл изображения');return{dataUrl:`data:image/png;base64,${bytes.toString('base64')}`}}"
-          if old not in s: raise SystemExit('GENERATE_IMAGE_TARGET_NOT_FOUND')
-          s=s.replace(old,new,1)
           s=s.replace("imageGeneration:!!keyOf('OPENAI_API_KEY')","imageGeneration:!!(keyOf('OPENAI_API_KEY')||keyOf('MISTRAL_API_KEY'))",1)
           p.write_text(s)
           print('RUNTIME_PATCH_OK')
@@ -103,7 +132,7 @@ jobs:
       - name: Publish Pages
         run: |
           rm -rf pages && mkdir pages && cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2"}' > pages/api.json
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2-clean-ui"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
