@@ -1,4 +1,4 @@
-name: My AI Unified — fix live provider configuration
+name: My AI Unified — keep live high-capability provider
 on:
   push:
   workflow_dispatch:
@@ -7,10 +7,10 @@ permissions:
 jobs:
   fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Fix live AI provider configuration and verify
+      - name: Keep live AI on the high-capability text model and verify
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -28,18 +28,16 @@ jobs:
           cp -a "$ENV" "$ENV.backup.$(date +%Y%m%d-%H%M%S)"
           tmp=$(mktemp)
           grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
-          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-20b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
           mv "$tmp" "$ENV"
           systemctl restart my-ai-unified
           sleep 5
           systemctl is-active --quiet my-ai-unified
-          echo 'Waiting for the previous Groq rate window to clear...'
-          sleep 25
           echo '=== HEALTH ==='
           curl --fail --silent --show-error --max-time 20 http://127.0.0.1:3020/health
           echo
           echo '=== CHAT ==='
-          curl --fail --silent --show-error --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
+          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
           echo
           echo '=== PHOTO ==='
           python3 - <<'PY'
