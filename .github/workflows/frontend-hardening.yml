@@ -1,0 +1,49 @@
+name: Frontend hardening
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/frontend-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch command handler
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('smart-index.html')
+          s=p.read_text(encoding='utf-8')
+          a=s.find('async function send(){')
+          b=s.find('async function data(f){',a)
+          if a < 0 or b <= a:
+              raise SystemExit('send function not found')
+          lines=[
+          "async function send(){",
+          "let t=input.value.trim();if(!t||busy)return;",
+          "add(t,'user');input.value='';messages.push({role:'user',content:t});",
+          "let w=add('⏳');busy=true;",
+          "try{",
+          "let j=await api('/chat',{prompt:t,messages:messages,memoryId:MEMORY_ID},180000);",
+          "w.remove();",
+          "if(j.routeUrl){let d=add(j.result||'Маршрут построен.');let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);say(j.result||'Маршрут построен.');}",
+          "else if(j.results&&j.results.length){for(let x of j.results.slice(0,12)){let d=add((x.store||x.merchant||'Магазин')+'\\n'+(x.title||'Товар')+'\\n'+(x.price!=null?x.price+' '+(x.currency||'RUB'):'Цена не указана'));if(x.url){let a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener';a.textContent='Открыть';d.append(a);}}}",
+          "else{let r=String(j.result||'');messages.push({role:'assistant',content:r});links(r);say(r);}",
+          "}catch(e){w.remove();add('🔴 '+e.message)}finally{busy=false}",
+          "}"
+          ]
+          s=s[:a]+' '.join(lines)+s[b:]
+          p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add smart-index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Harden frontend command handler'
+          git push
