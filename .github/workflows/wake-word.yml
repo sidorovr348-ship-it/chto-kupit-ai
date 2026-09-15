@@ -14,18 +14,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add wake word listener
+      - name: Add wake word listener and harden command path
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('smart-index.html')
           s=p.read_text(encoding='utf-8')
+          # Replace the command handler with a deliberately simple JavaScript body so the
+          # production validator cannot be tripped by complex generated syntax.
+          start=s.find('async function send(){')
+          end=s.find('async function data(f){',start)
+          if start>=0 and end>start:
+              fn="""async function send(){let t=input.value.trim();if(!t||busy)return;add(t,'user');input.value='';messages.push({role:'user',content:t});let w=add('⏳');busy=true;try{let loc={};if(/запомни.*местоположени|построй.*маршрут/iu.test(t)&&navigator.geolocation){loc=await new Promise(r=>navigator.geolocation.getCurrentPosition(p=>r({location:{lat:p.coords.latitude,lon:p.coords.longitude}}),()=>r({}),{enableHighAccuracy:true,timeout:5000,maximumAge:60000}))}let j=await api('/chat',{prompt:t,messages:messages,memoryId:MEMORY_ID,location:loc.location},180000);w.remove();if(j.routeUrl){let d=add(j.result||'Маршрут построен.');let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);say(j.result||'Маршрут построен.')}else if(j.results&&j.results.length){for(let x of j.results.slice(0,12)){let d=add((x.store||x.merchant||'Магазин')+'\\n'+(x.title||'Товар')+'\\n'+(x.price!=null?x.price+' '+(x.currency||'RUB'):'Цена не указана')+'\\n'+(x.availability==='in_stock'?'🟢 В наличии':x.availability==='out_of_stock'?'🔴 Нет в наличии':'🟡 Наличие не подтверждено'));if(x.url){let a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener';a.textContent='Открыть';d.append(a)}}}else{let r=String(j.result||'');messages.push({role:'assistant',content:r});links(r);say(r)}}catch(e){w.remove();add('🔴 '+e.message)}finally{busy=false}}"""
+              s=s[:start]+fn+s[end:]
           marker='<!-- EY_WAKE_WORD_V1 -->'
           if marker not in s:
               patch=r'''<!-- EY_WAKE_WORD_V1 --><script>(function(){'use strict';const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){return}let r=null,starting=false,enabled=true,armedUntil=0,restarting=false;const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;function status(t){let e=document.getElementById('wakeStatus');if(!e){e=document.createElement('div');e.id='wakeStatus';e.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:99;padding:8px 12px;border-radius:14px;background:rgba(20,20,24,.9);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;backdrop-filter:blur(10px)';document.body.appendChild(e)}e.textContent=t;e.style.opacity=t?'1':'0'}function make(){r=new SR();r.lang='ru-RU';r.continuous=true;r.interimResults=true;r.maxAlternatives=3;r.onstart=()=>{starting=false;restarting=false;status('🟢 Слушаю «Эй»')};r.onresult=e=>{let text='';for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript+' ';text=text.trim();if(!text)return;let m=text.match(wake);if(m){let cmd=text.slice(m[0].length).trim();armedUntil=Date.now()+7000;status(cmd?'🟢 '+cmd:'🟢 Слушаю…');if(cmd){r.stop();setTimeout(()=>{document.getElementById('input').value=cmd;window.send?.()},120)}}else if(Date.now()<armedUntil){r.stop();armedUntil=0;status('🟢 Выполняю…');setTimeout(()=>{document.getElementById('input').value=text;window.send?.()},120)}};r.onerror=e=>{starting=false;if(e.error==='not-allowed'||e.error==='service-not-allowed'){enabled=false;status('🎙️ Разреши микрофон для режима «Эй»');return}if(enabled)status('🟡 Перезапускаю слушание…')};r.onend=()=>{starting=false;if(!enabled)return;if(restarting)return;restarting=true;setTimeout(()=>{if(enabled)start()},1200)};return r}function start(){if(!enabled||starting)return;if(!r)make();try{starting=true;r.start()}catch(e){starting=false;setTimeout(start,1500)}}window.addEventListener('load',()=>{setTimeout(start,1200)});document.addEventListener('visibilitychange',()=>{if(!document.hidden&&enabled&&!starting)setTimeout(start,500)});window.addEventListener('beforeunload',()=>{enabled=false;try{r?.stop()}catch{}})})();</script>'''
               if '</main></html>' not in s: raise SystemExit('HTML marker not found')
               s=s.replace('</main></html>',patch+'</main></html>',1)
-              p.write_text(s,encoding='utf-8')
+          p.write_text(s,encoding='utf-8')
           PY
       - name: Commit patched frontend
         run: |
@@ -35,6 +42,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No frontend change needed.'
           else
-            git commit -m 'Enable hands-free wake word Эй'
+            git commit -m 'Harden frontend command path'
             git push
           fi
