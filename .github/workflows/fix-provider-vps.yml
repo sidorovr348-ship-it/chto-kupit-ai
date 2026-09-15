@@ -6,14 +6,13 @@ permissions:
   contents: read
 jobs:
   fix:
-    if: contains(github.event.head_commit.message, '[vision-hotfix2]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Wait for production deploy
         run: sleep 60
-      - name: Verify vision fallback
+      - name: Force stable vision path
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
