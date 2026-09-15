@@ -1,15 +1,19 @@
-name: My AI Unified — provider fixer (manual only)
+name: My AI Unified — provider fixer
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
   fix:
+    if: contains(github.event.head_commit.message, '[vision-hotfix2]')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Verify live supported provider without changing production
+      - name: Wait for production deploy
+        run: sleep 60
+      - name: Switch vision model and verify
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -19,5 +23,29 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
-          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'systemctl is-active --quiet my-ai-unified && curl --fail --silent --show-error --max-time 20 http://127.0.0.1:3020/health'
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          W=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "W='$W' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$W"
+          sed -i 's/qwen\/qwen3\.8-27b/qwen\/qwen3.6-27b/g' local-gateway.js
+          sed -i 's/^GROQ_VISION_MODEL=.*/GROQ_VISION_MODEL=qwen\/qwen3.6-27b/' /root/my-ai-unified/.local-ai.env || true
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h && break; sleep 1; done
+          python3 - <<'PY'
+          import json
+          assert json.load(open('/tmp/h')).get('ok')
+          PY
+          python3 - <<'PY'
+          import json
+          p='iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAA9klEQVR4nO2ZwQ3DMAwDm6KjeP+JPIRH6KNAHy3QwhQFWhDvndA6S4GR5Fpr3SpzVxcQxQJqLKDGAmosoMYCaiygprzAg544xvh9wZyTuNzFeh/4W/c3FBPOCAHVw3d9EO0ApYhIK0IdoFQfzMEFWNUH00ABbvWRzPLnACKQsf1w8rZAXvVYfssROoo9gez5AVZp1oEDsYAaC6ixgBoLqNkT4H4RoazSrAMHsi2QPUW7+UgH8hyA5H4j9CKjCVgm3gGuA5wWGiGWQySH83kdfleObwHnIcbqoDSQ9oPjTdU/NCq6ngPnYAE1FlBjATUWUGMBNeUFnnn0Sl31fm3mAAAAAElFTkSuQmCC'
+          open('/tmp/p','w').write(json.dumps({'images':['data:image/png;base64,'+p],'prompt':'Что изображено? Ответь кратко.'},ensure_ascii=False))
+          PY
+          C=$(curl -sS --max-time 120 -o /tmp/o -w '%{http_code}' -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/p)
+          cat /tmp/o
+          test "$C" = 200
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/o')); assert j.get('ok') and j.get('result'); print('VISION_OK',j.get('provider'),j.get('model'))
+          PY
