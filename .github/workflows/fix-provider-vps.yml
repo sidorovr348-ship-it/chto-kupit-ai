@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Wait for production deploy
         run: sleep 60
-      - name: Force stable vision path
+      - name: Restore stable Groq vision
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -23,4 +23,4 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'cd /root/my-ai-unified && sed -i "s/if(groq)try{/if(groq\\&\\&!vision)try{/" local-gateway.js && sed -i "s/qwen\\/qwen3\\.6-27b/qwen\\/qwen3.8-27b/g" local-gateway.js && systemctl restart my-ai-unified && for i in $(seq 1 30); do if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h; then cat /tmp/h; exit 0; fi; sleep 1; done; systemctl status my-ai-unified --no-pager -l; exit 1'
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'cd /root/my-ai-unified && sed -i "s/if(groq\\&\\&!vision)try{/if(groq)try{/" local-gateway.js && sed -i "s/qwen\\/qwen3\\.6-27b/qwen\\/qwen3.8-27b/g" local-gateway.js && systemctl restart my-ai-unified && for i in $(seq 1 30); do if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h; then cat /tmp/h; exit 0; fi; sleep 1; done; systemctl status my-ai-unified --no-pager -l; exit 1'
