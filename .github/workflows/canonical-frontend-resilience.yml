@@ -1,0 +1,30 @@
+name: My AI Unified — canonical frontend resilience
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make frontend network calls resilient
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text()
+          a=s.index('async function post(path,body,timeout=120000){')
+          b=s.index('async function check(){',a)
+          new='''async function post(path,body,timeout=120000){let last=null;for(let attempt=0;attempt<3;attempt++){const c=new AbortController(),tm=setTimeout(()=>c.abort(),timeout);try{const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body),cache:'no-store',mode:'cors',signal:c.signal});const t=await r.text();let j={};try{j=JSON.parse(t)}catch{}if(!r.ok){const e=Error(j.error||('Ошибка сервера HTTP '+r.status));if((r.status>=500||r.status===429)&&attempt<2){last=e;await new Promise(x=>setTimeout(x,800*(attempt+1)));continue}throw e}return j}catch(e){last=e;if(attempt<2){await new Promise(x=>setTimeout(x,800*(attempt+1)));continue}if(e.name==='AbortError')throw Error('Сервер не ответил вовремя.');if(/Load failed|Failed to fetch|NetworkError/i.test(e.message))throw Error('Не удаётся связаться с AI-сервером. Проверь интернет/VPN и повтори.');throw e}finally{clearTimeout(tm)}}throw last||Error('Не удалось выполнить запрос.')}\n'''
+          s=s[:a]+new+s[b:]
+          p.write_text(s)
+          PY
+      - name: Commit canonical fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'fix: make frontend API calls resilient [skip ci]'
+          git push
