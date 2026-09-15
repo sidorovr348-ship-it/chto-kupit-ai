@@ -1,0 +1,66 @@
+name: My AI Unified — final browser verification
+on:
+  workflow_run:
+    workflows: ["My AI Unified — repair live and verify"]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public API
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 https://ai.aliceq.ru/health > health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('health.json'))
+          assert j.get('ok') and j.get('dispatcher'),j
+          assert j.get('adapters',{}).get('groq'),j
+          assert j.get('adapters',{}).get('groqVision'),j
+          assert j.get('adapters',{}).get('tts'),j
+          print('API_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Скажи коротко: Эй на связи."}' > chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('chat.json')); assert j.get('ok') and str(j.get('result','')).strip(),j
+          print('API_CHAT_OK:',j['result'][:120])
+          PY
+      - name: Install browser
+        run: npx --yes playwright@1.55.0 install --with-deps chromium
+      - name: Browser verify mobile UI
+        env:
+          PAGES_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
+          VERCEL_URL: https://chto-kupit-ai.vercel.app/
+        run: |
+          cat > /tmp/verify.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const urls=[process.env.PAGES_URL,process.env.VERCEL_URL];
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:393,height:852},isMobile:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1'});
+          for(const url of urls){
+            const page=await context.newPage();
+            await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
+            await page.waitForTimeout(2000);
+            await page.locator('h1').filter({hasText:'Эй'}).waitFor({timeout:15000});
+            await page.getByRole('button',{name:/Эй/}).waitFor({timeout:15000});
+            const source=await page.content();
+            if(!source.includes('SpeechRecognition')&&!source.includes('webkitSpeechRecognition')) throw new Error('wake-word speech code missing at '+url);
+            const input=page.locator('#input');
+            await input.fill('Привет, Эй');
+            await page.locator('#send').click();
+            await page.waitForTimeout(12000);
+            const texts=await page.locator('.msg').allTextContents();
+            if(texts.length<3) throw new Error('chat did not produce a response at '+url+' messages='+texts.length);
+            console.log('BROWSER_OK',url,texts.slice(-2));
+            await page.close();
+          }
+          await browser.close();
+          JS
+          node /tmp/verify.mjs
