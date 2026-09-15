@@ -51,7 +51,7 @@ jobs:
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/h.json"; then break; fi
             sleep 1
           done
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "test -s /tmp/h.json && python3 - <<'PY'\nimport json\nx=json.load(open('/tmp/h.json'))\na=x.get('adapters',{})\nneed=['groq','groqVision','search','tts','stt','documents','video','zip']\nmissing=[k for k in need if not a.get(k)]\nassert not missing, ('missing adapters',missing,x)\nprint('LOCAL_HEALTH_OK')\nPY"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "python3 -c 'import json; x=json.load(open(\"/tmp/h.json\")); a=x.get(\"adapters\",{}); need=[\"groq\",\"groqVision\",\"search\",\"tts\",\"stt\",\"documents\",\"video\",\"zip\"]; missing=[k for k in need if not a.get(k)]; assert not missing, (\"missing adapters\",missing,x); print(\"LOCAL_HEALTH_OK\")'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"prompt\":\"Кто ты?\"}' http://127.0.0.1:3020/chat | grep -q 'result'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"iPhone 18 Pro\"}' http://127.0.0.1:3020/shopping | grep -q 'results'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"погода сегодня Москва\"}' http://127.0.0.1:3020/search | grep -q 'results'"
