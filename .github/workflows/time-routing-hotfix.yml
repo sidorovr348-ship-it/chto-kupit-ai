@@ -34,10 +34,14 @@ jobs:
           from pathlib import Path
           p=Path('local-gateway.js')
           s=p.read_text()
-          marker="CURRENT_TIME_ROUTING_V1"
-          if marker not in s:
+          old_regex=r"function isCurrentTimeQuestion(q){return /\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(String(q||''));}"
+          new_regex="function isCurrentTimeQuestion(q){return /\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(String(q||''));}"
+          if old_regex in s:
+              s=s.replace(old_regex,new_regex,1)
+          s=s.replace('CURRENT_TIME_ROUTING_V1','CURRENT_TIME_ROUTING_V2')
+          if 'CURRENT_TIME_ROUTING_V2' not in s:
               target="app.post('/chat',async(req,res)=>"
-              patch="""const CURRENT_TIME_ROUTING_V1=true;
+              patch="""const CURRENT_TIME_ROUTING_V2=true;
           function isCurrentTimeQuestion(q){return /\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(String(q||''));}
           function currentMoscowTime(){return new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());}
           app.post('/chat',async(req,res)=>"""
@@ -47,10 +51,8 @@ jobs:
               new="const userText=textOf(m);if(isCurrentTimeQuestion(userText)){return res.json({ok:true,route:'time',result:`Сейчас в Москве ${currentMoscowTime()}.`});}const z=wantsSearch(userText)&&keyOf('SERPER_API_KEY','SERPER_KEY')?await answerWithSearch(m):await ask(m);"
               if old not in s: raise SystemExit('CHAT_BODY_TARGET_NOT_FOUND')
               s=s.replace(old,new,1)
-              p.write_text(s)
-              print('TIME_ROUTING_PATCH_OK')
-          else:
-              print('TIME_ROUTING_ALREADY_PRESENT')
+          p.write_text(s)
+          print('TIME_ROUTING_V2_READY')
           PY
           node --check local-gateway.js
           systemctl restart my-ai-unified
