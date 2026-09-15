@@ -1,0 +1,41 @@
+name: My AI Unified — public photo smoke
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  photo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Public health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 https://ai.aliceq.ru/health > /tmp/health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/health.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
+          assert j.get('adapters',{}).get('groqVision'), j
+          print('PHOTO_HEALTH_OK')
+          PY
+      - name: Public photo analysis
+        env:
+          IMAGE_B64: iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAA9klEQVR4nO2ZwQ3DMAwDm6KjeP+JPIRH6KNAHy3QwhQFWhDvndA6S4GR5Fpr3SpzVxcQxQJqLKDGAmosoMYCaiygprzAg544xvh9wZyTuNzFeh/4W/c3FBPOCAHVw3d9EO0ApYhIK0IdoFQfzMEFWNUH00ABbvWRzPLnACKQsf1w8rZAXvVYfssROoo9gez5AVZp1oEDsYAaC6ixgBoLqNkT4H4RoazSrAMHsi2QPUW7+UgH8hyA5H4j9CKjCVgm3gGuA5wWGiGWQySH83kdfleObwHnIcbqoDSQ9oPjTdU/NCq6ngPnYAE1FlBjATUWUGMBNeUFnnn0Sl31fm3mAAAAAElFTkSuQmCC
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,base64
+          body={"images":["data:image/png;base64,"+os.environ["IMAGE_B64"]],"prompt":"Что изображено на фотографии? Ответь кратко по-русски."}
+          open('/tmp/photo.json','w').write(json.dumps(body,ensure_ascii=False))
+          PY
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 180 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json > /tmp/result.json || { cat /tmp/result.json 2>/dev/null || true; exit 1; }
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/result.json'))
+          assert j.get('ok') and str(j.get('result','')).strip(), j
+          print('PUBLIC_PHOTO_OK')
+          print(j['result'][:500])
+          PY
