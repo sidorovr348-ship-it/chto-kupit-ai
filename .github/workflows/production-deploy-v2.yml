@@ -22,7 +22,6 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate source
         run: |
           set -euo pipefail
@@ -34,7 +33,6 @@ jobs:
           grep -q 'MediaRecorder' smart-index.html
           grep -q 'memoryId' smart-index.html
           echo SOURCE_OK
-
       - name: Deploy backend to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -63,12 +61,11 @@ jobs:
             if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
             sleep 1
           done
+          test -s /tmp/h.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/h.json'))
-          assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{})
-          assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','zip']),j
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','zip']),j
           print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
@@ -87,7 +84,6 @@ jobs:
           j=json.load(open('/tmp/q.json')); assert j.get('ok') and j.get('route')=='search' and j.get('sources'),j; print('LOCAL_SEARCH_OK')
           PY
           REMOTE
-
       - name: Verify public API
         run: |
           set -euo pipefail
@@ -109,18 +105,14 @@ jobs:
           import json
           j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j; print('PUBLIC_SHOPPING_OK')
           PY
-
       - name: Publish Pages
         run: |
           set -euo pipefail
           rm -rf pages && mkdir pages
           cp smart-index.html pages/index.html
           printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15"}' > pages/api.json
-
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: pages
       - uses: actions/deploy-pages@v4
-
-      # Explicit second trigger after replacing the old workflow.
