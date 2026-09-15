@@ -1,10 +1,10 @@
-name: My AI Unified — production deploy v2
+name: My AI Unified — production deploy v3 smart
 on:
   push:
     branches: [main]
   workflow_dispatch:
 concurrency:
-  group: my-ai-unified-production-v2
+  group: my-ai-unified-production-smart
   cancel-in-progress: true
 permissions:
   contents: read
@@ -13,58 +13,27 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Patch frontend before validation and publication
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('index.html'); s=p.read_text()
-          marker='MY_AI_UNIFIED_CLEAN_UI_V4'
-          if marker not in s:
-              old="function rich(text,sources=[]){const d=add('','ai');for(const p of String(text??'').split(/(https?:\\/\\/[^\\s]+)/g)){if(/^https?:\\/\\//i.test(p)){const a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener noreferrer';a.textContent=p;d.appendChild(a)}else d.appendChild(document.createTextNode(p))}for(const s of sources||[]){if(/^https?:\\/\\//i.test(String(s?.link||''))){const a=document.createElement('a');a.href=s.link;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Источник: '+(s.title||s.link);d.appendChild(a)}}return d}"
-              new="function rich(text,sources=[]){const d=add('','ai');for(const p of String(text??'').split(/(https?:\\/\\/[^\\s]+)/g)){if(/^https?:\\/\\//i.test(p)){const a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener noreferrer';a.textContent=p;d.appendChild(a)}else d.appendChild(document.createTextNode(p))}return d}"
-              if old not in s: raise SystemExit('RICH_TARGET_NOT_FOUND')
-              s=s.replace(old,new,1)
-              old2="if(x.evidence){const ev=document.createElement('div');ev.className='muted';ev.textContent='Источник: '+x.evidence;d.appendChild(ev)}"
-              s=s.replace(old2,'',1)
-              marker_send="async function send(){const text=input.value.trim();if(!text||busy)return;"
-              if marker_send not in s: raise SystemExit('SEND_TARGET_NOT_FOUND')
-              timeblock="""async function send(){const text=input.value.trim();if(!text||busy)return;
-          if(/\\b(сколько\\s+времени|который\\s+час|текущее\\s+время|сейчас\\s+время|время\\s+в|времени\\s+в)\\b/iu.test(text)){
-            add(text,'user'); input.value='';
-            const now=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
-            const result=`Сейчас в Москве ${now}.`;
-            messages.push({role:'user',content:text},{role:'assistant',content:result});
-            rich(result); speak(result); return;
-          }
-          add(text,'user');"""
-              s=s.replace(marker_send,timeblock,1)
-              p.write_text(s)
-              print('MY_AI_UNIFIED_CLEAN_UI_V4_OK')
-          else: print('MY_AI_UNIFIED_CLEAN_UI_V4_ALREADY_PRESENT')
-          PY
-      - name: Validate frontend and backend
+      - name: Validate smart frontend and backend
         run: |
           set -euo pipefail
           node --check local-gateway.js
-          node --test test-local-gateway.js
           node - <<'NODE'
-          const fs=require('fs'); const html=fs.readFileSync('index.html','utf8');
-          const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
-          if(!scripts.length) throw new Error('frontend script missing');
-          for(const s of scripts) new Function(s[1]);
-          for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!html.includes('id="'+id+'"')) throw new Error('missing UI control '+id);
-          if(html.includes("Источник: '+(s.title||s.link)")) throw new Error('source links still rendered');
-          if(html.includes("Источник: '+x.evidence")) throw new Error('shopping evidence still rendered');
-          if(!html.includes('Europe/Moscow')) throw new Error('Moscow time handler missing');
-          console.log('SOURCE_OK_CLEAN_UI');
+          const fs=require('fs');
+          const h=fs.readFileSync('smart-index.html','utf8');
+          const x=h.match(/<script>([\s\S]*?)<\/script>/i);
+          if(!x) throw Error('smart frontend script missing');
+          new Function(x[1]);
+          for(const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camAnalyze','camShot','camOff']) if(!h.includes('id="'+id+'"')) throw Error('missing '+id);
+          for(const s of ['MediaRecorder','/transcribe','.zip','getUserMedia']) if(!h.includes(s)) throw Error('missing capability '+s);
+          console.log('SMART_FRONTEND_OK');
           NODE
-      - name: Deploy to VPS
+          node --test test-local-gateway.js
+      - name: Deploy backend to VPS and patch archive support
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -72,7 +41,8 @@ jobs:
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
           workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
@@ -87,16 +57,19 @@ jobs:
           import re
           p=Path('local-gateway.js'); s=p.read_text()
           s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
-          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL='qwen/qwen3.6-27b'",1)
           s=s.replace("const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-120b'","const GROQ_TEXT_MODEL=process.env.GROQ_MODEL||'openai/gpt-oss-20b'",1)
-          new_sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; можно шутить и высказывать мнение, если это уместно. Если пользователь просто общается — общайся, не превращай разговор в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
-          s=re.sub(r"const sys='[^']*';",new_sys,s,count=1)
-          marker="if(!vision)for(const [kn,url,model,name] of[['OPENAI_API_KEY'"
-          if marker in s and "PARALON_API_KEY" not in s:
-              ins="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN','PARALON_API_TOKEN');if(pk)try{return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,'qwen3.8-27b',messages,vision?60000:30000,vision),provider:'paralon',model:'qwen3.8-27b'}}catch(e){errors.push(`Paralon: ${e.message}`);console.error('PARALON_ERROR:',e.message)}"
-              s=s.replace(marker,ins+marker,1)
+          sys="const sys='Ты — «Эй», умный русскоязычный персональный помощник и собеседник. Веди естественный живой диалог и учитывай контекст предыдущих сообщений. Отвечай дружелюбно, уверенно и человеческим языком; если пользователь просто общается — общайся, а не превращай ответ в сухую справку. Если нужна актуальная информация, поиск, товар, цена, файл, фото или другая задача — выполняй её и отделяй проверенное от предположений. Не выдумывай факты, цены, наличие или характеристики. Не упоминай внутренние модели, ключи и серверы без прямого вопроса пользователя.';"
+          s=re.sub(r"const sys='[^']*';",sys,s,count=1)
+          zipfn="""async function extractZip(buf){const {spawn}=require('child_process');return await new Promise((resolve,reject)=>{const py=`import sys,zipfile,io,json\ndata=sys.stdin.buffer.read()\nwith zipfile.ZipFile(io.BytesIO(data)) as z:\n out=[]\n for info in z.infolist():\n  n=info.filename\n  if info.is_dir() or n.startswith('/') or '..' in n.split('/'):\n   continue\n  size=info.file_size\n  item={'name':n,'size':size}\n  low=n.lower()\n  if size<=1000000 and low.endswith(('.txt','.md','.csv','.tsv','.json','.xml','.html','.js','.css','.log','.py')):\n   try:item['text']=z.read(info).decode('utf-8','replace')[:120000]\n   except Exception as e:item['text']='[не удалось прочитать текст: '+str(e)+']'\n  out.append(item)\n print(json.dumps(out,ensure_ascii=False))`;const p=spawn('python3',['-c',py]);let o='',e='';p.stdout.on('data',d=>o+=d);p.stderr.on('data',d=>e+=d);p.on('error',reject);p.on('close',code=>{if(code||!o)return reject(Error('Не удалось открыть ZIP: '+(e||'python3 error')));try{resolve(JSON.parse(o))}catch(x){reject(x)}});p.stdin.end(buf)})}"""
+          if 'async function extractZip(' not in s:
+              pos=s.index('async function extractDocument(')
+              s=s[:pos]+zipfn+'\n'+s[pos:]
+          old="const buf=Buffer.from(m[2],'base64'),mime=m[1],name=String(b.name||'').toLowerCase();"
+          new="const buf=Buffer.from(m[2],'base64'),mime=m[1],name=String(b.name||'').toLowerCase();if(/zip|\\.zip$/i.test(mime+' '+name)){const entries=await extractZip(buf);const listed=entries.map(x=>`ФАЙЛ: ${x.name} (${x.size} байт)${x.text?'\\n'+x.text:''}`).join('\\n\\n');return ('СОДЕРЖИМОЕ ZIP-АРХИВА:\\n\\n'+listed).slice(0,180000)}"
+          if old not in s: raise SystemExit('ZIP_TARGET_NOT_FOUND')
+          s=s.replace(old,new,1)
           p.write_text(s)
-          print('RUNTIME_PATCH_OK')
+          print('SMART_RUNTIME_PATCH_OK')
           PY
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
@@ -116,22 +89,30 @@ jobs:
           curl -fsS --max-time 40 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
           test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
           REMOTE
-          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/public-chat.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/public-tts.mp3
-          test -s /tmp/public-tts.mp3; echo PUBLIC_TTS_OK
-      - name: Publish Pages
+      - name: Verify public API
         run: |
-          rm -rf pages && mkdir pages && cp index.html pages/index.html
-          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2-clean-ui"}' > pages/api.json
+          set -euo pipefail
+          sleep 10
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/h.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
+          print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
+          test -s /tmp/t.mp3; echo PUBLIC_TTS_OK
+      - name: Publish smart Pages
+        run: |
+          set -euo pipefail
+          rm -rf pages && mkdir pages
+          cp smart-index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
