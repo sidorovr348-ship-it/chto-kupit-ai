@@ -31,14 +31,14 @@ jobs:
           set +a
           python3 - <<'PY'
           import base64,json
-          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000020000000200802000000fc18eda30000000949444154789c636060f8cf00000004000101e0a35e0000000049454e44ae426082')).decode()
-          body={'messages':[{'role':'user','content':[{'type':'text','text':'Что изображено? Ответь кратко.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,'+png}}]}],'model':'qwen/qwen3.6-27b','temperature':0.7,'max_completion_tokens':256,'reasoning_effort':'none','reasoning_format':'hidden'}
+          png='iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAA9klEQVR4nO2ZwQ3DMAwDm6KjeP+JPIRH6KNAHy3QwhQFWhDvndA6S4GR5Fpr3SpzVxcQxQJqLKDGAmosoMYCaiygprzAg544xvh9wZyTuNzFeh/4W/c3FBPOCAHVw3d9EO0ApYhIK0IdoFQfzMEFWNUH00ABbvWRzPLnACKQsf1w8rZAXvVYfssROoo9gez5AVZp1oEDsYAaC6ixgBoLqNkT4H4RoazSrAMHsi2QPUW7+UgH8hyA5H4j9CKjCVgm3gGuA5wWGiGWQySH83kdfleObwHnIcbqoDSQ9oPjTdU/NCq6ngPnYAE1FlBjATUWUGMBNeUFnnn0Sl31fm3mAAAAAElFTkSuQmCC'
+          body={'messages':[{'role':'user','content':[{'type':'text','text':'Что изображено? Ответь кратко.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,'+png}}]}],'model':'qwen/qwen3.8-27b','temperature':0.7,'max_completion_tokens':512,'reasoning_effort':'none','reasoning_format':'hidden'}
           open('/tmp/v.json','w').write(json.dumps(body,ensure_ascii=False))
           open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Что на изображении? Ответь кратко.'},ensure_ascii=False))
           PY
           echo '=== DIRECT GROQ VISION ==='
           curl -sS --max-time 90 -X POST https://api.groq.com/openai/v1/chat/completions -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' --data-binary @/tmp/v.json -o /tmp/groq.out -w 'HTTP:%{http_code}\n'
-          cat /tmp/groq.out | head -c 2000
+          cat /tmp/groq.out | head -c 3000
           echo
           echo '=== LOCAL PHOTO ==='
           curl -sS --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json -o /tmp/photo.out -w 'HTTP:%{http_code}\n'
