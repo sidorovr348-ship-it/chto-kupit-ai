@@ -24,11 +24,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path('local-gateway.js'); s=p.read_text()
-          old="async function ask(messages,vision=false){const errors=[],groq=keyOf('GROQ_API_KEY');if(groq)try{return{text:await provider('https://api.groq.com/openai/v1/chat/completions',groq,vision?GROQ_VISION_MODEL:GROQ_TEXT_MODEL,messages,vision?60000:30000,vision),provider:'groq',model:vision?GROQ_VISION_MODEL:GROQ_TEXT_MODEL}}catch(e){errors.push(`Groq: ${e.message}`);console.error('GROQ_ERROR',e.message)}"
-          new="async function ask(messages,vision=false){const errors=[],groq=keyOf('GROQ_API_KEY');if(groq){const models=vision?[GROQ_VISION_MODEL]:[GROQ_TEXT_MODEL,'llama-3.3-70b-versatile'];for(const model of models)try{return{text:await provider('https://api.groq.com/openai/v1/chat/completions',groq,model,messages,vision?60000:30000,vision),provider:'groq',model}}catch(e){errors.push(`Groq ${model}: ${e.message}`);console.error('GROQ_ERROR',model,e.message)}}"
-          if old not in s: raise SystemExit('Groq provider block not found')
+          old="const models=vision?[GROQ_VISION_MODEL]:[GROQ_TEXT_MODEL,'llama-3.3-70b-versatile'];"
+          new="const models=vision?[GROQ_VISION_MODEL]:[GROQ_TEXT_MODEL,'openai/gpt-oss-20b','llama-3.1-8b-instant','llama-3.3-70b-versatile'];"
+          if old not in s: raise SystemExit('fallback model list not found')
           s=s.replace(old,new,1)
-          marker='// PROVIDER_FALLBACK_HARDENING_V1'
+          marker='// PROVIDER_FALLBACK_HARDENING_V2'
           if marker not in s: s+='\n'+marker+'\n'
           p.write_text(s)
           PY
@@ -38,5 +38,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add local-gateway.js
-          git diff --cached --quiet || git commit -m 'Add resilient Groq text fallback'
+          git diff --cached --quiet || git commit -m 'Expand Groq model fallback chain'
           git push
