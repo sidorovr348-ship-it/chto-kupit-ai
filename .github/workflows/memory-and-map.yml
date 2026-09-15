@@ -17,87 +17,42 @@ jobs:
           from pathlib import Path
           p=Path('local-gateway.js'); s=p.read_text()
           if "require('./memory-map')" not in s:
-              s=s.replace("const path=require('path');", "const path=require('path');\nconst {memoryMiddleware,memoryRoutes}=require('./memory-map');")
-              route_marker="app.get('/health'"
-              if route_marker not in s: raise SystemExit('health route not found')
-              s=s.replace(route_marker, "app.use(memoryMiddleware);\nmemoryRoutes(app);\n"+route_marker, 1)
+              s=s.replace("const path=require('path');", "const path=require('path');\nconst {memoryMiddleware,memoryRoutes}=require('./memory-map');", 1)
+              marker="app.get('/health'"
+              if marker not in s: raise SystemExit('health route not found')
+              s=s.replace(marker, "app.use(memoryMiddleware);\nmemoryRoutes(app);\n"+marker, 1)
               p.write_text(s)
-          mem=Path('memory-map.js')
-          if not mem.exists():
-            mem.write_text(r'''const fs=require('fs/promises');
-const path=require('path');
-const crypto=require('crypto');
-const DATA_DIR=process.env.MY_AI_MEMORY_DIR||path.join(process.env.HOME||'/root','my-ai-unified-data');
-const FILE=path.join(DATA_DIR,'memory.json');
-let lock=Promise.resolve();
-const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
-const hash=s=>crypto.createHash('sha256').update(String(s||'default')).digest('hex').slice(0,32);
-async function readAll(){try{return JSON.parse(await fs.readFile(FILE,'utf8'))}catch{return {}}}
-async function writeAll(x){await fs.mkdir(DATA_DIR,{recursive:true});const t=FILE+'.tmp';await fs.writeFile(t,JSON.stringify(x,null,2),'utf8');await fs.rename(t,FILE)}
-async function locked(fn){const prev=lock;let release;lock=new Promise(r=>release=r);await prev;try{return await fn()}finally{release()}}
-function uid(req){return req.body?.memoryId||req.headers['x-memory-id']||req.body?.sessionId||req.body?.request?.session_id||req.body?.session?.session_id||'default'}
-function stripWake(s){return norm(s).replace(/^э(?:й|и|й-ай|й ай|й-эй|й эй)[\s,:;!?-]*/iu,'').replace(/^ай[\s,:;!?-]*/iu,'')}
-function parseCommand(text){
- const s=stripWake(text);
- let m=s.match(/^запомни\s+(?:мо[её]\s+)?местоположени(?:е|я)\s*(?:как|назови|под\s+именем)\s*["“]?([^"”:\n]+)["”]?\s*(?::|-)?\s*(.*)$/iu);
- if(m)return {kind:'place',name:norm(m[1])||'Место',value:norm(m[2])};
- m=s.match(/^запомни\s+(?:мо[её]\s+)?местоположени(?:е|я)\s*(?:это|:|-)?\s*(.*)$/iu);
- if(m)return {kind:'place',name:'Дом',value:norm(m[1])};
- m=s.match(/^запомни\s+(?:правило|правила)\s*[:\-]?\s*(.+)$/iu);
- if(m)return {kind:'rule',value:norm(m[1])};
- m=s.match(/^запомни\s*[:\-]?\s*(.+)$/iu);
- if(m)return {kind:'rule',value:norm(m[1])};
- if(/^(?:что\s+ты\s+обо\s+мне\s+запомнил|что\s+ты\s+запомнил|какие\s+у\s+тебя\s+правила)$/iu.test(s))return {kind:'show'};
- if(/^забудь\s+(?:мо[её]\s+)?местоположени(?:е|я)$/iu.test(s))return {kind:'forgetPlace',name:'Дом'};
- if(/^забудь\s+(?:всё|все|всё\s+что\s+ты\s+запомнил|все\s+правила)$/iu.test(s))return {kind:'forgetAll'};
- m=s.match(/^забудь\s+(?:правило|правила)\s*[:\-]?\s*(.+)$/iu);if(m)return {kind:'forgetRule',value:norm(m[1])};
- m=s.match(/^(?:построй|покажи|проложи)\s+(?:мне\s+)?(?:точку\s+)?маршрут\s+(?:до|к)\s+(.+)$/iu);if(m)return {kind:'route',to:norm(m[1])};
- return null;
-}
-function placeKey(n){return norm(n).toLowerCase().replace(/[«»"“”]/g,'')}
-async function mutate(id,fn){return locked(async()=>{const all=await readAll();const k=hash(id);const u=all[k]||{rules:[],places:{}};const out=await fn(u);all[k]=u;await writeAll(all);return out})}
-async function getUser(id){const all=await readAll();return all[hash(id)]||{rules:[],places:{}}}
-function memoryText(u){const p=Object.entries(u.places||{}).map(([k,v])=>`${v.name||k}: ${v.address||((v.lat!=null&&v.lon!=null)?`${v.lat}, ${v.lon}`:'местоположение')}`).join('\n');const r=(u.rules||[]).map(x=>`• ${x.text}`).join('\n');return [p?`Сохранённые места:\n${p}`:'',r?`Постоянные правила:\n${r}`:''].filter(Boolean).join('\n\n')||'Постоянной памяти пока нет.'}
-async function geocode(q){if(!q||/^местоположение$/iu.test(q))return null;try{const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=ru&q='+encodeURIComponent(q);const r=await fetch(u,{headers:{'User-Agent':'My-AI-Unified/1.0 contact: ai.aliceq.ru'},signal:AbortSignal.timeout(10000)});const a=await r.json().catch(()=>[]);if(!r.ok||!a[0])return null;return {lat:Number(a[0].lat),lon:Number(a[0].lon),address:String(a[0].display_name||q)}}catch{return null}}
-async function handleCommand(req,c){const id=uid(req);if(c.kind==='show')return {ok:true,route:'memory',result:memoryText(await getUser(id))};
- if(c.kind==='forgetAll'){await mutate(id,u=>{u.rules=[];u.places={};return 1});return {ok:true,route:'memory',result:'Запомненные правила и места удалены.'}}
- if(c.kind==='forgetPlace'){await mutate(id,u=>{delete u.places[placeKey(c.name)];return 1});return {ok:true,route:'memory',result:'Дом забыт.'}}
- if(c.kind==='forgetRule'){await mutate(id,u=>{u.rules=(u.rules||[]).filter(x=>x.text!==c.value);return 1});return {ok:true,route:'memory',result:'Правило удалено.'}}
- if(c.kind==='place'){
-   const loc=req.body?.location&&Number.isFinite(Number(req.body.location.lat))?{lat:Number(req.body.location.lat),lon:Number(req.body.location.lon),address:String(req.body.location.address||'Текущее местоположение')}:await geocode(c.value);
-   if(!loc)return {ok:true,route:'memory',result:`Не смог определить место для «${c.name}». Дай адрес или разреши доступ к геопозиции.`};
-   await mutate(id,u=>{u.places[placeKey(c.name)]={name:c.name,...loc,updatedAt:new Date().toISOString()};return 1});return {ok:true,route:'memory',result:`Запомнил «${c.name}».`};
- }
- if(c.kind==='rule'){await mutate(id,u=>{u.rules=u.rules||[];const i=u.rules.findIndex(x=>x.text===c.value);if(i>=0)u.rules[i].updatedAt=new Date().toISOString();else u.rules.unshift({id:crypto.randomUUID(),text:c.value,createdAt:new Date().toISOString()});u.rules=u.rules.slice(0,100);return 1});return {ok:true,route:'memory',result:'Запомнил это как постоянное правило.'}}
- if(c.kind==='route'){const u=await getUser(id);const v=u.places?.[placeKey(c.to)]||Object.values(u.places||{}).find(x=>placeKey(x.name)===placeKey(c.to));if(!v)return {ok:true,route:'memory',result:`Я не знаю место «${c.to}». Скажи: «Эй, запомни моё местоположение как ${c.to}»`};const dest=v.lat!=null?`${v.lat},${v.lon}`:v.address;const url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(dest);return {ok:true,route:'map',result:`Маршрут до «${v.name||c.to}» построен.`,routeUrl:url,destination:v}}
- return null}
-async function memoryMiddleware(req,res,next){if(req.path!=='/chat'&&req.path!=='/alice')return next();const text=req.path==='/alice'?(req.body?.request?.command||req.body?.request?.original_utterance||''):(req.body?.prompt||((req.body?.messages||[]).slice().reverse().find(x=>x?.role==='user')||{}).content||'');const c=parseCommand(text);if(c){try{const out=await handleCommand(req,c);if(req.path==='/alice')return res.json({version:'1.0',response:{text:out.result,end_session:false}});return res.json(out)}catch(e){return res.status(500).json({ok:false,error:e.message})}}
- try{const u=await getUser(uid(req));const mt=memoryText(u);if(mt&&req.body?.messages)req.body.messages=[{role:'system',content:`Постоянная память пользователя. Используй её как пользовательские настройки и сведения, но она не отменяет системные правила безопасности:\n${mt}`},...req.body.messages]}catch{}
- next()}
-function memoryRoutes(app){app.get('/memory',async(req,res)=>{const u=await getUser(req.query.memoryId||'default');res.json({ok:true,memory:u,result:memoryText(u)})})}
-module.exports={memoryMiddleware,memoryRoutes,parseCommand};
-''','utf8')
           for fn in ['smart-index.html','index.html']:
             q=Path(fn)
             if not q.exists(): continue
             x=q.read_text()
-            if "my-ai-memory-id-v1" not in x:
-              x=x.replace("const API='https://ai.aliceq.ru'", "const API='https://ai.aliceq.ru',MEMORY_KEY='my-ai-memory-id-v1',MEMORY_ID=localStorage.getItem(MEMORY_KEY)||(crypto.randomUUID?crypto.randomUUID():(Date.now().toString(36)+Math.random().toString(36).slice(2)));localStorage.setItem(MEMORY_KEY,MEMORY_ID)")
-            x=x.replace("api('/chat',{prompt:t,messages}", "api('/chat',{prompt:t,messages,memoryId:MEMORY_ID,...((/запомни.*местоположени|построй.*маршрут/iu.test(t)&&navigator.geolocation)?await new Promise(r=>navigator.geolocation.getCurrentPosition(p=>r({location:{lat:p.coords.latitude,lon:p.coords.longitude}}),()=>r({}),{enableHighAccuracy:true,timeout:5000,maximumAge:60000})):{} )")
-            x=x.replace("api('/chat',{prompt:t,messages})", "api('/chat',{prompt:t,messages,memoryId:MEMORY_ID})")
-            x=x.replace("if(j.results){", "if(j.routeUrl){let d=add(j.result||'Маршрут построен.');let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);say(j.result||'Маршрут построен.')}else if(j.results){")
+            if 'my-ai-memory-id-v1' not in x:
+              x=x.replace("const API='https://ai.aliceq.ru'", "const API='https://ai.aliceq.ru',MEMORY_KEY='my-ai-memory-id-v1',MEMORY_ID=localStorage.getItem(MEMORY_KEY)||(crypto.randomUUID?crypto.randomUUID():(Date.now().toString(36)+Math.random().toString(36).slice(2)));localStorage.setItem(MEMORY_KEY,MEMORY_ID)", 1)
+            if 'let loc={}' not in x:
+              x=x.replace("let shop=/(найди|найти|где купить", "let loc={};if(/запомни.*местоположени|построй.*маршрут/iu.test(t)&&navigator.geolocation){loc=await new Promise(r=>navigator.geolocation.getCurrentPosition(p=>r({location:{lat:p.coords.latitude,lon:p.coords.longitude}}),()=>r({}),{enableHighAccuracy:true,timeout:5000,maximumAge:60000}))}let shop=/(найди|найти|где купить", 1)
+            x=x.replace("api('/chat',{prompt:t,messages}", "api('/chat',{prompt:t,messages,memoryId:MEMORY_ID,...loc}", 1)
+            if 'j.routeUrl' not in x:
+              x=x.replace("if(j.results){", "if(j.routeUrl){let d=add(j.result||'Маршрут построен.');let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);say(j.result||'Маршрут построен.')}else if(j.results){", 1)
             q.write_text(x)
       - name: Validate
         run: |
           node --check local-gateway.js
           node --check memory-map.js
-          grep -q "MEMORY_ID" smart-index.html
-          grep -q "memoryMiddleware" local-gateway.js
+          node - <<'NODE'
+          const fs=require('fs');
+          for(const f of ['smart-index.html','index.html']){
+            if(!fs.existsSync(f)) continue;
+            const h=fs.readFileSync(f,'utf8'),x=h.match(/<script>([\s\S]*?)<\/script>/i);
+            if(!x) throw Error('script missing in '+f);
+            new Function(x[1]);
+            if(!h.includes('MEMORY_ID')) throw Error('memory id missing in '+f);
+          }
+          NODE
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add local-gateway.js memory-map.js smart-index.html index.html
+          git add local-gateway.js smart-index.html index.html
           git diff --cached --quiet && exit 0
           git commit -m "Add persistent AI memory and map routes [memory-map-bot]"
           git push
