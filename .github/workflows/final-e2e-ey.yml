@@ -33,13 +33,19 @@ jobs:
           print('API_CHAT_OK:',j['result'][:120])
           PY
       - name: Install browser
-        run: npx --yes playwright@1.55.0 install --with-deps chromium
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pw && cd /tmp/pw
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 --no-audit --no-fund >/dev/null 2>&1
+          npx playwright install --with-deps chromium
       - name: Browser verify mobile UI
         env:
           PAGES_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
           VERCEL_URL: https://chto-kupit-ai.vercel.app/
         run: |
-          cat > /tmp/verify.mjs <<'JS'
+          set -euo pipefail
+          cat > /tmp/pw/verify.mjs <<'JS'
           import { chromium } from 'playwright';
           const urls=[process.env.PAGES_URL,process.env.VERCEL_URL];
           const browser=await chromium.launch({headless:true});
@@ -47,7 +53,7 @@ jobs:
           for(const url of urls){
             const page=await context.newPage();
             await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000});
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(1500);
             await page.locator('h1').filter({hasText:'Эй'}).waitFor({timeout:15000});
             await page.getByRole('button',{name:/Эй/}).waitFor({timeout:15000});
             const source=await page.content();
@@ -55,7 +61,7 @@ jobs:
             const input=page.locator('#input');
             await input.fill('Привет, Эй');
             await page.locator('#send').click();
-            await page.waitForTimeout(12000);
+            await page.waitForTimeout(10000);
             const texts=await page.locator('.msg').allTextContents();
             if(texts.length<3) throw new Error('chat did not produce a response at '+url+' messages='+texts.length);
             console.log('BROWSER_OK',url,texts.slice(-2));
@@ -63,4 +69,4 @@ jobs:
           }
           await browser.close();
           JS
-          node /tmp/verify.mjs
+          cd /tmp/pw && node verify.mjs
