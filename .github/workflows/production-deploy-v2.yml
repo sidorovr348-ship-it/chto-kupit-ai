@@ -51,6 +51,7 @@ jobs:
           cd "$WORKDIR"
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p=Path('local-gateway.js'); s=p.read_text()
           s=s.replace("const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'",1)
           s=s.replace("body.reasoning_effort='none';body.reasoning_format='hidden';delete body.max_tokens","body.reasoning_effort='none';body.reasoning_format='hidden';delete body.include_reasoning;body.max_completion_tokens=256;delete body.max_tokens",1)
@@ -61,8 +62,13 @@ jobs:
           if marker in s and "MISTRAL_VISION_MODEL" not in s:
               ins="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)try{const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral Vision: ${e.message}`)}}"
               s=s.replace(marker,ins+marker,1)
+          old="async function generateImage(prompt){const k=keyOf('OPENAI_API_KEY');if(!k)throw Object.assign(Error('Генерация изображений не настроена: нужен доступ к сервису изображений.'),{status:503});const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${k}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)}),d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(`Генерация изображения: HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,300)}`),{status:r.status});const x=d?.data?.[0];if(!x)throw Error('Сервис изображений не вернул результат');return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null}"
+          new="async function generateImage(prompt){const ok=keyOf('OPENAI_API_KEY');if(ok){const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${ok}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)}),d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(Error(`Генерация изображения: HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,300)}`),{status:r.status});const x=d?.data?.[0];if(!x)throw Error('Сервис изображений не вернул результат');return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null}const mk=keyOf('MISTRAL_API_KEY');if(!mk)throw Object.assign(Error('Генерация изображений не настроена: нет ключа OpenAI или Mistral.'),{status:503});const create=await fetch('https://api.mistral.ai/v1/agents',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({model:process.env.MISTRAL_IMAGE_MODEL||'mistral-medium-latest',name:'My AI Image Agent',description:'Image generation agent for My AI Unified',instructions:'Use the image_generation tool to generate the requested image. Return the generated image file.',tools:[{type:'image_generation'}],completion_args:{temperature:.3,top_p:.95}}),signal:AbortSignal.timeout(60000)});const ca=await create.json().catch(()=>({}));if(!create.ok)throw Object.assign(Error(`Mistral image agent HTTP ${create.status}: ${String(ca?.message||ca?.error?.message||'').slice(0,300)}`),{status:create.status});const agentId=ca?.id;if(!agentId)throw Error('Mistral не вернул ID агента генерации');const conv=await fetch('https://api.mistral.ai/v1/conversations',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({inputs:String(prompt).slice(0,4000),stream:false,agent_id:agentId}),signal:AbortSignal.timeout(180000)});const cv=await conv.json().catch(()=>({}));if(!conv.ok)throw Object.assign(Error(`Mistral image conversation HTTP ${conv.status}: ${String(cv?.message||cv?.error?.message||'').slice(0,300)}`),{status:conv.status});let fileId='';for(const out of (cv?.outputs||[])){for(const chunk of (out?.content||[])){if(chunk&&typeof chunk==='object'&&(chunk.file_id||chunk.fileId))fileId=chunk.file_id||chunk.fileId}}if(!fileId)throw Error('Mistral не вернул файл изображения');const fr=await fetch(`https://api.mistral.ai/v1/files/${encodeURIComponent(fileId)}/content`,{headers:{Authorization:`Bearer ${mk}`,Accept:'application/octet-stream'},signal:AbortSignal.timeout(60000)});if(!fr.ok)throw Object.assign(Error(`Mistral image file HTTP ${fr.status}`),{status:fr.status});const bytes=Buffer.from(await fr.arrayBuffer());if(!bytes.length)throw Error('Mistral вернул пустой файл изображения');return{dataUrl:`data:image/png;base64,${bytes.toString('base64')}`}}"
+          if old not in s: raise SystemExit('GENERATE_IMAGE_TARGET_NOT_FOUND')
+          s=s.replace(old,new,1)
+          s=s.replace("imageGeneration:!!keyOf('OPENAI_API_KEY')","imageGeneration:!!(keyOf('OPENAI_API_KEY')||keyOf('MISTRAL_API_KEY'))",1)
           p.write_text(s)
-          print('RUNTIME_VISION_PATCH_OK')
+          print('RUNTIME_PATCH_OK')
           PY
           npm install --omit=dev --no-audit --no-fund
           node --check local-gateway.js
@@ -71,7 +77,7 @@ jobs:
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video'),j
+          a=j.get('adapters',{}); assert a.get('groq') and a.get('groqVision') and a.get('search') and a.get('tts') and a.get('stt') and a.get('documents') and a.get('video') and a.get('imageGeneration'),j
           print('LOCAL_HEALTH_OK')
           PY
           curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
@@ -85,7 +91,7 @@ jobs:
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/public-health.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
+          j=json.load(open('/tmp/public-health.json')); assert j.get('ok') and j.get('dispatcher'),j; assert j.get('adapters',{}).get('imageGeneration'),j; print('PUBLIC_HEALTH_OK')
           PY
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/public-chat.json
           python3 - <<'PY'
@@ -100,5 +106,6 @@ jobs:
           printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","verified":"production-v2"}' > pages/api.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with: { path: pages }
+        with:
+          path: pages
       - uses: actions/deploy-pages@v4
