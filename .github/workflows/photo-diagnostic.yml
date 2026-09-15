@@ -11,6 +11,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for production deploy and provider repair
+        run: sleep 75
       - name: Diagnose live vision provider and photo endpoint
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -36,6 +38,9 @@ jobs:
           open('/tmp/v.json','w').write(json.dumps(body,ensure_ascii=False))
           open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Что на изображении? Ответь кратко.'},ensure_ascii=False))
           PY
+          echo '=== HEALTH ==='
+          curl -fsS --max-time 10 http://127.0.0.1:3020/health
+          echo
           echo '=== DIRECT GROQ VISION ==='
           curl -sS --max-time 90 -X POST https://api.groq.com/openai/v1/chat/completions -H "Authorization: Bearer $GROQ_API_KEY" -H 'Content-Type: application/json' --data-binary @/tmp/v.json -o /tmp/groq.out -w 'HTTP:%{http_code}\n'
           cat /tmp/groq.out | head -c 3000
