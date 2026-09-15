@@ -1,0 +1,124 @@
+name: My AI Unified — production deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: my-ai-unified-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate source
+        run: |
+          set -euo pipefail
+          node --check local-gateway.js
+          node --check memory-map.js
+          node --test test-local-gateway.js
+          test -f smart-index.html
+          grep -q 'EY_WAKE_WORD_V1' smart-index.html
+          grep -q 'MediaRecorder' smart-index.html
+          grep -q 'memoryId' smart-index.html
+          echo SOURCE_OK
+
+      - name: Deploy backend to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          workdir=$(ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          test -n "$workdir"
+          scp "${O[@]}" -q local-gateway.js "$VPS_USER@$VPS_HOST:$workdir/local-gateway.js"
+          scp "${O[@]}" -q memory-map.js "$VPS_USER@$VPS_HOST:$workdir/memory-map.js"
+          scp "${O[@]}" -q package.json "$VPS_USER@$VPS_HOST:$workdir/package.json"
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "WORKDIR='$workdir' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$WORKDIR"
+          npm install --omit=dev --no-audit --no-fund
+          node --check local-gateway.js
+          node --check memory-map.js
+          systemctl restart my-ai-unified
+          for i in $(seq 1 30); do
+            if systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json; then break; fi
+            sleep 1
+          done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json'))
+          assert j.get('ok') and j.get('dispatcher'),j
+          a=j.get('adapters',{})
+          assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','zip']),j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('route')=='chat' and j.get('result'),j; print('LOCAL_CHAT_OK')
+          PY
+          curl -fsS --max-time 120 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди iPhone 18 Pro в Москве где купить дешевле"}' >/tmp/s.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j; print('LOCAL_SHOPPING_OK')
+          PY
+          curl -fsS --max-time 120 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди свежую информацию о погоде в Москве сегодня"}' >/tmp/q.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/q.json')); assert j.get('ok') and j.get('route')=='search' and j.get('sources'),j; print('LOCAL_SEARCH_OK')
+          PY
+          REMOTE
+
+      - name: Verify public API
+        run: |
+          set -euo pipefail
+          sleep 5
+          API=https://ai.aliceq.ru
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/h.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video','zip']),j; print('PUBLIC_HEALTH_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Кто ты?"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('route')=='chat' and j.get('result'),j; print('PUBLIC_CHAT_OK')
+          PY
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Найди iPhone 18 Pro в Москве где купить дешевле"}' >/tmp/s.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j; print('PUBLIC_SHOPPING_OK')
+          PY
+
+      - name: Publish Pages
+        run: |
+          set -euo pipefail
+          rm -rf pages && mkdir pages
+          cp smart-index.html pages/index.html
+          printf '%s\n' '{"ok":true,"api":"https://ai.aliceq.ru","version":"smart-2026-09-15"}' > pages/api.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+      - uses: actions/deploy-pages@v4
