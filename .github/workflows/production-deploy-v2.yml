@@ -59,6 +59,10 @@ jobs:
           import re
           p=Path('local-gateway.js'); s=p.read_text()
           s=re.sub(r"const GROQ_VISION_MODEL=[^;]+;", "const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.8-27b';", s, count=1)
+          marker="const hf=keyOf('HF_TOKEN','HUGGINGFACE_API_KEY','HF_API_KEY','HUGGINGFACE_TOKEN');"
+          block="const pk=keyOf('PARALON_API_KEY','PARALON_TOKEN','PARALON_KEY','PARALON_CLOUD_API_KEY');if(pk)try{const pm=process.env.PARALON_VISION_MODEL||'qwen3.8-27b';return{text:await provider('https://paraloncloud.com/v1/chat/completions',pk,pm,messages,vision?60000:30000,vision),provider:'paralon',model:pm}}catch(e){errors.push(`Paralon: ${e.message}`);console.error('PARALON_ERROR:',e.message)}"
+          if marker in s and "provider:'paralon'" not in s:
+              s=s.replace(marker,block+marker,1)
           p.write_text(s)
           env=Path('/root/my-ai-unified/.local-ai.env')
           if env.exists():
