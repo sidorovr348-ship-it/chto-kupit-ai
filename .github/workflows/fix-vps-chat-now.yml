@@ -1,0 +1,56 @@
+name: My AI Unified — restore live chat provider
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore live VPS chat
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519; chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          O=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=5 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          ssh "${O[@]}" "$VPS_USER@$VPS_HOST" "python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/root/my-ai-unified/local-gateway.js')
+          s=p.read_text()
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'",1)
+          p.write_text(s)
+          print('QWEN_VISION_RESTORED')
+          PY
+          node --check /root/my-ai-unified/local-gateway.js
+          systemctl restart my-ai-unified
+          for i in \$(seq 1 30); do systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/h.json && break; sleep 1; done
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
+          print('LOCAL_HEALTH_OK')
+          PY
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('LOCAL_CHAT_OK')
+          PY
+          curl -fsS --max-time 60 -X POST http://127.0.0.1:3020/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/tts.mp3
+          test -s /tmp/tts.mp3; echo LOCAL_TTS_OK
+          curl -fsS --retry 12 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/ph.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/ph.json')); assert j.get('ok') and j.get('dispatcher'),j; print('PUBLIC_HEALTH_OK')
+          PY
+          curl -fsS --retry 8 --retry-all-errors --retry-delay 2 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/pc.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/pc.json')); assert j.get('ok') and j.get('result'),j; print('PUBLIC_CHAT_OK')
+          PY
+          echo LIVE_CHAT_RESTORED
