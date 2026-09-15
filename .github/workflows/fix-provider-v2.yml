@@ -1,0 +1,40 @@
+name: My AI Unified — enforce live provider models
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait briefly for deployment jobs, then enforce supported models
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          sleep 20
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          ENV=/root/my-ai-unified/.local-ai.env
+          cp -a "$ENV" "$ENV.backup.provider-v2.$(date +%Y%m%d-%H%M%S)"
+          tmp=$(mktemp)
+          grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-20b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
+          mv "$tmp" "$ENV"
+          systemctl restart my-ai-unified
+          sleep 5
+          systemctl is-active --quiet my-ai-unified
+          echo 'LIVE_MODELS_OK'
+          curl --fail --silent --show-error --max-time 20 http://127.0.0.1:3020/health
+          echo
+          REMOTE
