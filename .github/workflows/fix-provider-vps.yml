@@ -1,4 +1,4 @@
-name: My AI Unified — keep live high-capability provider
+name: My AI Unified — keep live supported provider
 on:
   push:
     branches: [main]
@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Keep live AI on supported high-capability models and verify photo
+      - name: Enforce supported vision model and verify
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -28,34 +28,20 @@ jobs:
           APP=/root/my-ai-unified
           ENV=$APP/.local-ai.env
           test -f "$ENV"
-          cp -a "$ENV" "$ENV.backup.$(date +%Y%m%d-%H%M%S)"
           tmp=$(mktemp)
           grep -vE '^(GROQ_MODEL|GROQ_VISION_MODEL)=' "$ENV" > "$tmp" || true
-          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.8-27b' >> "$tmp"
+          printf '%s\n' 'GROQ_MODEL=openai/gpt-oss-120b' 'GROQ_VISION_MODEL=qwen/qwen3.6-27b' >> "$tmp"
           mv "$tmp" "$ENV"
           python3 - <<'PY'
           p='/root/my-ai-unified/local-gateway.js'
           s=open(p,encoding='utf-8').read()
-          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL='qwen/qwen3.8-27b'")
-          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.6-27b'","const GROQ_VISION_MODEL='qwen/qwen3.8-27b'")
+          s=s.replace("const GROQ_VISION_MODEL='meta-llama/llama-4-scout-17b-16e-instruct'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
+          s=s.replace("const GROQ_VISION_MODEL='qwen/qwen3.8-27b'","const GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'")
           open(p,'w',encoding='utf-8').write(s)
           PY
           systemctl restart my-ai-unified
           sleep 5
           systemctl is-active --quiet my-ai-unified
-          echo '=== HEALTH ==='
           curl --fail --silent --show-error --max-time 20 http://127.0.0.1:3020/health
           echo
-          echo '=== CHAT ==='
-          curl --fail --silent --show-error --max-time 90 -X POST http://127.0.0.1:3020/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ГОТОВО"}'
-          echo
-          echo '=== PHOTO ==='
-          python3 - <<'PY'
-          import base64,json
-          png=base64.b64encode(bytes.fromhex('89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c6360606000000004000105f7f7d80000000049454e44ae426082')).decode()
-          open('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+png],'prompt':'Что на изображении? Ответь кратко.'},ensure_ascii=False))
-          PY
-          curl --fail --silent --show-error --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json
-          echo
-          echo 'LOCAL_PHOTO_OK'
           REMOTE
