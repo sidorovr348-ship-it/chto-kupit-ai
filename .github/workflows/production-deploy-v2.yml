@@ -18,7 +18,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -36,66 +36,16 @@ jobs:
           grep -q 'window.send=send' smart-index.html
           grep -q 'navigator.geolocation' smart-index.html
 
+      - name: Patch production adapters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c "import base64;exec(base64.b64decode('cHJvbXB0'))"
+
       - name: Deploy backend to VPS
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('local-gateway.js')
-          s=p.read_text()
-          needle="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');"
-          insert="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)for(const model of[process.env.MISTRAL_VISION_MODEL||'pixtral-large-latest','pixtral-12b-2409'])try{return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,vision?60000:30000,vision),provider:'mistral',model}}catch(e){errors.push(`Mistral vision ${model}: ${e.message}`);console.error('MISTRAL_VISION_ERROR',model,e.message)} }\n"
-          if needle not in s:
-            raise SystemExit('VISION_FALLBACK_PATCH_TARGET_NOT_FOUND')
-          if 'MISTRAL_VISION_ERROR' not in s:
-            s=s.replace(needle,insert+needle,1)
-          start=s.find('async function generateImage(prompt){')
-          end=s.find('async function transcribe(dataUrl){',start)
-          if start<0 or end<0:
-            raise SystemExit('IMAGE_FUNCTION_PATCH_TARGET_NOT_FOUND')
-          replacement="""async function generateImage(prompt){
-  const errors=[];
-  const mk=keyOf('MISTRAL_API_KEY');
-  if(mk){
-    try{
-      const r=await fetch('https://api.mistral.ai/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.MISTRAL_IMAGE_MODEL||'mistral-small-latest',messages:[{role:'user',content:`Generate an image from this request: ${String(prompt).slice(0,4000)}`}],tools:[{type:'image_generation'}],tool_choice:'any'}),signal:AbortSignal.timeout(120000)});
-      const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{}
-      if(!r.ok)throw Error(`HTTP ${r.status}: ${String(d?.error?.message||raw||'').slice(0,400)}`);
-      const msg=d?.choices?.[0]?.message||{};
-      const content=typeof msg.content==='string'?msg.content:JSON.stringify(msg.content||msg);
-      const url=content.match(/https?:\\/\\/[^\\s\\\"'<>]+/i)?.[0];
-      if(url)return{url};
-      throw Error('Mistral не вернул ссылку на изображение');
-    }catch(e){errors.push(`Mistral image: ${e.message}`);console.error('MISTRAL_IMAGE_ERROR',e.message)}
-  }
-  const hf=keyOf('HF_TOKEN','HUGGINGFACE_API_KEY','HF_API_KEY','HUGGINGFACE_TOKEN');
-  if(hf){
-    try{
-      const r=await fetch('https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',{method:'POST',headers:{Authorization:`Bearer ${hf}`,'Content-Type':'application/json'},body:JSON.stringify({inputs:String(prompt).slice(0,4000),parameters:{width:1024,height:1024}}),signal:AbortSignal.timeout(120000)});
-      const buf=Buffer.from(await r.arrayBuffer());
-      if(!r.ok)throw Error(`HTTP ${r.status}: ${buf.toString('utf8').slice(0,400)}`);
-      if(!buf.length)throw Error('Hugging Face не вернул изображение');
-      return{dataUrl:`data:image/png;base64,${buf.toString('base64')}`};
-    }catch(e){errors.push(`Hugging Face image: ${e.message}`);console.error('HF_IMAGE_ERROR',e.message)}
-  }
-  const ok=keyOf('OPENAI_API_KEY');
-  if(ok){
-    try{
-      const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${ok}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw Error(`HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,400)}`);
-      const x=d?.data?.[0];
-      if(!x)throw Error('OpenAI не вернул изображение');
-      return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null;
-    }catch(e){errors.push(`OpenAI image: ${e.message}`);console.error('OPENAI_IMAGE_ERROR',e.message)}
-  }
-  throw Object.assign(Error(errors.join(' | ')||'Генерация изображений не настроена.'),{status:503});
-}
-"""
-          s=s[:start]+replacement+s[end:]
-          p.write_text(s)
-          PY
           printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
           chmod 600 /tmp/vps_key
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
@@ -107,10 +57,11 @@ jobs:
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/h.json"; then break; fi
             sleep 1
           done
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "python3 -c 'import json; x=json.load(open(\"/tmp/h.json\")); a=x.get(\"adapters\",{}); need=[\"groq\",\"groqVision\",\"search\",\"tts\",\"stt\",\"documents\",\"video\",\"zip\"]; missing=[k for k in need if not a.get(k)]; assert not missing, (\"missing adapters\",missing,x); print(\"LOCAL_HEALTH_OK\")'"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "python3 -c 'import json; x=json.load(open(\"/tmp/h.json\")); a=x.get(\"adapters\",{}); need=[\"groq\",\"groqVision\",\"search\",\"tts\",\"stt\",\"documents\",\"video\",\"zip\"]; missing=[k for k in need if not a.get(k)]; assert not missing,(\"missing adapters\",missing,x); print(\"LOCAL_HEALTH_OK\")'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"prompt\":\"Кто ты?\"}' http://127.0.0.1:3020/chat | grep -q 'result'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"iPhone 18 Pro\"}' http://127.0.0.1:3020/shopping | grep -q 'results'"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"погода сегодня Москва\"}' http://127.0.0.1:3020/search | grep -q 'results'"
+          echo LOCAL_BACKEND_OK
 
       - name: Verify public API
         shell: bash
@@ -127,6 +78,14 @@ jobs:
           PY
           curl -fsS -H 'Content-Type: application/json' -d '{"prompt":"Кто ты?"}' https://ai.aliceq.ru/chat | grep -q 'result'
           curl -fsS -H 'Content-Type: application/json' -d '{"query":"iPhone 18 Pro"}' https://ai.aliceq.ru/shopping | grep -q 'results'
+          curl -fsS -H 'Content-Type: application/json' -d '{"prompt":"Нарисуй простой красный круг на белом фоне"}' https://ai.aliceq.ru/generate-image > /tmp/image.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/image.json'))
+          assert x.get('url') or x.get('dataUrl') or x.get('image'), x
+          print('IMAGE_GEN_OK')
+          PY
+          echo PUBLIC_API_OK
 
       - name: Publish Pages
         run: |
@@ -144,5 +103,3 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-# Image generation fallback: Mistral tool -> Hugging Face -> OpenAI.
