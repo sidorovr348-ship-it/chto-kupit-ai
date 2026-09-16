@@ -103,8 +103,18 @@ jobs:
           curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 2 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json
           PHOTO_CODE=$?
           set -e
-          echo "PHOTO_CURL_EXIT=$PHOTO_CODE"
-          cat /tmp/photo-result.json
+          echo "PHOTO_PUBLIC_CURL_EXIT=$PHOTO_CODE"
+          cat /tmp/photo-result.json || true
+          if [ "$PHOTO_CODE" != 0 ] || ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then
+            echo '=== LOCAL_VPS_PHOTO_DIAGNOSTIC ==='
+            printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
+            chmod 600 /tmp/vps_key
+            ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+            scp "${ssh_opts[@]}" /tmp/photo.json "$VPS_USER@$VPS_HOST:/tmp/photo.json"
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.headers -o /tmp/photo.local.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo LOCAL_HEADERS; cat /tmp/photo.headers; echo LOCAL_BODY; cat /tmp/photo.local.out; echo SERVICE_STATUS; systemctl --no-pager --full status my-ai-unified || true; echo SERVICE_LOG; journalctl -u my-ai-unified -n 80 --no-pager || true"
+            rm -f /tmp/vps_key
+            exit 1
+          fi
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/photo-result.json'))
