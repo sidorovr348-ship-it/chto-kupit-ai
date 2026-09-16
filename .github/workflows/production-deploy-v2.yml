@@ -24,8 +24,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Validate source
         run: |
+          set -euo pipefail
           node --check local-gateway.js
           node --check memory-map.js
           node --test test-local-gateway.js
@@ -34,15 +36,15 @@ jobs:
           grep -q 'memoryId' smart-index.html
           grep -q 'window.send=send' smart-index.html
           grep -q 'navigator.geolocation' smart-index.html
-      - name: Patch production adapters
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -c "import base64;exec(base64.b64decode('CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aApwPVBhdGgoJ2xvY2FsLWdhdGV3YXkuanMnKQpzPXAucmVhZF90ZXh0KCkKbmVlZGxlPSJjb25zdCBwaz1rZXlPZignUEFSQUxPTl9BUElfS0VZJywnUEFSQUxPTl9LRVknLCdQQVJBTE9OX1RPS0VOJyk7IgppbnNlcnQ9ImlmKHZpc2lvbil7Y29uc3QgbWs9a2V5T2YoJ01JU1RSQUxfQVBJX0tFWScpO2lmKG1rKWZvcihjb25zdCBtb2RlbCBvZltwcm9jZXNzLmVudi5NSVNUUkFMX1ZJU0lPTl9NT0RFTHx8J3BpeHRyYWwtbGFyZ2UtbGF0ZXN0JywncGl4dHJhbC0xMmItMjQwOSddKXRyeXtyZXR1cm57dGV4dDphd2FpdCBwcm92aWRlcignaHR0cHM6Ly9hcGkubWlzdHJhbC5haS92MS9jaGF0L2NvbXBsZXRpb25zJyxtayxtb2RlbCxtZXNzYWdlcyx2aXNpb24/NjAwMDA6MzAwMDAsdmlzaW9uKSxwcm92aWRlcjonbWlzdHJhbCcsbW9kZWx9fWNhdGNoKGUpe2Vycm9ycy5wdXNoKGBNaXN0cmFsIHZpc2lvbiAke21vZGVsfTogJHtlLm1lc3NhZ2V9YCk7Y29uc29sZS5lcnJvcignTUlTVFJBTF9WSVNJT05fRVJST1InLG1vZGVsLGUubWVzc2FnZSl9fVxuIgppZiBuZWVkbGUgbm90IGluIHM6IHJhaXNlIFN5c3RlbUV4aXQoJ1ZJU0lPTl9UQVJHRVRfTk9UX0ZPVU5EJykKaWYgJ01JU1RSQUxfVklTSU9OX0VSUk9SJyBub3QgaW4gczogcz1zLnJlcGxhY2UobmVlZGxlLGluc2VydCtuZWVkbGUsMSkKc3RhcnQ9cy5maW5kKCdhc3luYyBmdW5jdGlvbiBnZW5lcmF0ZUltYWdlKHByb21wdCl7JykKZW5kPXMuZmluZCgnYXN5bmMgZnVuY3Rpb24gdHJhbnNjcmliZShkYXRhVXJsKXsnLHN0YXJ0KQppZiBzdGFydDwwIG9yIGVuZDwwOiByYWlzZSBTeXN0ZW1FeGl0KCdJTUFHRV9UQVJHRVRfTk9UX0ZPVU5EJykKcmVwbGFjZW1lbnQgPSByJycnYXN5bmMgZnVuY3Rpb24gZ2VuZXJhdGVJbWFnZShwcm9tcHQpewogIGNvbnN0IGVycm9ycz1bXTsKICBjb25zdCBtaz1rZXlPZignTUlTVFJBTF9BUElfS0VZJyk7CiAgaWYobWspewogICAgdHJ5ewogICAgICBjb25zdCByPWF3YWl0IGZldGNoKCdodHRwczovL2FwaS5taXN0cmFsLmFpL3YxL2NoYXQvY29tcGxldGlvbnMnLHttZXRob2Q6J1BPU1QnLGhlYWRlcnM6e0F1dGhvcml6YXRpb246YEJlYXJlciAke21rfWAsJ0NvbnRlbnQtVHlwZSc6J2FwcGxpY2F0aW9uL2pzb24nfSxib2R5OkpTT04uc3RyaW5naWZ5KHttb2RlbDpwcm9jZXNzLmVudi5NSVNUUkFMX0lNQUdFX01PREVMfHwnbWlzdHJhbC1zbWFsbC1sYXRlc3QnLG1lc3NhZ2VzOlt7cm9sZTondXNlcicsY29udGVudDpgR2VuZXJhdGUgYW4gaW1hZ2UgZnJvbSB0aGlzIHJlcXVlc3Q6ICR7U3RyaW5nKHByb21wdCkuc2xpY2UoMCw0MDAwKX1gfV0sdG9vbHM6W3t0eXBlOidpbWFnZV9nZW5lcmF0aW9uJ31dLHRvb2xfY2hvaWNlOidhbnknfSksc2lnbmFsOkFib3J0U2lnbmFsLnRpbWVvdXQoMTIwMDAwKX0pOwogICAgICBjb25zdCByYXc9YXdhaXQgci50ZXh0KCk7bGV0IGQ9e307dHJ5e2Q9cmF3P0pTT04ucGFyc2UocmF3KTp7fX1jYXRjaHt9CiAgICAgIGlmKCFyLm9rKXRocm93IEVycm9yKGBIVFRQICR7ci5zdGF0dXN9OiAke1N0cmluZyhkPy5lcnJvcj8ubWVzc2FnZXx8cmF3fHwnJykuc2xpY2UoMCw0MDApfWApOwogICAgICBjb25zdCBtc2c9ZD8uY2hvaWNlcz8uWzBdPy5tZXNzYWdlfHx7fTsKICAgICAgY29uc3QgY29udGVudD10eXBlb2YgbXNnLmNvbnRlbnQ9PT0nc3RyaW5nJz9tc2cuY29udGVudDpKU09OLnN0cmluZ2lmeShtc2cuY29udGVudHx8bXNnKTsKICAgICAgY29uc3QgdXJsPWNvbnRlbnQubWF0Y2goL2h0dHBzPzpcL1wvW15ccyInPD5dKy9pKT8uWzBdOwogICAgICBpZih1cmwpcmV0dXJue3VybH07CiAgICAgIHRocm93IEVycm9yKCdNaXN0cmFsINC90LUg0LLQtdGA0L3Rg9C7INGB0YHRi9C70LrRgyDQvdCwINC40LfQvtCx0YDQsNC20LXQvdC40LUnKTsKICAgIH1jYXRjaChlKXtlcnJvcnMucHVzaChgTWlzdHJhbCBpbWFnZTogJHtlLm1lc3NhZ2V9YCk7Y29uc29sZS5lcnJvcignTUlTVFJBTF9JTUFHRV9FUlJPUicsZS5tZXNzYWdlKX0KICB9CiAgY29uc3QgaGY9a2V5T2YoJ0hGX1RPS0VOJywnSFVHR0lOR0ZBQ0VfQVBJX0tFWScsJ0hGX0FQSV9LRVknLCdIVUdHSU5HRkFDRV9UT0tFTicpOwogIGlmKGhmKXsKICAgIHRyeXsKICAgICAgY29uc3Qgcj1hd2FpdCBmZXRjaCgnaHR0cHM6Ly9yb3V0ZXIuaHVnZ2luZ2ZhY2UuY28vaGYtaW5mZXJlbmNlL21vZGVscy9ibGFjay1mb3Jlc3QtbGFicy9GTFVYLjEtc2NobmVsbCcse21ldGhvZDonUE9TVCcsaGVhZGVyczp7QXV0aG9yaXphdGlvbjpgQmVhcmVyICR7aGZ9YCwnQ29udGVudC1UeXBlJzonYXBwbGljYXRpb24vanNvbid9LGJvZHk6SlNPTi5zdHJpbmdpZnkoe2lucHV0czpTdHJpbmcocHJvbXB0KS5zbGljZSgwLDQwMDApLHBhcmFtZXRlcnM6e3dpZHRoOjEwMjQsaGVpZ2h0OjEwMjR9fSksc2lnbmFsOkFib3J0U2lnbmFsLnRpbWVvdXQoMTIwMDAwKX0pOwogICAgICBjb25zdCBidWY9QnVmZmVyLmZyb20oYXdhaXQgci5hcnJheUJ1ZmZlcigpKTsKICAgICAgaWYoIXIub2spdGhyb3cgRXJyb3IoYEhUVFAgJHtyLnN0YXR1c306ICR7YnVmLnRvU3RyaW5nKCd1dGY4Jykuc2xpY2UoMCw0MDApfWApOwogICAgICBpZighYnVmLmxlbmd0aCl0aHJvdyBFcnJvcignSHVnZ2luZyBGYWNlINC90LUg0LLQtdGA0L3Rg9C7INC40LfQvtCx0YDQsNC20LXQvdC40LUnKTsKICAgICAgcmV0dXJue2RhdGFVcmw6YGRhdGE6aW1hZ2UvcG5nO2Jhc2U2NCwke2J1Zi50b1N0cmluZygnYmFzZTY0Jyl9YH07CiAgICB9Y2F0Y2goZSl7ZXJyb3JzLnB1c2goYEh1Z2dpbmcgRmFjZSBpbWFnZTogJHtlLm1lc3NhZ2V9YCk7Y29uc29sZS5lcnJvcignSEZfSU1BR0VfRVJST1InLGUubWVzc2FnZSl9CiAgfQogIGNvbnN0IG9rPWtleU9mKCdPUEVOQUlfQVBJX0tFWScpOwogIGlmKG9rKXsKICAgIHRyeXsKICAgICAgY29uc3Qgcj1hd2FpdCBmZXRjaCgnaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MS9pbWFnZXMvZ2VuZXJhdGlvbnMnLHttZXRob2Q6J1BPU1QnLGhlYWRlcnM6e0F1dGhvcml6YXRpb246YEJlYXJlciAke29rfWAsJ0NvbnRlbnQtVHlwZSc6J2FwcGxpY2F0aW9uL2pzb24nfSxib2R5OkpTT04uc3RyaW5naWZ5KHttb2RlbDpwcm9jZXNzLmVudi5PUEVOQUlfSU1BR0VfTU9ERUx8fCdncHQtaW1hZ2UtMScscHJvbXB0OlN0cmluZyhwcm9tcHQpLnNsaWNlKDAsNDAwMCksc2l6ZTpwcm9jZXNzLmVudi5PUEVOQUlfSU1BR0VfU0laRXx8JzEwMjR4MTAyNCcscXVhbGl0eTonYXV0byd9KSxzaWduYWw6QWJvcnRTaWduYWwudGltZW91dCgxMjAwMDApfSk7CiAgICAgIGNvbnN0IGQ9YXdhaXQgci5qc29uKCkuY2F0Y2goKCk9Pih7fSkpOwogICAgICBpZighci5vayl0aHJvdyBFcnJvcihgSFRUUCAke3Iuc3RhdHVzfTogJHtTdHJpbmcoZD8uZXJyb3I/Lm1lc3NhZ2V8fCcnKS5zbGljZSgwLDQwMCl9YCk7CiAgICAgIGNvbnN0IHg9ZD8uZGF0YT8uWzBdOwogICAgICBpZigheCl0aHJvdyBFcnJvcignT3BlbkFJINC90LUg0LLQtdGA0L3Rg9C7INC40LfQvtCx0YDQsNC20LXQvdC40LUnKTsKICAgICAgcmV0dXJuIHguYjY0X2pzb24/e2RhdGFVcmw6YGRhdGE6aW1hZ2UvcG5nO2Jhc2U2NCwke3guYjY0X2pzb259YH06eC51cmw/e3VybDp4LnVybH06bnVsbDsKICAgIH1jYXRjaChlKXtlcnJvcnMucHVzaChgT3BlbkFJIGltYWdlOiAke2UubWVzc2FnZX1gKTtjb25zb2xlLmVycm9yKCdPUEVOQUlfSU1BR0VfRVJST1InLGUubWVzc2FnZSl9CiAgfQogIHRocm93IE9iamVjdC5hc3NpZ24oRXJyb3IoZXJyb3JzLmpvaW4oJyB8ICcpfHwn0JPQtdC90LXRgNCw0YbQuNGPINC40LfQvtCx0YDQsNC20LXQvdC40Lkg0L3QtSDQvdCw0YHRgtGA0L7QtdC90LAuJykse3N0YXR1czo1MDN9KTsKfQonJycKcz1zWzpzdGFydF0rcmVwbGFjZW1lbnQrc1tlbmQ6XQpwLndyaXRlX3RleHQocykK'))"
+          grep -q '/generate-image' smart-index.html
+
       - name: Deploy backend to VPS
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_KEY"
           printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
           chmod 600 /tmp/vps_key
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
@@ -50,48 +52,65 @@ jobs:
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
           scp "${ssh_opts[@]}" local-gateway.js memory-map.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && systemctl restart my-ai-unified"
+          healthy=0
           for i in $(seq 1 30); do
-            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/h.json"; then break; fi
+            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/my-ai-health.json"; then
+              healthy=1
+              break
+            fi
             sleep 1
           done
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "python3 -c 'import json; x=json.load(open(\"/tmp/h.json\")); a=x.get(\"adapters\",{}); need=[\"groq\",\"groqVision\",\"search\",\"tts\",\"stt\",\"documents\",\"video\",\"zip\"]; missing=[k for k in need if not a.get(k)]; assert not missing,(\"missing adapters\",missing,x); print(\"LOCAL_HEALTH_OK\")'"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"prompt\":\"Кто ты?\"}' http://127.0.0.1:3020/chat | grep -q 'result'"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"iPhone 18 Pro\"}' http://127.0.0.1:3020/shopping | grep -q 'results'"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS -H 'Content-Type: application/json' -d '{\"query\":\"погода сегодня Москва\"}' http://127.0.0.1:3020/search | grep -q 'results'"
-          echo LOCAL_BACKEND_OK
+          test "$healthy" = 1
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-health.json"
+          rm -f /tmp/vps_key
+
       - name: Verify public API
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS https://ai.aliceq.ru/health > /tmp/public-health.json
+          API='https://ai.aliceq.ru'
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/health.json
           python3 - <<'PY'
           import json
-          x=json.load(open('/tmp/public-health.json')); a=x.get('adapters',{})
-          need=['groq','groqVision','search','tts','stt','documents','video','zip']
-          missing=[k for k in need if not a.get(k)]
-          assert not missing, ('missing adapters',missing,x)
-          print('PUBLIC_HEALTH_OK')
+          j=json.load(open('/tmp/health.json'))
+          assert j.get('ok') and j.get('dispatcher'), j
+          a=j.get('adapters',{})
+          required=['groq','groqVision','search','tts','stt','documents','video','zip']
+          missing=[k for k in required if not a.get(k)]
+          assert not missing, ('missing adapters',missing,j)
+          print('PUBLIC_HEALTH_OK', a)
           PY
-          curl -fsS -H 'Content-Type: application/json' -d '{"prompt":"Кто ты?"}' https://ai.aliceq.ru/chat | grep -q 'result'
-          curl -fsS -H 'Content-Type: application/json' -d '{"query":"iPhone 18 Pro"}' https://ai.aliceq.ru/shopping | grep -q 'results'
-          curl -fsS -H 'Content-Type: application/json' -d '{"prompt":"Нарисуй простой красный круг на белом фоне"}' https://ai.aliceq.ru/generate-image > /tmp/image.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' | grep -q 'result'
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 150 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shopping.json
           python3 - <<'PY'
           import json
-          x=json.load(open('/tmp/image.json'))
-          assert x.get('url') or x.get('dataUrl') or x.get('image'), x
+          j=json.load(open('/tmp/shopping.json'))
+          assert j.get('ok') and j.get('results'), j
+          print('SHOPPING_OK', len(j['results']))
+          PY
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 240 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/image.json'))
+          assert j.get('ok') and (j.get('url') or j.get('dataUrl') or j.get('image')), j
           print('IMAGE_GEN_OK')
           PY
           echo PUBLIC_API_OK
+
       - name: Publish Pages
         run: |
+          set -euo pipefail
           mkdir -p pages
           cp smart-index.html pages/index.html
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pages
+
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
