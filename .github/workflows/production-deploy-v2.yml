@@ -24,7 +24,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Validate source
         run: |
           set -euo pipefail
@@ -38,16 +37,12 @@ jobs:
           grep -q 'window.send=send' smart-index.html
           grep -q 'navigator.geolocation' smart-index.html
           grep -q '/generate-image' smart-index.html
-
       - name: Deploy backend to VPS
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$VPS_HOST"
-          test -n "$VPS_USER"
-          test -n "$VPS_SSH_KEY"
-          printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
-          chmod 600 /tmp/vps_key
+          test -n "$VPS_HOST"; test -n "$VPS_USER"; test -n "$VPS_SSH_KEY"
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
@@ -55,16 +50,12 @@ jobs:
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node image-generation-fallback.js local-gateway.js && node --check local-gateway.js && timeout 20s systemctl restart --no-block my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
-            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/my-ai-health.json"; then
-              healthy=1
-              break
-            fi
+            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
             sleep 1
           done
           test "$healthy" = 1
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-health.json"
           rm -f /tmp/vps_key
-
       - name: Verify public API
         shell: bash
         run: |
@@ -74,77 +65,64 @@ jobs:
           cat /tmp/health.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/health.json'))
-          assert j.get('ok') and j.get('dispatcher'), j
-          print('PUBLIC_HEALTH_OK', j.get('adapters',{}))
+          j=json.load(open('/tmp/health.json')); assert j.get('ok') and j.get('dispatcher'),j
+          print('PUBLIC_HEALTH_OK',j.get('adapters',{}))
           PY
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           cat /tmp/chat.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/chat.json'))
-          assert j.get('result') or j.get('text') or j.get('answer'), j
+          j=json.load(open('/tmp/chat.json')); assert j.get('result') or j.get('text') or j.get('answer'),j
           print('CHAT_OK')
           PY
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shopping.json
           cat /tmp/shopping.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/shopping.json'))
-          assert j.get('ok') and j.get('results'), j
-          print('SHOPPING_OK', len(j['results']))
+          j=json.load(open('/tmp/shopping.json')); assert j.get('ok') and j.get('results'),j
+          print('SHOPPING_OK',len(j['results']))
           PY
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
           b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
           print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
           PY
-          set +e
-          curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 2 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json
-          PHOTO_CODE=$?
-          set -e
-          echo "PHOTO_PUBLIC_CURL_EXIT=$PHOTO_CODE"
-          cat /tmp/photo-result.json || true
-          if [ "$PHOTO_CODE" != 0 ] || ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then
+          rm -f /tmp/photo-result.json /tmp/photo.err
+          curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 2 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
+          echo 'PHOTO_PUBLIC_BODY'; cat /tmp/photo-result.json || true; echo 'PHOTO_PUBLIC_ERR'; cat /tmp/photo.err || true
+          if ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then
             echo '=== LOCAL_VPS_PHOTO_DIAGNOSTIC ==='
-            printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
-            chmod 600 /tmp/vps_key
+            printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
             ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
             scp "${ssh_opts[@]}" /tmp/photo.json "$VPS_USER@$VPS_HOST:/tmp/photo.json"
-            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.headers -o /tmp/photo.local.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo LOCAL_HEADERS; cat /tmp/photo.headers; echo LOCAL_BODY; cat /tmp/photo.local.out; echo SERVICE_STATUS; systemctl --no-pager --full status my-ai-unified || true; echo SERVICE_LOG; journalctl -u my-ai-unified -n 80 --no-pager || true"
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.headers -o /tmp/photo.local.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo LOCAL_HEADERS; cat /tmp/photo.headers; echo LOCAL_BODY; cat /tmp/photo.local.out; echo SERVICE_STATUS; systemctl --no-pager --full status my-ai-unified || true; echo SERVICE_LOG; journalctl -u my-ai-unified -n 120 --no-pager || true"
             rm -f /tmp/vps_key
             exit 1
           fi
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/photo-result.json'))
-          assert j.get('ok') and j.get('result'),j
+          j=json.load(open('/tmp/photo-result.json')); assert j.get('ok') and j.get('result'),j
           print('PHOTO_OK',j.get('provider'),j.get('model'))
           PY
           curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 240 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
           cat /tmp/image.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/image.json'))
-          assert j.get('ok') and (j.get('url') or j.get('dataUrl') or j.get('image')), j
-          print('IMAGE_GEN_OK', j.get('provider'), j.get('model'))
+          j=json.load(open('/tmp/image.json')); assert j.get('ok') and (j.get('url') or j.get('dataUrl') or j.get('image')),j
+          print('IMAGE_GEN_OK',j.get('provider'),j.get('model'))
           PY
           echo PUBLIC_API_OK
-
       - name: Publish Pages
         run: |
           set -euo pipefail
           mkdir -p pages
           cp smart-index.html pages/index.html
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: pages
-
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
