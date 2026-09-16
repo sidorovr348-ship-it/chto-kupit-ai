@@ -30,6 +30,7 @@ jobs:
           set -euo pipefail
           node --check local-gateway.js
           node --check memory-map.js
+          node --check image-generation-fallback.js
           node --test test-local-gateway.js
           grep -q 'EY_WAKE_WORD_V1' smart-index.html
           grep -q 'MediaRecorder' smart-index.html
@@ -50,8 +51,8 @@ jobs:
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
-          scp "${ssh_opts[@]}" local-gateway.js memory-map.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && systemctl restart my-ai-unified"
+          scp "${ssh_opts[@]}" local-gateway.js memory-map.js image-generation-fallback.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node image-generation-fallback.js local-gateway.js && node --check local-gateway.js && systemctl restart my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/my-ai-health.json"; then
@@ -75,7 +76,7 @@ jobs:
           j=json.load(open('/tmp/health.json'))
           assert j.get('ok') and j.get('dispatcher'), j
           a=j.get('adapters',{})
-          required=['groq','groqVision','search','tts','stt','documents','video','zip']
+          required=['groq','groqVision','search','tts','stt','documents','video','zip','imageGeneration']
           missing=[k for k in required if not a.get(k)]
           assert not missing, ('missing adapters',missing,j)
           print('PUBLIC_HEALTH_OK', a)
@@ -93,7 +94,7 @@ jobs:
           import json
           j=json.load(open('/tmp/image.json'))
           assert j.get('ok') and (j.get('url') or j.get('dataUrl') or j.get('image')), j
-          print('IMAGE_GEN_OK')
+          print('IMAGE_GEN_OK', j.get('provider'), j.get('model'))
           PY
           echo PUBLIC_API_OK
 
