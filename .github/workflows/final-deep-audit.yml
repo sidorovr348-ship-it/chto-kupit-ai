@@ -1,0 +1,142 @@
+name: My AI Unified — final deep audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static source audit
+        run: |
+          set -euo pipefail
+          node --check local-gateway.js
+          node --check memory-map.js
+          node --test test-local-gateway.js
+          test -s smart-index.html
+          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/transcribe' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
+          echo STATIC_AUDIT_OK
+      - name: Wait for production deployment
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 48); do
+            if curl -fsS --max-time 10 'https://sidorovr348-ship-it.github.io/chto-kupit-ai/?audit='"$i" -o /tmp/live.html 2>/dev/null; then
+              grep -q 'My AI Unified' /tmp/live.html && break
+            fi
+            sleep 5
+          done
+          test -s /tmp/live.html
+          for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'EY_WAKE_WORD_V1'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
+          echo PAGES_AUDIT_OK
+      - name: API health and chat latency
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 2 --max-time 90 https://ai.aliceq.ru/health >/tmp/health.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/health.json')); a=j.get('adapters',{})
+          assert j.get('ok') and j.get('dispatcher'),j
+          for k in ['groq','groqVision','search','tts','stt','documents','video','zip']: assert a.get(k) is True,(k,j)
+          print('HEALTH_OK')
+          PY
+          /usr/bin/time -f '%e' -o /tmp/chat.time curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/chat.json')); assert j.get('ok') and j.get('result'),j
+          print('CHAT_OK',j.get('route'),open('/tmp/chat.time').read().strip(),'sec')
+          PY
+      - name: Search and shopping semantic audit
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 150 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди свежую информацию о погоде в Москве сегодня"}' >/tmp/search.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди iPhone 18 Pro в Москве где купить дешевле"}' >/tmp/shop.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди 8849 TANK 4 Pro в Москве где купить дешевле"}' >/tmp/tank.json
+          python3 - <<'PY'
+          import json,re
+          s=json.load(open('/tmp/search.json')); assert s.get('ok') and s.get('route')=='search' and s.get('sources'),s
+          for fn in ['/tmp/shop.json','/tmp/tank.json']:
+            j=json.load(open(fn)); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j
+            for x in j['results']:
+              assert x.get('url','').startswith(('http://','https://')),x
+              if x.get('price') is not None: assert isinstance(x['price'],(int,float)) and x['price']>0,x
+              assert not re.search(r'чехол|кейс|стекл|плёнк|кабель|заряд|ремеш|креплен|держател|сумк|футляр|насадк|фильтр|запчаст|аксессуар|совместим',x.get('title',''),re.I),x
+          print('SEARCH_OK',len(s['sources']))
+          print('SHOPPING_OK',len(json.load(open('/tmp/shop.json'))['results']))
+          print('TANK_OK',len(json.load(open('/tmp/tank.json'))['results']))
+          PY
+      - name: Photo vision audit
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >/tmp/photo.json
+          import json,base64
+          # 1x1 PNG; endpoint/vision chain must accept it without transport or provider errors.
+          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+          print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 180 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo-result.json')); assert j.get('ok') and j.get('result'),j; print('PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
+      - name: Document and ZIP audit
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >/tmp/zip.json
+          import io,zipfile,json,base64
+          b=io.BytesIO()
+          with zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED) as z:
+            z.writestr('hello.txt','Это тест ZIP. Файл найден.')
+            z.writestr('data.json','{"ok":true,"source":"final-audit"}')
+          print(json.dumps({'name':'final-audit.zip','mime':'application/zip','file':'data:application/zip;base64,'+base64.b64encode(b.getvalue()).decode()}))
+          PY
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST https://ai.aliceq.ru/document -H 'Content-Type: application/json' --data-binary @/tmp/zip.json >/tmp/zip-result.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/zip-result.json')); r=j.get('result',''); assert j.get('ok') and 'hello.txt' in r and 'data.json' in r,j; print('ZIP_OK')
+          PY
+      - name: TTS and STT round-trip audit
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голосового распознавания"}' -o /tmp/voice.bin
+          test -s /tmp/voice.bin
+          python3 - <<'PY'
+          import base64,json,mimetypes
+          b=base64.b64encode(open('/tmp/voice.bin','rb').read()).decode()
+          print(json.dumps({'filename':'audit.m4a','mime':'audio/mp4','audio':'data:audio/mp4;base64,'+b}))
+          PY >/tmp/stt.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/transcribe -H 'Content-Type: application/json' --data-binary @/tmp/stt.json >/tmp/stt-result.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/stt-result.json')); assert j.get('ok') and j.get('text'),j; print('TTS_OK_STT_OK',j['text'])
+          PY
+      - name: Memory and map audit
+        run: |
+          set -euo pipefail
+          ID="final-audit-$(date +%s)"
+          curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data "{\"prompt\":\"Эй, запомни правило: отвечай по-русски\",\"memoryId\":\"$ID\"}" >/tmp/mem-save.json
+          curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data "{\"prompt\":\"Эй, что ты обо мне запомнил?\",\"memoryId\":\"$ID\"}" >/tmp/mem-show.json
+          curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data "{\"prompt\":\"Эй, запомни моё местоположение как Дом\",\"memoryId\":\"$ID\",\"location\":{\"lat\":55.7558,\"lon\":37.6176,\"address\":\"Тестовая точка\"}}" >/tmp/place-save.json
+          curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data "{\"prompt\":\"Эй, построй мне маршрут до дома\",\"memoryId\":\"$ID\"}" >/tmp/route.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/mem-save.json')); b=json.load(open('/tmp/mem-show.json')); c=json.load(open('/tmp/place-save.json')); d=json.load(open('/tmp/route.json'))
+          assert a.get('ok') and a.get('route')=='memory',a
+          assert b.get('ok') and 'отвечай по-русски' in b.get('result',''),b
+          assert c.get('ok') and c.get('route')=='memory',c
+          assert d.get('ok') and d.get('route')=='map' and d.get('routeUrl'),d
+          print('MEMORY_MAP_OK')
+          PY
+      - name: Image generation audit
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 240 -X POST https://ai.aliceq.ru/generate-image -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/image.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j; print('IMAGE_GEN_OK')
+          PY
+      - name: Final audit summary
+        run: echo 'FINAL_DEEP_AUDIT_ALL_CHECKS_PASSED'
