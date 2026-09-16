@@ -84,7 +84,7 @@ jobs:
           PY
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
-          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
           print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
           PY
           rm -f /tmp/photo-result.json /tmp/photo.err
