@@ -1,12 +1,15 @@
 name: My AI Unified — final deep audit
 on:
-  workflow_dispatch:
-  push:
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -20,17 +23,17 @@ jobs:
           test -s smart-index.html
           for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/transcribe' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
           echo STATIC_AUDIT_OK
-      - name: Wait for production deployment
+      - name: Verify live Pages
         run: |
           set -euo pipefail
-          for i in $(seq 1 48); do
+          for i in $(seq 1 24); do
             if curl -fsS --max-time 10 'https://sidorovr348-ship-it.github.io/chto-kupit-ai/?audit='"$i" -o /tmp/live.html 2>/dev/null; then
-              grep -q 'My AI Unified' /tmp/live.html && break
+              if grep -q 'MediaRecorder' /tmp/live.html && grep -q 'https://ai.aliceq.ru' /tmp/live.html; then break; fi
             fi
             sleep 5
           done
           test -s /tmp/live.html
-          for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'EY_WAKE_WORD_V1'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
+          for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'EY_WAKE_WORD_V1' '/generate-image'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
           echo PAGES_AUDIT_OK
       - name: API health and chat latency
         run: |
@@ -139,5 +142,3 @@ jobs:
           PY
       - name: Final audit summary
         run: echo 'FINAL_DEEP_AUDIT_ALL_CHECKS_PASSED'
-
-# audit-trigger-2026-09-16
