@@ -82,6 +82,7 @@ jobs:
           j=json.load(open('/tmp/shopping.json')); assert j.get('ok') and j.get('results'),j
           print('SHOPPING_OK',len(j['results']))
           PY
+          sleep 4
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
           b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
