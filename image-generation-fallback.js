@@ -20,6 +20,7 @@ const replacement = `async function generateImage(prompt){
   return {dataUrl:\`data:image/svg+xml;base64,\${safe}\`,provider:'svg-fallback'};
 }`;
 s = s.slice(0,start) + replacement + s.slice(end);
-s = s.replace(/imageGeneration:!!keyOf\('OPENAI_API_KEY','GROQ_API_KEY'\)/, "imageGeneration:!!keyOf('OPENAI_API_KEY','GROQ_API_KEY','PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN')");
+s = s.replace(/imageGeneration:!!keyOf\('OPENAI_API_KEY'(?:,'[^']*')*\)/, "imageGeneration:!!keyOf('OPENAI_API_KEY','GROQ_API_KEY','PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN')");
+s = s.replace(/imageGeneration:!!keyOf\('OPENAI_API_KEY'\)/, "imageGeneration:!!keyOf('OPENAI_API_KEY','GROQ_API_KEY','PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN')");
 fs.writeFileSync(file,s);
 console.log('IMAGE_GENERATION_FALLBACK_PATCH_OK');
