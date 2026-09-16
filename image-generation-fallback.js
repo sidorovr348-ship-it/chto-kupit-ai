@@ -29,5 +29,7 @@ const replacement = `async function generateImage(prompt){
 s = s.slice(0,start) + replacement + s.slice(end);
 s = s.replace(/imageGeneration:!!keyOf\('OPENAI_API_KEY'(?:,'[^']*')*\)/, "imageGeneration:!!keyOf('OPENAI_API_KEY','GROQ_API_KEY','PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN')");
 s = s.replace(/imageGeneration:!!keyOf\('OPENAI_API_KEY'\)/, "imageGeneration:!!keyOf('OPENAI_API_KEY','GROQ_API_KEY','PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN')");
+s = s.replace("const models=vision?[GROQ_VISION_MODEL]:[GROQ_TEXT_MODEL,'openai/gpt-oss-20b','llama-3.1-8b-instant','llama-3.3-70b-versatile'];", "const models=vision?[GROQ_VISION_MODEL,'qwen/qwen3.6-27b','meta-llama/llama-4-scout-17b-16e-instruct'].filter((v,i,a)=>a.indexOf(v)===i):[GROQ_TEXT_MODEL,'openai/gpt-oss-20b','llama-3.1-8b-instant','llama-3.3-70b-versatile'];");
 fs.writeFileSync(file,s);
 console.log('IMAGE_GENERATION_FALLBACK_PATCH_OK');
+console.log('VISION_FALLBACK_PATCH_OK');
