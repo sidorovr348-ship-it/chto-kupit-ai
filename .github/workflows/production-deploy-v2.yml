@@ -94,6 +94,23 @@ jobs:
           assert j.get('ok') and j.get('results'), j
           print('SHOPPING_OK', len(j['results']))
           PY
+          python3 - <<'PY' >/tmp/photo.json
+          import base64,json
+          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+          print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
+          PY
+          set +e
+          curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 2 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json
+          PHOTO_CODE=$?
+          set -e
+          echo "PHOTO_CURL_EXIT=$PHOTO_CODE"
+          cat /tmp/photo-result.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo-result.json'))
+          assert j.get('ok') and j.get('result'),j
+          print('PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
           curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 240 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
           cat /tmp/image.json
           python3 - <<'PY'
