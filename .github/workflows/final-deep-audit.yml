@@ -11,7 +11,7 @@ jobs:
   audit:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Static source audit
@@ -19,6 +19,7 @@ jobs:
           set -euo pipefail
           node --check local-gateway.js
           node --check memory-map.js
+          node --check image-generation-fallback.js
           node --test test-local-gateway.js
           test -s smart-index.html
           for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/transcribe' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
@@ -26,13 +27,17 @@ jobs:
       - name: Verify live Pages
         run: |
           set -euo pipefail
-          for i in $(seq 1 24); do
-            if curl -fsS --max-time 10 'https://sidorovr348-ship-it.github.io/chto-kupit-ai/?audit='"$i" -o /tmp/live.html 2>/dev/null; then
-              if grep -q 'MediaRecorder' /tmp/live.html && grep -q 'https://ai.aliceq.ru' /tmp/live.html; then break; fi
+          sleep 20
+          PAGE_URL='https://sidorovr348-ship-it.github.io/chto-kupit-ai/'
+          ok=0
+          for i in $(seq 1 20); do
+            rm -f /tmp/live.html
+            if curl -LfsS --max-time 20 --retry 2 --retry-all-errors "$PAGE_URL?audit=$i" -o /tmp/live.html 2>/tmp/page.err; then
+              if grep -q 'MediaRecorder' /tmp/live.html && grep -q 'ai.aliceq.ru' /tmp/live.html && grep -q 'EY_WAKE_WORD_V1' /tmp/live.html; then ok=1; break; fi
             fi
-            sleep 5
+            sleep 3
           done
-          test -s /tmp/live.html
+          if [ "$ok" != 1 ]; then echo 'LIVE_PAGES_FETCH_FAILED'; cat /tmp/page.err 2>/dev/null || true; exit 1; fi
           for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'EY_WAKE_WORD_V1' '/generate-image'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
           echo PAGES_AUDIT_OK
       - name: API health and chat latency
@@ -43,7 +48,7 @@ jobs:
           import json
           j=json.load(open('/tmp/health.json')); a=j.get('adapters',{})
           assert j.get('ok') and j.get('dispatcher'),j
-          for k in ['groq','groqVision','search','tts','stt','documents','video','zip']: assert a.get(k) is True,(k,j)
+          for k in ['groq','groqVision','search','tts','stt','documents','video','zip','imageGeneration']: assert a.get(k) is True,(k,j)
           print('HEALTH_OK')
           PY
           /usr/bin/time -f '%e' -o /tmp/chat.time curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 1 --max-time 90 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
