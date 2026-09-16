@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -c "import base64;exec(base64.b64decode('cHJvbXB0'))"
+          python3 -c "import base64;exec(base64.b64decode('YQo'))"
 
       - name: Deploy backend to VPS
         shell: bash
