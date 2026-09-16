@@ -13,14 +13,14 @@ const replacement = `async function generateImage(prompt){
   const system='Ты генератор SVG-иллюстраций. Создай ОДИН самодостаточный SVG 1024x1024 по описанию пользователя. Разрешены только обычные SVG-элементы: svg, rect, circle, ellipse, line, polyline, polygon, path, text, g, linearGradient, radialGradient, stop. Никаких script, image, iframe, foreignObject, внешних URL и обработчиков событий. Верни только полный SVG-код без markdown и пояснений.';
   const makeSvg=svg=>{svg=String(svg||'').trim().replace(/^\\s*\\\`\\\`\\\`(?:svg)?/i,'').replace(/\\\`\\\`\\\`\\s*$/,'').trim();if(!/^<svg\\b/i.test(svg)||!/<\\/svg>$/i.test(svg))throw Error('Некорректный SVG');if(/<script\\b|javascript:|<iframe\\b|<foreignObject\\b|on[a-z]+\\s*=/i.test(svg))throw Error('SVG содержит запрещённый код');if(!/viewBox=/i.test(svg))svg=svg.replace(/^<svg\\b/i,'<svg viewBox="0 0 1024 1024"');return {dataUrl:\`data:image/svg+xml;base64,\${Buffer.from(svg,'utf8').toString('base64')}\`,provider:'ai-svg'};};
   async function aiSvg(url,key,model,label){
-    const r=await fetch(url,{method:'POST',headers:{Authorization:\`Bearer \${key}\`,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:p.slice(0,3000)}],temperature:0.2,max_tokens:7000}),signal:AbortSignal.timeout(60000)});
+    const r=await fetch(url,{method:'POST',headers:{Authorization:\`Bearer \${key}\`,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'system',content:system},{role:'user',content:p.slice(0,3000)}],temperature:0.2,max_tokens:4000}),signal:AbortSignal.timeout(60000)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok) throw Error(label+' HTTP '+r.status+' '+JSON.stringify(d).slice(0,500));
     const text=d?.choices?.[0]?.message?.content||d?.choices?.[0]?.text||'';
     return {...makeSvg(text),model,provider:label};
   }
   const groq=keyOf('GROQ_API_KEY');
-  if(groq){try{return await aiSvg('https://api.groq.com/openai/v1/chat/completions',groq,process.env.GROQ_TEXT_MODEL||'openai/gpt-oss-120b','groq-ai-svg');}catch(e){console.error('GROQ_IMAGE_ERROR',e.message)}}
+  if(groq){try{return await aiSvg('https://api.groq.com/openai/v1/chat/completions',groq,'openai/gpt-oss-20b','groq-ai-svg');}catch(e){console.error('GROQ_IMAGE_ERROR',e.message)}}
   const paralon=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');
   if(paralon){try{return await aiSvg('https://paraloncloud.com/v1/chat/completions',paralon,process.env.PARALON_IMAGE_MODEL||'qwen3.8-27b','paralon-ai-svg');}catch(e){console.error('PARALON_IMAGE_ERROR',e.message)}}
   const safe=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="white"/><circle cx="512" cy="430" r="230" fill="#d71920"/><path d="M320 720h384" stroke="#222" stroke-width="28" stroke-linecap="round"/></svg>','utf8').toString('base64');
