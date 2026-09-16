@@ -16,7 +16,7 @@ const replacement = `async function generateImage(prompt){
   const groq=keyOf('GROQ_API_KEY');if(groq)providers.push(['https://api.groq.com/openai/v1/chat/completions',groq,GROQ_TEXT_MODEL]);
   const paralon=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');if(paralon)providers.push(['https://paraloncloud.com/v1/chat/completions',paralon,'qwen3.8-27b']);
   for(const [url,key,model] of providers){try{const z=await provider(url,key,model,[{role:'system',content:system},{role:'user',content:p.slice(0,3000)}],45000,false);return {...makeSvg(z.text),model};}catch(e){console.error('IMAGE_PROVIDER_ERROR',model,e.message)}}
-  const safe=Buffer.from(\`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="white"/><circle cx="512" cy="430" r="230" fill="#d71920"/><text x="512" y="790" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" fill="#222">${p.replace(/[&<>"']/g,'').slice(0,80)}</text></svg>\`,'utf8').toString('base64');
+  const safe=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="white"/><circle cx="512" cy="430" r="230" fill="#d71920"/><path d="M320 720h384" stroke="#222" stroke-width="28" stroke-linecap="round"/></svg>','utf8').toString('base64');
   return {dataUrl:\`data:image/svg+xml;base64,\${safe}\`,provider:'svg-fallback'};
 }`;
 s = s.slice(0,start) + replacement + s.slice(end);
