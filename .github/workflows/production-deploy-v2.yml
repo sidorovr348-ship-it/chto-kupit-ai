@@ -50,7 +50,51 @@ jobs:
             raise SystemExit('VISION_FALLBACK_PATCH_TARGET_NOT_FOUND')
           if 'MISTRAL_VISION_ERROR' not in s:
             s=s.replace(needle,insert+needle,1)
-            p.write_text(s)
+          start=s.find('async function generateImage(prompt){')
+          end=s.find('async function transcribe(dataUrl){',start)
+          if start<0 or end<0:
+            raise SystemExit('IMAGE_FUNCTION_PATCH_TARGET_NOT_FOUND')
+          replacement="""async function generateImage(prompt){
+  const errors=[];
+  const mk=keyOf('MISTRAL_API_KEY');
+  if(mk){
+    try{
+      const r=await fetch('https://api.mistral.ai/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${mk}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.MISTRAL_IMAGE_MODEL||'mistral-small-latest',messages:[{role:'user',content:`Generate an image from this request: ${String(prompt).slice(0,4000)}`}],tools:[{type:'image_generation'}],tool_choice:'any'}),signal:AbortSignal.timeout(120000)});
+      const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{}
+      if(!r.ok)throw Error(`HTTP ${r.status}: ${String(d?.error?.message||raw||'').slice(0,400)}`);
+      const msg=d?.choices?.[0]?.message||{};
+      const content=typeof msg.content==='string'?msg.content:JSON.stringify(msg.content||msg);
+      const url=content.match(/https?:\\/\\/[^\\s\\\"'<>]+/i)?.[0];
+      if(url)return{url};
+      throw Error('Mistral не вернул ссылку на изображение');
+    }catch(e){errors.push(`Mistral image: ${e.message}`);console.error('MISTRAL_IMAGE_ERROR',e.message)}
+  }
+  const hf=keyOf('HF_TOKEN','HUGGINGFACE_API_KEY','HF_API_KEY','HUGGINGFACE_TOKEN');
+  if(hf){
+    try{
+      const r=await fetch('https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell',{method:'POST',headers:{Authorization:`Bearer ${hf}`,'Content-Type':'application/json'},body:JSON.stringify({inputs:String(prompt).slice(0,4000),parameters:{width:1024,height:1024}}),signal:AbortSignal.timeout(120000)});
+      const buf=Buffer.from(await r.arrayBuffer());
+      if(!r.ok)throw Error(`HTTP ${r.status}: ${buf.toString('utf8').slice(0,400)}`);
+      if(!buf.length)throw Error('Hugging Face не вернул изображение');
+      return{dataUrl:`data:image/png;base64,${buf.toString('base64')}`};
+    }catch(e){errors.push(`Hugging Face image: ${e.message}`);console.error('HF_IMAGE_ERROR',e.message)}
+  }
+  const ok=keyOf('OPENAI_API_KEY');
+  if(ok){
+    try{
+      const r=await fetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{Authorization:`Bearer ${ok}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_IMAGE_MODEL||'gpt-image-1',prompt:String(prompt).slice(0,4000),size:process.env.OPENAI_IMAGE_SIZE||'1024x1024',quality:'auto'}),signal:AbortSignal.timeout(120000)});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(`HTTP ${r.status}: ${String(d?.error?.message||'').slice(0,400)}`);
+      const x=d?.data?.[0];
+      if(!x)throw Error('OpenAI не вернул изображение');
+      return x.b64_json?{dataUrl:`data:image/png;base64,${x.b64_json}`}:x.url?{url:x.url}:null;
+    }catch(e){errors.push(`OpenAI image: ${e.message}`);console.error('OPENAI_IMAGE_ERROR',e.message)}
+  }
+  throw Object.assign(Error(errors.join(' | ')||'Генерация изображений не настроена.'),{status:503});
+}
+"""
+          s=s[:start]+replacement+s[end:]
+          p.write_text(s)
           PY
           printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
           chmod 600 /tmp/vps_key
@@ -101,4 +145,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-# Final verification trigger: current main includes the wake-word and location-memory fixes.
+# Image generation fallback: Mistral tool -> Hugging Face -> OpenAI.
