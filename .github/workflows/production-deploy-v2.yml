@@ -40,6 +40,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('local-gateway.js')
+          s=p.read_text()
+          needle="const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');"
+          insert="if(vision){const mk=keyOf('MISTRAL_API_KEY');if(mk)for(const model of[process.env.MISTRAL_VISION_MODEL||'pixtral-large-latest','pixtral-12b-2409'])try{return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,messages,vision?60000:30000,vision),provider:'mistral',model}}catch(e){errors.push(`Mistral vision ${model}: ${e.message}`);console.error('MISTRAL_VISION_ERROR',model,e.message)} }\n"
+          if needle not in s:
+            raise SystemExit('VISION_FALLBACK_PATCH_TARGET_NOT_FOUND')
+          if 'MISTRAL_VISION_ERROR' not in s:
+            s=s.replace(needle,insert+needle,1)
+            p.write_text(s)
+          PY
           printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
           chmod 600 /tmp/vps_key
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
