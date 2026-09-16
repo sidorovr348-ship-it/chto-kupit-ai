@@ -48,11 +48,11 @@ jobs:
           test -n "$VPS_SSH_KEY"
           printf '%s\n' "$VPS_SSH_KEY" > /tmp/vps_key
           chmod 600 /tmp/vps_key
-          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
           scp "${ssh_opts[@]}" local-gateway.js memory-map.js image-generation-fallback.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node image-generation-fallback.js local-gateway.js && node --check local-gateway.js && systemctl restart my-ai-unified"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node image-generation-fallback.js local-gateway.js && node --check local-gateway.js && timeout 20s systemctl restart --no-block my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health > /tmp/my-ai-health.json"; then
