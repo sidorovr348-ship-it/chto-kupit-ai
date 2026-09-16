@@ -73,7 +73,6 @@ jobs:
           set -euo pipefail
           python3 - <<'PY' >/tmp/photo.json
           import json,base64
-          # 1x1 PNG; endpoint/vision chain must accept it without transport or provider errors.
           b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
           print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
           PY
@@ -103,11 +102,11 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Проверка голосового распознавания"}' -o /tmp/voice.bin
           test -s /tmp/voice.bin
-          python3 - <<'PY'
-          import base64,json,mimetypes
+          python3 - <<'PY' >/tmp/stt.json
+          import base64,json
           b=base64.b64encode(open('/tmp/voice.bin','rb').read()).decode()
           print(json.dumps({'filename':'audit.m4a','mime':'audio/mp4','audio':'data:audio/mp4;base64,'+b}))
-          PY >/tmp/stt.json
+          PY
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/transcribe -H 'Content-Type: application/json' --data-binary @/tmp/stt.json >/tmp/stt-result.json
           python3 - <<'PY'
           import json
