@@ -1,0 +1,33 @@
+name: Photo public smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  photo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Build valid JPEG payload
+        run: |
+          python3 - <<'PY' >/tmp/photo.json
+          import base64,json
+          b=base64.b64decode('PLACEHOLDER')
+          print(json.dumps({'images':['data:image/jpeg;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши изображение по-русски. Ответь одним предложением.'}))
+          PY
+      - name: Verify public photo
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out
+          cat /tmp/photo.out
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.out'))
+          assert j.get('ok') and j.get('result'), j
+          print('PHOTO_OK',j.get('provider'),j.get('model'))
+          PY
