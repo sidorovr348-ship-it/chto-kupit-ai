@@ -23,6 +23,21 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install --no-save playwright@1.55.0
           npx playwright install --with-deps chromium
+      - name: Create a minimal real DOCX fixture
+        run: |
+          python3 - <<'PY'
+          from zipfile import ZipFile, ZIP_DEFLATED
+          from pathlib import Path
+          root = Path('/tmp/docx-fixture')
+          (root/'word').mkdir(parents=True, exist_ok=True)
+          (root/'[Content_Types].xml').write_text('''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>''')
+          (root/'_rels').mkdir(exist_ok=True)
+          (root/'_rels/.rels').write_text('''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>''')
+          (root/'word/document.xml').write_text('''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Проверка загрузки документа через мобильный интерфейс My AI Unified.</w:t></w:r></w:p></w:body></w:document>''')
+          with ZipFile('/tmp/mobile-e2e.docx','w',ZIP_DEFLATED) as z:
+              for p in [root/'[Content_Types].xml',root/'_rels/.rels',root/'word/document.xml']:
+                  z.write(p,p.relative_to(root).as_posix())
+          PY
       - name: Run iPhone-sized production end-to-end test
         env:
           APP_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
@@ -32,6 +47,7 @@ jobs:
           node <<'NODE'
           (async () => {
             const { chromium } = require('playwright');
+            const fs = require('fs');
             const APP = process.env.APP_URL;
             const API = process.env.API_URL;
             const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required'] });
@@ -44,7 +60,6 @@ jobs:
             const errors = [];
             page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
             page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-            const first = (...ids) => ids.map(id => `#${id}`).find(sel => page.locator(sel).count().then ? false : false);
             const pick = async (...ids) => {
               for (const id of ids) if (await page.locator(`#${id}`).count()) return page.locator(`#${id}`).first();
               throw new Error(`none of selectors exists: ${ids.join(', ')}`);
@@ -60,15 +75,12 @@ jobs:
             try {
               await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
               if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
-
               const send = await pick('send');
               const input = await pick('in','input');
               const voice = await pick('voice');
-              const photoButton = await pick('photo');
               const cameraButton = await pick('camBtn','camera');
-              const fileButton = await pick('file');
               const imageButton = await pick('img','imagegen');
-              for (const ids of [['video'],['sound'],['stop'],['clear']]) if (await countAny(...ids) !== 1) fail(`control missing: ${ids.join('/')}`);
+              for (const id of ['video','sound','stop','clear']) if (await countAny(id) !== 1) fail(`control missing: ${id}`);
 
               const health = await page.evaluate(async api => { const r=await fetch(`${api}/health?mobile_e2e=${Date.now()}`); return {status:r.status,body:await r.json()}; }, API);
               if (health.status !== 200 || !health.body.ok) fail(`health failed: ${JSON.stringify(health)}`);
@@ -77,14 +89,10 @@ jobs:
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
               await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.tap(); await waitAI(before);
 
-              // 2. Live camera path, accepting either currently served UI variant.
+              // 2. Live camera path: permission, stream, mobile UI state, shutdown.
               await cameraButton.tap();
-              const box = await pick('camBox','cameraBox');
-              await page.waitForFunction(() => {
-                const b=document.querySelector('#camBox')||document.querySelector('#cameraBox');
-                const v=document.querySelector('#cam');
-                return b?.style.display==='block' && !!v?.srcObject?.getVideoTracks?.()[0];
-              }, null, {timeout:15000});
+              await pick('camBox','cameraBox');
+              await page.waitForFunction(() => { const b=document.querySelector('#camBox')||document.querySelector('#cameraBox'); const v=document.querySelector('#cam'); return b?.style.display==='block' && !!v?.srcObject?.getVideoTracks?.()[0]; }, null, {timeout:15000});
               await page.waitForFunction(() => document.querySelector('#cam')?.srcObject?.getVideoTracks?.()[0]?.readyState==='live', null, {timeout:15000});
               await (await pick('camOff')).tap();
               await page.waitForFunction(() => { const b=document.querySelector('#camBox')||document.querySelector('#cameraBox'); return b?.style.display==='none'; });
@@ -94,9 +102,12 @@ jobs:
               const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
               before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await waitAI(before,180000);
 
-              // 4. Document path through the real file input and public /document backend.
+              // 4. Binary document path through the real mobile file input and /document backend.
               const fileInput = await pick('fi','fileInput');
-              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await fileInput.setInputFiles({name:'mobile-e2e.txt',mimeType:'text/plain',buffer:Buffer.from('Это проверка загрузки документа через мобильный интерфейс.')}); await waitAI(before,180000);
+              const docx = fs.readFileSync('/tmp/mobile-e2e.docx');
+              before=await page.locator('#chat .m.a, #chat .msg.ai').count();
+              await fileInput.setInputFiles({name:'mobile-e2e.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:docx});
+              await waitAI(before,180000);
 
               // 5. Voice UI: permission, MediaRecorder start/stop and cleanup.
               await voice.tap(); await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000}); await voice.tap(); await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
@@ -105,7 +116,7 @@ jobs:
               let dialogSeen=false; page.once('dialog',async d=>{dialogSeen=true;await d.dismiss();}); await imageButton.tap(); await page.waitForTimeout(200); if(!dialogSeen) fail('image generation prompt did not open');
 
               // 7. Controls remain present after the complete interaction chain.
-              if (await countAny('send')!==1 || await countAny('voice')!==1 || await countAny('photo')!==1 || await countAny('file')!==1 || await countAny('sound')!==1 || await countAny('stop')!==1 || await countAny('clear')!==1) fail('core control set changed after interactions');
+              for (const id of ['send','voice','photo','file','sound','stop','clear']) if (await countAny(id)!==1) fail(`core control missing after interactions: ${id}`);
               if(errors.length) fail(errors.join('\n'));
               await page.screenshot({path:'mobile-e2e.png',fullPage:true});
               console.log('MOBILE_E2E_OK');
