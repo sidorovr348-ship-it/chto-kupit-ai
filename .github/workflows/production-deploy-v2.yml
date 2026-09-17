@@ -21,12 +21,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Pin current vision model
-        run: |
-          set -euo pipefail
-          sed -i 's/qwen\/qwen3\.6-27b/qwen\/qwen3.8-27b/g' local-gateway.js image-generation-fallback.js
-          grep -q 'qwen/qwen3.8-27b' local-gateway.js
-          grep -q 'qwen/qwen3.8-27b' image-generation-fallback.js
       - name: Validate source
         run: |
           set -euo pipefail
@@ -51,7 +45,7 @@ jobs:
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
           scp "${ssh_opts[@]}" local-gateway.js memory-map.js image-generation-fallback.js vision-runtime-hotfix.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node --check vision-runtime-hotfix.js && node image-generation-fallback.js local-gateway.js && node vision-runtime-hotfix.js local-gateway.js && node --check local-gateway.js && timeout 20s systemctl restart --no-block my-ai-unified"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node --check vision-runtime-hotfix.js && node image-generation-fallback.js local-gateway.js && node vision-runtime-hotfix.js local-gateway.js && node --check local-gateway.js && systemctl restart my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
@@ -65,51 +59,40 @@ jobs:
         run: |
           set -euo pipefail
           API='https://ai.aliceq.ru'
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/health.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/health.json
           cat /tmp/health.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/health.json')); assert j.get('ok') and j.get('dispatcher'),j
-          print('PUBLIC_HEALTH_OK',j.get('adapters',{}))
+          print('PUBLIC_HEALTH_OK')
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
+          curl --fail --silent --show-error --max-time 120 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/chat.json
           cat /tmp/chat.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/chat.json')); assert j.get('result') or j.get('text') or j.get('answer'),j
           print('CHAT_OK')
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shopping.json
+          curl --fail --silent --show-error --max-time 180 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shopping.json
           cat /tmp/shopping.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/shopping.json')); assert j.get('ok') and j.get('results'),j
           print('SHOPPING_OK',len(j['results']))
           PY
-          sleep 8
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
-          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAACeklEQVR4nO2d')
-          raise SystemExit('fixture prefix intentionally incomplete')
+          b=base64.b64decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDiaKKK+PP6QP/Z')
+          print(json.dumps({'images':['data:image/jpeg;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши изображение по-русски. Ответь одним предложением.'}))
           PY
-          rm -f /tmp/photo-result.json /tmp/photo.err
-          curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 5 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
-          echo 'PHOTO_PUBLIC_BODY'; cat /tmp/photo-result.json || true; echo 'PHOTO_PUBLIC_ERR'; cat /tmp/photo.err || true
-          if ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then
-            echo '=== LOCAL_VPS_PHOTO_DIAGNOSTIC ==='
-            printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
-            ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
-            scp "${ssh_opts[@]}" /tmp/photo.json "$VPS_USER@$VPS_HOST:/tmp/photo.json"
-            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.headers -o /tmp/photo.local.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo LOCAL_HEADERS; cat /tmp/photo.headers; echo LOCAL_BODY; cat /tmp/photo.local.out; echo SERVICE_STATUS; systemctl --no-pager --full status my-ai-unified || true; echo SERVICE_LOG; journalctl -u my-ai-unified -n 120 --no-pager || true"
-            rm -f /tmp/vps_key
-            exit 1
-          fi
+          curl --fail --silent --show-error --max-time 120 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json
+          cat /tmp/photo-result.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/photo-result.json')); assert j.get('ok') and j.get('result'),j
           print('PHOTO_OK',j.get('provider'),j.get('model'))
           PY
-          curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 240 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
+          curl --fail --silent --show-error --max-time 180 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
           cat /tmp/image.json
           python3 - <<'PY'
           import json

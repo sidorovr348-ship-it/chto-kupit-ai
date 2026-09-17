@@ -16,14 +16,15 @@ jobs:
       - run: npm install
       - run: node --check server.js
       - run: node --test
-      - name: Verify public AI photo and TTS
+      - name: Verify public AI photo and TTS after production push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          PHOTO_DATA: iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAACMElEQVR4nO3csU0cURRAUbAcuQ0n0AsBJVAJgSOXQQkOiN0GJE4owukQTIiwWRn+eeu9Jx6Wx7/zZhFacb5t21mcT3qAU1cArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcA+H3T1r8vLD5rjP/P14eGNV7YBWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVADvsz9ETXF3c/fmC+8ebFXO8k+MI8NdDf+3i+TGmBzjo6F/78skZ5gb4x6N/+VIzM0wM8I5H//Jlp2UY91vQB53+stc/1KANWHY0o1ZhygasvzGHrMKIAOosJjTwAewp8AY4AP/5+QwywITT38FJ/CPoxLEAc27/nZrHBJh2+jsyVY8gDASYefvv1s/WBmCrA0y+/XeLJ2wDsKUB5t/+u5VztgFYAbACYOsCHMsbwG7ZtG0AVgCsAFgBsAJgBcAKgBUAKwBWAGxdgCEfhn2jZdO2AVgBsAJgSwMcy9vAyjnbAGx1gPlLsHjCNgADASYvwfrZ2gDMBJi5BGQqtgHTGqh5egRhMsCcJYCT4A2Y0MDO4P9XxP3jzdXF3e/r2/Xf+suPb/wOGPEeoE6Bn/7ZkACnrABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwBWAKwAWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwBWAKwB2vm2bnuGktQFYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgD0Dqd1n+2iwVJcAAAAASUVORK5CYII=
+          PHOTO_DATA: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDiaKKK+PP6QP/Z
         run: |
           set -euo pipefail
           echo '=== PHOTO ==='
-          sleep 8
-          PHOTO_OUT=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 3 --max-time 180 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}")
+          printf '%s' "$PHOTO_DATA" | base64 -d >/tmp/photo.jpg
+          PHOTO_OUT=$(curl --fail --silent --show-error --max-time 120 -X POST https://ai.aliceq.ru/photo -H 'Content-Type: application/json' --data "{\"image\":\"$PHOTO_DATA\",\"prompt\":\"Коротко скажи, что ты видишь.\"}")
           echo "$PHOTO_OUT"
           echo '=== TTS ==='
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 60 -X POST https://ai.aliceq.ru/tts -H 'Content-Type: application/json' --data '{"text":"Привет. Это проверка голоса."}' -o /tmp/tts.mp3
