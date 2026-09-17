@@ -33,6 +33,7 @@ jobs:
           node --check local-gateway.js
           node --check memory-map.js
           node --check image-generation-fallback.js
+          node --check vision-runtime-hotfix.js
           node --test test-local-gateway.js
           grep -q 'EY_WAKE_WORD_V1' smart-index.html
           grep -q 'MediaRecorder' smart-index.html
@@ -49,8 +50,8 @@ jobs:
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
-          scp "${ssh_opts[@]}" local-gateway.js memory-map.js image-generation-fallback.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node image-generation-fallback.js local-gateway.js && node --check local-gateway.js && timeout 20s systemctl restart --no-block my-ai-unified"
+          scp "${ssh_opts[@]}" local-gateway.js memory-map.js image-generation-fallback.js vision-runtime-hotfix.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cd '$WORKDIR' && npm install --omit=dev --no-audit --no-fund && node --check local-gateway.js && node --check memory-map.js && node --check image-generation-fallback.js && node --check vision-runtime-hotfix.js && node image-generation-fallback.js local-gateway.js && node vision-runtime-hotfix.js local-gateway.js && node --check local-gateway.js && timeout 20s systemctl restart --no-block my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
             if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
@@ -88,11 +89,11 @@ jobs:
           sleep 8
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
-          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAACMElEQVR4nO3csU0cURRAUbAcuQ0n0AsBJVAJgSOXQQkOiN0GJE4owukQTIiwWRn+eeu9Jx6Wx7/zZhFacb5t21mcT3qAU1cArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcA+H3T1r8vLD5rjP/P14eGNV7YBWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVADvsz9ETXF3c/fmC+8ebFXO8k+MI8NdDf+3i+TGmBzjo6F/78skZ5gb4x6N/+VIzM0wM8I5H//Jlp2UY91vQB53+stc/1KANWHY0o1ZhygasvzGHrMKIAOosJjTwAewp8AY4AP/5+QwywITT38FJ/CPoxLEAc27/nZrHBJh2+jsyVY8gDASYefvv1s/WBmCrA0y+/XeLJ2wDsKUB5t/+u5VztgFYAbACYOsCHMsbwG7ZtG0AVgCsAFgBsAJgBcAKgBUAKwBWAGxdgCEfhn2jZdO2AVgBsAJgSwMcy9vAyjnbAGx1gPlLsHjCNgADASYvwfrZ2gDMBJi5BGQqtgHTGqh5egRhMsCcJYCT4A2Y0MDO4P9XxP3jzdXF3e/r2/Xf+suPb/wOGPEeoE6Bn/7ZkACnrABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwBWAKwAWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwB2vm2bnuGktQFYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgD0Dqd1n+2iwVJcAAAAASUVORK5CYII=')
+          b=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAACMElEQVR4nO3csU0cURRAUbAcuQ0n0AsBJVAJgSOXQQkOiN0GJE4owukQTIiwWRn+eeu9Jx6Wx7/zZhFacb5t21mcT3qAU1cArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcA+H3T1r8vLD5rjP/P14eGNV7YBWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVADvsz9ETXF3c/fmC+8ebFXO8k+MI8NdDf+3i+TGmBzjo6F/78skZ5gb4x6N/+VIzM0wM8I5H//Jlp2UY91vQB53+stc/1KANWHY0o1ZhygasvzGHrMKIAOosJjTwAewp8AY4AP/5+QwywITT38FJ/CPoxLEAc27/nZrHBJh2+jsyVY8gDASYefvv1s/WBmCrA0y+/XeLJ2wDsKUB5t/+u5VztgFYAbACYOsCHMsbwG7ZtG0AVgCsAFgBsAJgBcAKgBUAKwBWAGxdgCEfhn2jZdO2AVgBsAJgSwMcy9vAyjnbAGx1gPlLsHjCNgADASYvwfrZ2gDMBJi5BGQqtgHTGqh5egRhMsCcJYCT4A2Y0MDO4P9XxP3jzdXF3e/r2/Xf+suPb/wOGPEeoE6Bn/7ZkACnrABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwBWAKwAWAGwAmAFwAqAFQArAFYArABYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgBUAKwBWAKwB2vm2bnuGktQFYAbACYAXACoAVACsAVgCsAFgBsAJgBcAKgD0Dqd1n+2iwVJcAAAAASUVORK5CYII=')
           print(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))
           PY
           rm -f /tmp/photo-result.json /tmp/photo.err
-          curl --silent --show-error --retry 3 --retry-all-errors --retry-delay 3 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
+          curl --silent --show-error --retry 2 --retry-all-errors --retry-delay 5 --max-time 180 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
           echo 'PHOTO_PUBLIC_BODY'; cat /tmp/photo-result.json || true; echo 'PHOTO_PUBLIC_ERR'; cat /tmp/photo.err || true
           if ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then
             echo '=== LOCAL_VPS_PHOTO_DIAGNOSTIC ==='
