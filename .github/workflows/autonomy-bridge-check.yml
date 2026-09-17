@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci --ignore-scripts
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - name: Verify autonomy bridge
         run: node --test test-autonomy-integration.js test-autonomy-bridge.js
       - name: Verify production syntax and existing tests
