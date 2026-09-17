@@ -82,7 +82,7 @@ jobs:
           PY
           printf '%s\n' '{"images":["https://placehold.co/256x256.jpg"],"prompt":"Кратко опиши изображение по-русски. Ответь одним предложением."}' >/tmp/photo.json
           photo_ok=0
-          for attempt in $(seq 1 14); do
+          for attempt in $(seq 1 32); do
             echo "PHOTO_ATTEMPT=$attempt"
             rm -f /tmp/photo-result.json /tmp/photo.err
             curl --silent --show-error --max-time 120 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
