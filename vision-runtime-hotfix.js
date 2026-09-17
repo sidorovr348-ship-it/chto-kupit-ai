@@ -10,5 +10,6 @@ if (!s.includes('VISION_IMAGE_NORMALIZE_MIDDLEWARE')) {
 }
 // The configured Mistral key is already rate-limited; do not spend the photo request on a known 429 before Groq.
 s = s.replace("const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(!mk)return next();", "const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(true)return next();");
+s = s.replace("const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(!mk || keyOf('GROQ_API_KEY'))return next();", "const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(true)return next();");
 fs.writeFileSync(file, s);
 console.log('VISION_RUNTIME_HOTFIX_OK');
