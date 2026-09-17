@@ -30,90 +30,95 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
-          const { chromium } = require('playwright');
-          const APP = process.env.APP_URL;
-          const API = process.env.API_URL;
-          const browser = await chromium.launch({
-            headless: true,
-            args: [
-              '--use-fake-device-for-media-stream',
-              '--use-fake-ui-for-media-stream',
-              '--autoplay-policy=no-user-gesture-required'
-            ]
-          });
-          const context = await browser.newContext({
-            permissions: ['camera', 'microphone'],
-            viewport: { width: 393, height: 852 },
-            deviceScaleFactor: 3,
-            isMobile: true,
-            hasTouch: true,
-            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'
-          });
-          const page = await context.newPage();
-          const errors = [];
-          page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
-          page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+          (async () => {
+            const { chromium } = require('playwright');
+            const APP = process.env.APP_URL;
+            const API = process.env.API_URL;
+            const browser = await chromium.launch({
+              headless: true,
+              args: [
+                '--use-fake-device-for-media-stream',
+                '--use-fake-ui-for-media-stream',
+                '--autoplay-policy=no-user-gesture-required'
+              ]
+            });
+            const context = await browser.newContext({
+              permissions: ['camera', 'microphone'],
+              viewport: { width: 393, height: 852 },
+              deviceScaleFactor: 3,
+              isMobile: true,
+              hasTouch: true,
+              userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'
+            });
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+            page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 
-          const fail = msg => { throw new Error(msg); };
-          const waitAI = async (before, timeout = 120000) => {
-            await page.waitForFunction(n => {
-              const nodes = [...document.querySelectorAll('#chat .msg.ai')];
-              return nodes.length > n && nodes.some(x => {
-                const t = x.textContent.trim();
-                return t.length > 20 && !t.includes('⏳') && !t.includes('🔴');
-              });
-            }, before, { timeout });
-          };
+            const fail = msg => { throw new Error(msg); };
+            const waitAI = async (before, timeout = 120000) => {
+              await page.waitForFunction(n => {
+                const nodes = [...document.querySelectorAll('#chat .msg.ai')];
+                return nodes.length > n && nodes.some(x => {
+                  const t = x.textContent.trim();
+                  return t.length > 20 && !t.includes('⏳') && !t.includes('🔴');
+                });
+              }, before, { timeout });
+            };
 
-          await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
-          if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
-          await page.locator('#send').waitFor();
-          if (await page.locator('#input').count() !== 1) fail('chat input missing');
+            try {
+              await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
+              if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
+              await page.locator('#send').waitFor();
+              if (await page.locator('#input').count() !== 1) fail('chat input missing');
 
-          const health = await page.evaluate(async api => {
-            const r = await fetch(`${api}/health?mobile_e2e=${Date.now()}`);
-            return { status: r.status, body: await r.json() };
-          }, API);
-          if (health.status !== 200 || !health.body.ok) fail(`health failed: ${JSON.stringify(health)}`);
+              const health = await page.evaluate(async api => {
+                const r = await fetch(`${api}/health?mobile_e2e=${Date.now()}`);
+                return { status: r.status, body: await r.json() };
+              }, API);
+              if (health.status !== 200 || !health.body.ok) fail(`health failed: ${JSON.stringify(health)}`);
 
-          // 1. Chat through the real mobile UI.
-          let before = await page.locator('#chat .msg.ai').count();
-          await page.locator('#input').fill('Кто ты? Ответь одним коротким предложением.');
-          await page.locator('#send').tap();
-          await waitAI(before);
+              // 1. Chat through the real mobile UI.
+              let before = await page.locator('#chat .msg.ai').count();
+              await page.locator('#input').fill('Кто ты? Ответь одним коротким предложением.');
+              await page.locator('#send').tap();
+              await waitAI(before);
 
-          // 2. Live rear-camera path: permission, stream, UI state, shutdown.
-          await page.locator('#camera').tap();
-          await page.waitForFunction(() => document.querySelector('#cameraBox')?.style.display === 'block' && document.querySelector('#cam')?.videoWidth > 0, null, { timeout: 15000 });
-          await page.locator('#camOff').tap();
-          await page.waitForFunction(() => document.querySelector('#cameraBox')?.style.display === 'none');
+              // 2. Live rear-camera path: permission, stream, UI state, shutdown.
+              await page.locator('#camera').tap();
+              await page.waitForFunction(() => document.querySelector('#cameraBox')?.style.display === 'block' && document.querySelector('#cam')?.videoWidth > 0, null, { timeout: 15000 });
+              await page.locator('#camOff').tap();
+              await page.waitForFunction(() => document.querySelector('#cameraBox')?.style.display === 'none');
 
-          // 3. Photo path through the actual file input and /photo backend.
-          const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC', 'base64');
-          before = await page.locator('#chat .msg.ai').count();
-          await page.locator('#photoInput').setInputFiles({ name: 'mobile-e2e.png', mimeType: 'image/png', buffer: png });
-          await waitAI(before, 180000);
+              // 3. Photo path through the actual file input and /photo backend.
+              const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC', 'base64');
+              before = await page.locator('#chat .msg.ai').count();
+              await page.locator('#photoInput').setInputFiles({ name: 'mobile-e2e.png', mimeType: 'image/png', buffer: png });
+              await waitAI(before, 180000);
 
-          // 4. Document path through the real file input and /document backend.
-          before = await page.locator('#chat .msg.ai').count();
-          await page.locator('#fileInput').setInputFiles({ name: 'mobile-e2e.txt', mimeType: 'text/plain', buffer: Buffer.from('Это проверка загрузки документа через мобильный интерфейс.') });
-          await waitAI(before, 180000);
+              // 4. Document path through the real file input and /document backend.
+              before = await page.locator('#chat .msg.ai').count();
+              await page.locator('#fileInput').setInputFiles({ name: 'mobile-e2e.txt', mimeType: 'text/plain', buffer: Buffer.from('Это проверка загрузки документа через мобильный интерфейс.') });
+              await waitAI(before, 180000);
 
-          // 5. Voice UI: microphone permission, MediaRecorder start/stop and cleanup.
-          await page.locator('#voice').tap();
-          await page.waitForFunction(() => document.querySelector('#voice')?.classList.contains('recording'));
-          await page.locator('#voice').tap();
-          await page.waitForFunction(() => !document.querySelector('#voice')?.classList.contains('recording'), null, { timeout: 15000 });
+              // 5. Voice UI: microphone permission, MediaRecorder start/stop and cleanup.
+              await page.locator('#voice').tap();
+              await page.waitForFunction(() => document.querySelector('#voice')?.classList.contains('recording'));
+              await page.locator('#voice').tap();
+              await page.waitForFunction(() => !document.querySelector('#voice')?.classList.contains('recording'), null, { timeout: 15000 });
 
-          // 6. Core controls remain present and usable after all interactions.
-          for (const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camOff']) {
-            if (await page.locator(`#${id}`).count() !== 1) fail(`control missing: #${id}`);
-          }
-          if (errors.length) fail(errors.join('\n'));
+              // 6. Core controls remain present and usable after all interactions.
+              for (const id of ['send','voice','photo','camera','video','file','imagegen','sound','stop','clear','camOff']) {
+                if (await page.locator(`#${id}`).count() !== 1) fail(`control missing: #${id}`);
+              }
+              if (errors.length) fail(errors.join('\n'));
 
-          await page.screenshot({ path: 'mobile-e2e.png', fullPage: true });
-          console.log('MOBILE_E2E_OK');
-          await browser.close();
+              await page.screenshot({ path: 'mobile-e2e.png', fullPage: true });
+              console.log('MOBILE_E2E_OK');
+            } finally {
+              await browser.close();
+            }
+          })().catch(err => { console.error(err); process.exitCode = 1; });
           NODE
       - name: Upload mobile evidence
         if: always()
