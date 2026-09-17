@@ -14,57 +14,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Install Playwright package and Chromium
+      - name: Install Playwright
         run: |
           set -euo pipefail
           npm init -y
           npm install --no-save playwright@1.55.0
           npx playwright install --with-deps chromium
-      - name: Verify API features
+      - name: Verify complete production stack
         run: |
           set -euo pipefail
           sleep 10
-          API='https://ai.aliceq.ru'
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 "$API/health" >/tmp/h.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/h.json')); assert j.get('ok') and j.get('dispatcher'),j
-          a=j.get('adapters',{}); assert all(a.get(k) for k in ['groq','groqVision','search','tts','stt','documents','video']),j
-          print('HEALTH_OK',a)
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/search" -H 'Content-Type: application/json' --data '{"query":"iPhone 18 Pro Москва цена"}' >/tmp/s.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/s.json')); assert j.get('ok') and j.get('results'),j; print('SEARCH_OK')
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/shopping" -H 'Content-Type: application/json' --data '{"query":"Найди iPhone 18 Pro в Москве"}' >/tmp/shop.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/shop.json')); assert j.get('ok') and j.get('results'),j; print('SHOPPING_OK',len(j['results']))
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/photo" -H 'Content-Type: application/json' --data '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"],"prompt":"Опиши изображение одним коротким предложением."}' >/tmp/photo.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/photo.json')); assert j.get('ok') and j.get('result'),j; print('PHOTO_OK',j.get('provider'),j.get('model'))
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 150 -X POST "$API/document" -H 'Content-Type: application/json' --data '{"name":"smoke.txt","mime":"text/plain","text":"Это тестовый документ. Ответь одним словом: ДОК_OK"}' >/tmp/d.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/d.json')); assert j.get('ok') and j.get('result'),j; print('DOCUMENT_OK')
-          PY
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 -X POST "$API/tts" -H 'Content-Type: application/json' --data '{"text":"Проверка голоса."}' -o /tmp/t.mp3
-          test -s /tmp/t.mp3 && echo TTS_OK
-          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 2 --max-time 90 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Ответь одним словом: ОК"}' >/tmp/c.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/c.json')); assert j.get('ok') and j.get('result'),j; print('CHAT_OK')
-          PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 240 -X POST "$API/generate-image" -H 'Content-Type: application/json' --data '{"prompt":"Простой красный круг на белом фоне"}' >/tmp/image.json
-          python3 - <<'PY'
-          import json
-          j=json.load(open('/tmp/image.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j; print('IMAGE_GEN_OK')
-          PY
-      - name: Verify Pages smart frontend
+          node production-acceptance.mjs
+      - name: Verify mobile frontend source
         env:
           APP_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
         run: |
@@ -74,9 +35,14 @@ jobs:
           grep -q 'getUserMedia' /tmp/live.html
           grep -q '.zip' /tmp/live.html
           grep -q 'https://ai.aliceq.ru' /tmp/live.html
+          grep -q 'generate-image' /tmp/live.html
+          grep -q '/transcribe' /tmp/live.html
           echo SMART_PAGES_OK
       - name: Verify source syntax
         run: |
+          node --check local-gateway.js
+          node --check memory-map.js
+          node --check production-acceptance.mjs
           node - <<'NODE'
           const fs=require('fs'); const h=fs.readFileSync('smart-index.html','utf8'); const x=h.match(/<script>([\s\S]*?)<\/script>/i); if(!x) throw Error('script missing'); new Function(x[1]); console.log('SMART_SOURCE_JS_OK');
           NODE
