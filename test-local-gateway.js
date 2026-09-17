@@ -4,7 +4,7 @@ const src=fs.readFileSync('local-gateway.js','utf8');
 assert.doesNotMatch(src,/OPENAI_API_KEY\s*[:=]\s*["'][^"']+/i);
 assert.match(src,/app\.get\('\/health'/);
 for(const route of ['/chat','/photo','/search','/shopping','/document','/generate-image','/tts','/transcribe','/alice'])assert.match(src,new RegExp(`app\\.post\\('${route.replace('/','\\/')}'`),`missing ${route}`);
-assert.match(src,/qwen\/qwen3\.8-27b/);
+assert.match(src,/qwen\/qwen3\.6-27b/);
 assert.match(src,/if\(groq\)\{/);
 assert.match(src,/provider\('https:\/\/paraloncloud\.com\/v1\/chat\/completions'/);
 assert.match(src,/whisper-large-v3-turbo/);
