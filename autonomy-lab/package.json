@@ -1,0 +1,6 @@
+{
+  "name": "my-ai-unified-autonomy-lab",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" }
+}
