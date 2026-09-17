@@ -11,20 +11,29 @@ permissions:
 jobs:
   photo:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     steps:
       - name: Build valid JPEG payload
         run: |
           python3 - <<'PY' >/tmp/photo.json
           import base64,json
-          b=base64.b64decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDiaKKK+PP6QP/Z')
+          b=base64.b64decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAQABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDiaKKK+PP6QP/Z')
           print(json.dumps({'images':['data:image/jpeg;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши изображение по-русски. Ответь одним предложением.'}))
           PY
       - name: Verify public photo
         run: |
           set -euo pipefail
-          curl --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out
-          cat /tmp/photo.out
+          photo_ok=0
+          for attempt in $(seq 1 32); do
+            echo "PHOTO_ATTEMPT=$attempt"
+            rm -f /tmp/photo.out
+            curl --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out || true
+            cat /tmp/photo.out || true
+            if grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo.out; then photo_ok=1; break; fi
+            if grep -qi '502\|rate limit\|try again in\|429\|temporarily' /tmp/photo.out; then sleep 30; continue; fi
+            break
+          done
+          test "$photo_ok" = 1
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/photo.out'))
