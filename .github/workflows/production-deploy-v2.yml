@@ -88,7 +88,7 @@ jobs:
             curl --silent --show-error --max-time 120 -X POST "$API/photo" -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo-result.json 2>/tmp/photo.err || true
             cat /tmp/photo-result.json || true
             if grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/photo-result.json; then photo_ok=1; break; fi
-            if grep -qi 'rate limit\|try again in\|429\|temporarily' /tmp/photo-result.json; then sleep 30; continue; fi
+            if grep -qi '502\|rate limit\|try again in\|429\|temporarily' /tmp/photo-result.json; then sleep 30; continue; fi
             cat /tmp/photo.err || true
             break
           done
