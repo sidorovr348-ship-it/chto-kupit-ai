@@ -17,8 +17,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Verify autonomy bridge
-        run: node --test test-autonomy-integration.js test-autonomy-bridge.js
+      - name: Verify autonomy bridge and release controller
+        run: node --test test-autonomy-integration.js test-autonomy-bridge.js test-autonomy-release-controller.js
       - name: Verify production syntax and existing tests
         run: |
           node --check local-gateway.js
