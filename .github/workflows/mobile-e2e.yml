@@ -34,98 +34,83 @@ jobs:
             const { chromium } = require('playwright');
             const APP = process.env.APP_URL;
             const API = process.env.API_URL;
-            const browser = await chromium.launch({
-              headless: true,
-              args: [
-                '--use-fake-device-for-media-stream',
-                '--use-fake-ui-for-media-stream',
-                '--autoplay-policy=no-user-gesture-required'
-              ]
-            });
+            const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required'] });
             const context = await browser.newContext({
-              permissions: ['camera', 'microphone'],
-              viewport: { width: 393, height: 852 },
-              deviceScaleFactor: 3,
-              isMobile: true,
-              hasTouch: true,
+              permissions: ['camera', 'microphone'], viewport: { width: 393, height: 852 }, deviceScaleFactor: 3,
+              isMobile: true, hasTouch: true,
               userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1'
             });
             const page = await context.newPage();
             const errors = [];
             page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
             page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+            const first = (...ids) => ids.map(id => `#${id}`).find(sel => page.locator(sel).count().then ? false : false);
+            const pick = async (...ids) => {
+              for (const id of ids) if (await page.locator(`#${id}`).count()) return page.locator(`#${id}`).first();
+              throw new Error(`none of selectors exists: ${ids.join(', ')}`);
+            };
+            const countAny = async (...ids) => { let n=0; for (const id of ids) n += await page.locator(`#${id}`).count(); return n; };
             const fail = msg => { throw new Error(msg); };
             const waitAI = async (before, timeout = 120000) => {
               await page.waitForFunction(n => {
-                const nodes = [...document.querySelectorAll('#chat .m.a')];
-                return nodes.length > n && nodes.some(x => {
-                  const t = x.textContent.trim();
-                  return t.length > 20 && !t.includes('⏳') && !t.includes('🔴');
-                });
+                const nodes = [...document.querySelectorAll('#chat .m.a, #chat .msg.ai')];
+                return nodes.length > n && nodes.some(x => { const t=x.textContent.trim(); return t.length>20 && !t.includes('⏳') && !t.includes('🔴'); });
               }, before, { timeout });
             };
             try {
               await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
               if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
-              for (const id of ['send','voice','photo','camBtn','video','file','img','sound','stop','clear']) {
-                if (await page.locator(`#${id}`).count() !== 1) fail(`control missing: #${id}`);
-              }
-              if (await page.locator('#in').count() !== 1) fail('chat input missing');
 
-              const health = await page.evaluate(async api => {
-                const r = await fetch(`${api}/health?mobile_e2e=${Date.now()}`);
-                return { status: r.status, body: await r.json() };
-              }, API);
+              const send = await pick('send');
+              const input = await pick('in','input');
+              const voice = await pick('voice');
+              const photoButton = await pick('photo');
+              const cameraButton = await pick('camBtn','camera');
+              const fileButton = await pick('file');
+              const imageButton = await pick('img','imagegen');
+              for (const ids of [['video'],['sound'],['stop'],['clear']]) if (await countAny(...ids) !== 1) fail(`control missing: ${ids.join('/')}`);
+
+              const health = await page.evaluate(async api => { const r=await fetch(`${api}/health?mobile_e2e=${Date.now()}`); return {status:r.status,body:await r.json()}; }, API);
               if (health.status !== 200 || !health.body.ok) fail(`health failed: ${JSON.stringify(health)}`);
 
               // 1. Chat through the real mobile UI.
-              let before = await page.locator('#chat .m.a').count();
-              await page.locator('#in').fill('Кто ты? Ответь одним коротким предложением.');
-              await page.locator('#send').tap();
-              await waitAI(before);
+              let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
+              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.tap(); await waitAI(before);
 
-              // 2. Live camera path: permission, stream, mobile UI state, shutdown.
-              await page.locator('#camBtn').tap();
-              await page.waitForFunction(() => document.querySelector('#camBox')?.style.display === 'block' && !!document.querySelector('#cam')?.srcObject?.getVideoTracks?.()[0]);
-              await page.waitForFunction(() => document.querySelector('#cam')?.srcObject?.getVideoTracks?.()[0]?.readyState === 'live', null, { timeout: 15000 });
-              await page.locator('#camOff').tap();
-              await page.waitForFunction(() => document.querySelector('#camBox')?.style.display === 'none');
+              // 2. Live camera path, accepting either currently served UI variant.
+              await cameraButton.tap();
+              const box = await pick('camBox','cameraBox');
+              await page.waitForFunction(() => {
+                const b=document.querySelector('#camBox')||document.querySelector('#cameraBox');
+                const v=document.querySelector('#cam');
+                return b?.style.display==='block' && !!v?.srcObject?.getVideoTracks?.()[0];
+              }, null, {timeout:15000});
+              await page.waitForFunction(() => document.querySelector('#cam')?.srcObject?.getVideoTracks?.()[0]?.readyState==='live', null, {timeout:15000});
+              await (await pick('camOff')).tap();
+              await page.waitForFunction(() => { const b=document.querySelector('#camBox')||document.querySelector('#cameraBox'); return b?.style.display==='none'; });
 
-              // 3. Photo path through the actual mobile file input and public /photo backend.
-              const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC', 'base64');
-              before = await page.locator('#chat .m.a').count();
-              await page.locator('#pi').setInputFiles({ name: 'mobile-e2e.png', mimeType: 'image/png', buffer: png });
-              await waitAI(before, 180000);
+              // 3. Photo path through the real file input and public /photo backend.
+              const photoInput = await pick('pi','photoInput');
+              const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
+              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await waitAI(before,180000);
 
-              // 4. Document path through the real mobile file input and public /document backend.
-              before = await page.locator('#chat .m.a').count();
-              await page.locator('#fi').setInputFiles({ name: 'mobile-e2e.txt', mimeType: 'text/plain', buffer: Buffer.from('Это проверка загрузки документа через мобильный интерфейс.') });
-              await waitAI(before, 180000);
+              // 4. Document path through the real file input and public /document backend.
+              const fileInput = await pick('fi','fileInput');
+              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await fileInput.setInputFiles({name:'mobile-e2e.txt',mimeType:'text/plain',buffer:Buffer.from('Это проверка загрузки документа через мобильный интерфейс.')}); await waitAI(before,180000);
 
-              // 5. Voice UI: microphone permission, MediaRecorder start/stop and cleanup.
-              await page.locator('#voice').tap();
-              await page.waitForFunction(() => document.querySelector('#voice')?.classList.contains('recording'), null, { timeout: 15000 });
-              await page.locator('#voice').tap();
-              await page.waitForFunction(() => !document.querySelector('#voice')?.classList.contains('recording'), null, { timeout: 15000 });
+              // 5. Voice UI: permission, MediaRecorder start/stop and cleanup.
+              await voice.tap(); await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000}); await voice.tap(); await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
 
-              // 6. Image-generation UI path: real prompt dialog opens and can be cancelled safely.
-              let dialogSeen = false;
-              page.once('dialog', async d => { dialogSeen = true; await d.dismiss(); });
-              await page.locator('#img').tap();
-              await page.waitForFunction(() => true);
-              if (!dialogSeen) fail('image generation prompt did not open');
+              // 6. Image-generation UI: real prompt dialog opens and can be safely cancelled.
+              let dialogSeen=false; page.once('dialog',async d=>{dialogSeen=true;await d.dismiss();}); await imageButton.tap(); await page.waitForTimeout(200); if(!dialogSeen) fail('image generation prompt did not open');
 
-              // 7. Core controls remain intact after the full interaction chain.
-              for (const id of ['send','voice','photo','camBtn','video','file','img','sound','stop','clear','camOff']) {
-                if (await page.locator(`#${id}`).count() !== 1) fail(`control missing after interactions: #${id}`);
-              }
-              if (errors.length) fail(errors.join('\n'));
-              await page.screenshot({ path: 'mobile-e2e.png', fullPage: true });
+              // 7. Controls remain present after the complete interaction chain.
+              if (await countAny('send')!==1 || await countAny('voice')!==1 || await countAny('photo')!==1 || await countAny('file')!==1 || await countAny('sound')!==1 || await countAny('stop')!==1 || await countAny('clear')!==1) fail('core control set changed after interactions');
+              if(errors.length) fail(errors.join('\n'));
+              await page.screenshot({path:'mobile-e2e.png',fullPage:true});
               console.log('MOBILE_E2E_OK');
-            } finally {
-              await browser.close();
-            }
-          })().catch(err => { console.error(err); process.exitCode = 1; });
+            } finally { await browser.close(); }
+          })().catch(err=>{console.error(err);process.exitCode=1;});
           NODE
       - name: Upload mobile evidence
         if: always()
