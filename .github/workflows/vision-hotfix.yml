@@ -31,5 +31,15 @@ jobs:
             sleep 1
           done
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/vision-health.json"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "python3 - <<'PY'\nimport json,base64\nb=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')\nopen('/tmp/photo.json','w').write(json.dumps({'images':['data:image/png;base64,'+base64.b64encode(b).decode()],'prompt':'Кратко опиши это изображение. Ответь по-русски.'}))\nPY\ncurl -sS -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo; journalctl -u my-ai-unified -n 20 --no-pager | tail -20"
-          rm -f /tmp/vps_key
+
+          python3 - <<'PY' >/tmp/photo.json
+          import base64, json
+          b = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
+          print(json.dumps({
+              'images': ['data:image/png;base64,' + base64.b64encode(b).decode()],
+              'prompt': 'Кратко опиши это изображение. Ответь по-русски.'
+          }))
+          PY
+          scp "${ssh_opts[@]}" /tmp/photo.json "$VPS_USER@$VPS_HOST:/tmp/photo.json"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo; journalctl -u my-ai-unified -n 20 --no-pager | tail -20"
+          rm -f /tmp/vps_key /tmp/photo.json
