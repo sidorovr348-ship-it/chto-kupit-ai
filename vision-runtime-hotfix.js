@@ -15,7 +15,7 @@ if (!s.includes('VISION_PROVIDER_FALLBACK_V5')) {
 s = s.replace(/GROQ_VISION_MODEL\s*=\s*process\.env\.GROQ_VISION_MODEL\|\|'[^']+'/g, "GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'");
 s = s.replace(/GROQ_VISION_MODEL\s*=\s*'qwen\/qwen3\.8-27b'/g, "GROQ_VISION_MODEL=process.env.GROQ_VISION_MODEL||'qwen/qwen3.6-27b'");
 
-// Preserve the existing Mistral vision attempt, but put DeepSeek before it for predictable fallback latency.
+// Put DeepSeek before Mistral/Groq so exhausted quotas do not add avoidable latency.
 if (!s.includes('DEEPSEEK_VISION_PRIMARY_V5')) {
   const rx = /async function ask\(messages,vision=false\)\{const errors=\[\](?:,|;)/;
   const m = s.match(rx);
@@ -25,13 +25,7 @@ if (!s.includes('DEEPSEEK_VISION_PRIMARY_V5')) {
   } else throw new Error('ask() marker not found');
 }
 
-// Keep a DeepSeek attempt before Paralon for runtimes where the primary marker already exists.
-if (!s.includes('DEEPSEEK_VISION_FALLBACK_V5')) {
-  const marker = "const pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');";
-  const injection = "if(vision && !s){} /* DEEPSEEK_VISION_FALLBACK_V5 */\nconst pk=keyOf('PARALON_API_KEY','PARALON_KEY','PARALON_TOKEN');";
-  if (s.includes(marker)) s = s.replace(marker, injection);
-}
-
+// Existing Groq vision fallback remains in ask(); DeepSeek is now the fast primary path.
 s = s.replace(/\/\/ MISTRAL_PHOTO_MIDDLEWARE[\s\S]*?\n(?=app\.post\('\/photo')/g, '');
 s = s.replace(/\/\/ VISION_IMAGE_NORMALIZE_MIDDLEWARE[\s\S]*?\n(?=app\.post\('\/photo')/g, '');
 fs.writeFileSync(file, s);
