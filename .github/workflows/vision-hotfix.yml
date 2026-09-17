@@ -1,37 +1,24 @@
-name: My AI Unified — vision hotfix
+name: My AI Unified — vision verification
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
 
 permissions:
   contents: read
 
-env:
-  VPS_HOST: ${{ secrets.VPS_HOST }}
-  VPS_USER: ${{ secrets.VPS_USER }}
-  VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-
 jobs:
   vision:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Switch vision model and verify
+      - name: Verify public photo
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key
-          chmod 600 /tmp/vps_key
-          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl set-environment GROQ_VISION_MODEL=qwen/qwen3.6-27b && systemctl restart my-ai-unified"
-          for i in $(seq 1 30); do
-            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/vision-health.json"; then break; fi
-            sleep 1
-          done
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/vision-health.json"
-
           python3 - <<'PY' >/tmp/photo.json
           import base64, json
           b = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
@@ -40,6 +27,12 @@ jobs:
               'prompt': 'Кратко опиши это изображение. Ответь по-русски.'
           }))
           PY
-          scp "${ssh_opts[@]}" /tmp/photo.json "$VPS_USER@$VPS_HOST:/tmp/photo.json"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl --fail --silent --show-error --max-time 120 -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary @/tmp/photo.json; echo; journalctl -u my-ai-unified -n 20 --no-pager | tail -20"
-          rm -f /tmp/vps_key /tmp/photo.json
+          curl --fail --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out
+          cat /tmp/photo.out
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/photo.out'))
+          assert j.get('ok') and j.get('result'), j
+          print('VISION_PUBLIC_OK', j.get('provider'), j.get('model'))
+          PY
+          rm -f /tmp/photo.json /tmp/photo.out
