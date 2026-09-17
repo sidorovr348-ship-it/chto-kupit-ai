@@ -21,6 +21,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Pin current vision model
+        run: |
+          set -euo pipefail
+          sed -i 's/qwen\/qwen3\.8-27b/qwen\/qwen3.6-27b/g' local-gateway.js image-generation-fallback.js
+          grep -q 'qwen/qwen3.6-27b' local-gateway.js
+          grep -q 'qwen/qwen3.6-27b' image-generation-fallback.js
       - name: Validate source
         run: |
           set -euo pipefail
