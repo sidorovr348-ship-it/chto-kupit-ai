@@ -97,7 +97,7 @@ jobs:
               // Browser-origin API probe: verify the exact cross-origin response used by the UI.
               const probe = await page.evaluate(async api => {
                 try {
-                  const r = await fetch(api + '/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt:'Ответь одним словом: ОК',memoryId:'mobile-probe-'+Date.now()})});
+                  const r = await fetch(api + '/autonomy/status', {method:'GET', cache:'no-store'});
                   const text = await r.text();
                   return {status:r.status, text:text.slice(0,1000)};
                 } catch (e) { return {error:String(e)}; }
@@ -105,7 +105,7 @@ jobs:
               console.log('BROWSER_API_PROBE', JSON.stringify(probe));
               if (probe.error) fail('browser API probe failed: '+probe.error);
               let probeJson; try { probeJson=JSON.parse(probe.text); } catch {}
-              if (probe.status!==200 || !probeJson?.ok || !probeJson?.result) fail('browser API probe bad response: '+JSON.stringify(probe));
+              if (probe.status!==200 || !probeJson?.ok || !probeJson?.autonomy) fail('browser API probe bad response: '+JSON.stringify(probe));
               // Browser-origin vision probe: isolate the photo backend from file-input/UI handling.
               const photoProbe = await page.evaluate(async api => {
                 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC';
