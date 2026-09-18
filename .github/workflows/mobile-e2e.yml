@@ -66,7 +66,7 @@ jobs:
             };
             const countAny = async (...ids) => { let n=0; for (const id of ids) n += await page.locator(`#${id}`).count(); return n; };
             const fail = msg => { throw new Error(msg); };
-            const waitAI = async (before, timeout = 180000) => {
+            const waitAI = async (before, timeout = 120000) => {
               await page.waitForFunction(n => {
                 const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
                 const fresh = nodes.slice(n);
@@ -103,15 +103,28 @@ jobs:
               if (probe.error) fail('browser API probe failed: '+probe.error);
               let probeJson; try { probeJson=JSON.parse(probe.text); } catch {}
               if (probe.status!==200 || !probeJson?.ok || !probeJson?.result) fail('browser API probe bad response: '+JSON.stringify(probe));
+              // Browser-origin vision probe: isolate the photo backend from file-input/UI handling.
+              const photoProbe = await page.evaluate(async api => {
+                const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC';
+                const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),90000);
+                try {
+                  const r=await fetch(api+'/photo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images:[png],prompt:'Ответь одним словом: ОК'}),signal:ctl.signal});
+                  return {status:r.status,text:(await r.text()).slice(0,1200)};
+                } catch(e) { return {error:String(e)}; } finally { clearTimeout(tm); }
+              }, API);
+              console.log('BROWSER_PHOTO_PROBE', JSON.stringify(photoProbe));
+              if (photoProbe.error) fail('browser photo probe failed: '+photoProbe.error);
+              let photoProbeJson; try { photoProbeJson=JSON.parse(photoProbe.text); } catch {}
+              if (photoProbe.status!==200 || !photoProbeJson?.ok || !photoProbeJson?.result) fail('browser photo probe bad response: '+JSON.stringify(photoProbe));
               
               page.on('response', async response => {
                 if ((response.url().endsWith('/chat') || response.url().endsWith('/photo') || response.url().endsWith('/document')) && response.request().method()==='POST') {
-                  try { console.log('UI_CHAT_RESPONSE', response.status(), (await response.text()).slice(0,1200)); } catch {}
+                  try { console.log('UI_API_RESPONSE', response.url(), response.status(), (await response.text()).slice(0,1200)); } catch {}
                 }
               });
               // 1. Chat through the real mobile UI.
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
-              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.click(); await waitAI(before,180000);
+              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.click(); await waitAI(before,120000);
 
               // 2. Live camera path: permission, stream, mobile UI state, shutdown.
               await cameraButton.tap();
