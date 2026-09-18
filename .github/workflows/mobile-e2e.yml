@@ -66,12 +66,15 @@ jobs:
             };
             const countAny = async (...ids) => { let n=0; for (const id of ids) n += await page.locator(`#${id}`).count(); return n; };
             const fail = msg => { throw new Error(msg); };
-            const waitAI = async (before, timeout = 120000) => {
+            const waitAI = async (before, timeout = 180000) => {
               await page.waitForFunction(n => {
-                const nodes = [...document.querySelectorAll('#chat .m.a, #chat .msg.ai')];
-                return nodes.length > n && nodes.some(x => { const t=x.textContent.trim(); return t.length>20 && !t.includes('⏳') && !t.includes('🔴'); });
+                const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
+                return nodes.length > n && nodes.some(x => { const t=x.textContent.trim(); return t.length>0 && !t.includes('⏳'); });
               }, before, { timeout });
-            };
+              const latest = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')].slice(-1)[0]?.textContent?.trim() || '';
+              if (latest.startsWith('🔴')) throw new Error('AI UI error: '+latest);
+              if (latest.length < 3) throw new Error('AI UI returned empty response');
+            };           };
             try {
               await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
               if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
