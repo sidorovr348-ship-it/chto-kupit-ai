@@ -74,7 +74,7 @@ jobs:
               const latest = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')].slice(-1)[0]?.textContent?.trim() || '';
               if (latest.startsWith('🔴')) throw new Error('AI UI error: '+latest);
               if (latest.length < 3) throw new Error('AI UI returned empty response');
-            };           };
+            };
             try {
               await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
               if ((await page.title()) !== 'Эй') fail(`wrong title: ${await page.title()}`);
