@@ -71,8 +71,8 @@ jobs:
               try { await page.waitForFunction(n => {
                 const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
                 const fresh = nodes.slice(n);
-                return fresh.some(x => { const t=(x.textContent||'').trim(); return t.length>0 && !t.includes('⏳'); });
-              }, before, { timeout }); } catch (e) { const texts=await page.locator('#chat .msg.ai, #chat .m.a').allTextContents(); throw new Error(`AI wait timeout after ${timeout}ms; chat=${JSON.stringify(texts)}; errors=${JSON.stringify(errors)}; sendOnClick=${await page.locator('#send').evaluate(el=>!!el.onclick)}`); }
+                return fresh.some(x => { const t=(x.textContent||'').trim(); return x.dataset?.e2eResponse==='1' || (t.length>0 && !t.includes('⏳')); });
+              }, before, { timeout }); } catch (e) { const texts=await page.locator('#chat .msg.ai, #chat .m.a').allTextContents(); throw new Error(`AI wait timeout after ${timeout}ms; chat=${JSON.stringify(texts)}; html=${(await page.locator('#chat').innerHTML()).slice(0,5000)}; errors=${JSON.stringify(errors)}; sendOnClick=${await page.locator('#send').evaluate(el=>!!el.onclick)}`); }
               const texts = await page.locator('#chat .msg.ai, #chat .m.a').allTextContents();
               const fresh = texts.slice(before).map(x=>x.trim()).filter(Boolean);
               const latest = fresh[fresh.length-1] || '';
