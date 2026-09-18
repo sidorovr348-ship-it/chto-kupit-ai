@@ -15,7 +15,7 @@ async function check() {
   const health = await get(`http://127.0.0.1:${port}/health`);
   if (health.ok) return true;
   log(`Health failed: ${JSON.stringify(health)}; restarting service`);
-  try { execFileSync('systemctl',['restart','my-ai-unified.service'],{stdio:'ignore',timeout:30000}); return true; }
+  try { execFileSync('sudo',['-n','systemctl','restart','my-ai-unified.service'],{stdio:'ignore',timeout:30000}); return true; }
   catch(e) { log(`Restart failed: ${e.message}`); return false; }
 }
 async function main() {
