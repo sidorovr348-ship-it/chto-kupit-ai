@@ -147,3 +147,13 @@ jobs:
           PY
       - name: Final audit summary
         run: echo 'FINAL_DEEP_AUDIT_ALL_CHECKS_PASSED'
+      - name: 35 full acceptance cycles
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 35); do
+            echo "=== FULL_ACCEPTANCE_$n/35 ==="
+            ACCEPTANCE_RUN=$n node production-acceptance.mjs
+            echo "FULL_ACCEPTANCE_$n_PASS"
+            sleep 2
+          done
+          echo 'FULL_APPLICATION_35_OF_35_PASSED'
