@@ -60,18 +60,19 @@ jobs:
             const errors = [];
             page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
             page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+            page.on('requestfailed', r => errors.push(`requestfailed: ${r.method()} ${r.url()} ${r.failure()?.errorText||'unknown'}`));
             const pick = async (...ids) => {
               for (const id of ids) if (await page.locator(`#${id}`).count()) return page.locator(`#${id}`).first();
               throw new Error(`none of selectors exists: ${ids.join(', ')}`);
             };
             const countAny = async (...ids) => { let n=0; for (const id of ids) n += await page.locator(`#${id}`).count(); return n; };
             const fail = msg => { throw new Error(msg); };
-            const waitAI = async (before, timeout = 120000) => {
-              await page.waitForFunction(n => {
+            const waitAI = async (before, timeout = 30000) => {
+              try { await page.waitForFunction(n => {
                 const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
                 const fresh = nodes.slice(n);
                 return fresh.some(x => { const t=(x.textContent||'').trim(); return t.length>0 && !t.includes('⏳'); });
-              }, before, { timeout });
+              }, before, { timeout }); } catch (e) { const texts=await page.locator('#chat .msg.ai, #chat .m.a').allTextContents(); throw new Error(`AI wait timeout after ${timeout}ms; chat=${JSON.stringify(texts)}; errors=${JSON.stringify(errors)}; sendOnClick=${await page.locator('#send').evaluate(el=>!!el.onclick)}`); }
               const texts = await page.locator('#chat .msg.ai, #chat .m.a').allTextContents();
               const fresh = texts.slice(before).map(x=>x.trim()).filter(Boolean);
               const latest = fresh[fresh.length-1] || '';
@@ -126,7 +127,7 @@ jobs:
               });
               // 1. Chat through the real mobile UI.
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
-              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.click(); await waitAI(before,120000);
+              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.click(); await waitAI(before,30000);
 
               // 2. Live camera path: permission, stream, mobile UI state, shutdown.
               await cameraButton.tap();
