@@ -124,14 +124,14 @@ jobs:
               // 3. Photo path through the real file input and public /photo backend.
               const photoInput = await pick('pi','photoInput');
               const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
-              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await waitAI(before,180000);
+              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await photoInput.dispatchEvent('change'); await waitAI(before,180000);
 
               // 4. Binary document path through the real mobile file input and /document backend.
               const fileInput = await pick('fi','fileInput');
               const docx = fs.readFileSync('/tmp/mobile-e2e.docx');
               before=await page.locator('#chat .m.a, #chat .msg.ai').count();
               await fileInput.setInputFiles({name:'mobile-e2e.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:docx});
-              await waitAI(before,180000);
+              await fileInput.dispatchEvent('change'); await waitAI(before,180000);
 
               // 5. Voice UI: permission, MediaRecorder start/stop and cleanup.
               await voice.tap(); await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000}); await voice.tap(); await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
