@@ -105,7 +105,7 @@ jobs:
               if (probe.status!==200 || !probeJson?.ok || !probeJson?.result) fail('browser API probe bad response: '+JSON.stringify(probe));
               
               page.on('response', async response => {
-                if (response.url().endsWith('/chat') && response.request().method()==='POST') {
+                if ((response.url().endsWith('/chat') || response.url().endsWith('/photo') || response.url().endsWith('/document')) && response.request().method()==='POST') {
                   try { console.log('UI_CHAT_RESPONSE', response.status(), (await response.text()).slice(0,1200)); } catch {}
                 }
               });
