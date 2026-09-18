@@ -69,11 +69,14 @@ jobs:
             const waitAI = async (before, timeout = 180000) => {
               await page.waitForFunction(n => {
                 const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
-                return nodes.length > n && nodes.some(x => { const t=x.textContent.trim(); return t.length>0 && !t.includes('⏳'); });
+                const fresh = nodes.slice(n);
+                return fresh.some(x => { const t=(x.textContent||'').trim(); return t.length>0 && !t.includes('⏳'); });
               }, before, { timeout });
-              const latest = await page.evaluate(() => [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')].slice(-1)[0]?.textContent?.trim() || '');
+              const texts = await page.locator('#chat .msg.ai, #chat .m.a').allTextContents();
+              const fresh = texts.slice(before).map(x=>x.trim()).filter(Boolean);
+              const latest = fresh[fresh.length-1] || '';
               if (latest.startsWith('🔴')) throw new Error('AI UI error: '+latest);
-              if (latest.length < 3) throw new Error('AI UI returned empty response');
+              if (latest.length < 3 || latest.includes('⏳')) throw new Error('AI UI returned empty response: '+JSON.stringify(fresh));
             };
             try {
               await page.goto(`${APP}?e2e=${Date.now()}`, { waitUntil: 'networkidle', timeout: 90000 });
