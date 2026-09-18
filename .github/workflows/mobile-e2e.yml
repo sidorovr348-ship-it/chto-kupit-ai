@@ -86,6 +86,7 @@ jobs:
               const voice = await pick('voice');
               const cameraButton = await pick('camBtn','camera');
               const imageButton = await pick('img','imagegen');
+              const photoButton = await pick('photo');
               for (const id of ['video','sound','stop','clear']) if (await countAny(id) !== 1) fail(`control missing: ${id}`);
 
               const health = await page.evaluate(async api => { const r=await fetch(`${api}/health?mobile_e2e=${Date.now()}`); return {status:r.status,body:await r.json()}; }, API);
@@ -137,7 +138,7 @@ jobs:
               // 3. Photo path through the real file input and public /photo backend.
               const photoInput = await pick('pi','photoInput');
               const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
-              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await photoInput.dispatchEvent('change'); await waitAI(before,180000);
+              before=await page.locator('#chat .m.a, #chat .msg.ai').count(); await photoButton.tap(); await page.waitForTimeout(200); await photoInput.setInputFiles({name:'mobile-e2e.png',mimeType:'image/png',buffer:png}); await waitAI(before,120000);
 
               // 4. Binary document path through the real mobile file input and /document backend.
               const fileInput = await pick('fi','fileInput');
