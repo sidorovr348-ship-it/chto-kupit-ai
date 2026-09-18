@@ -115,7 +115,7 @@ jobs:
           b=base64.b64encode(open('/tmp/voice.bin','rb').read()).decode()
           print(json.dumps({'filename':'audit.m4a','mime':'audio/mp4','audio':'data:audio/mp4;base64,'+b}))
           PY
-          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/transcribe -H 'Content-Type: application/json' --data-binary @/tmp/stt.json >/tmp/stt-result.json
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -X POST https://ai.aliceq.ru/voice -H 'Content-Type: text/plain;charset=UTF-8' --data-binary @/tmp/stt.json >/tmp/stt-result.json
           python3 - <<'PY'
           import json
           j=json.load(open('/tmp/stt-result.json')); assert j.get('ok') and j.get('text'),j; print('TTS_OK_STT_OK',j['text'])
