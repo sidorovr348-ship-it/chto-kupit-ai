@@ -40,6 +40,18 @@ jobs:
               for p in [root/'[Content_Types].xml',root/'_rels/.rels',root/'word/document.xml']:
                   z.write(p,p.relative_to(root).as_posix())
           PY
+      - name: Create deterministic fake camera stream
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          w,h=320,240
+          y=bytes([128])*(w*h); u=bytes([128])*((w//2)*(h//2)); v=bytes([128])*((w//2)*(h//2))
+          frame=y+u+v
+          with open('/tmp/fake-camera.y4m','wb') as f:
+            f.write(f'YUV4MPEG2 W{w} H{h} F30:1 Ip A1:1 C420jpeg\\n'.encode())
+            for _ in range(90):
+              f.write(b'FRAME\\n'); f.write(frame)
+          PY
       - name: Run iPhone-sized production end-to-end test
         env:
           APP_URL: https://sidorovr348-ship-it.github.io/chto-kupit-ai/
@@ -52,7 +64,7 @@ jobs:
             const fs = require('fs');
             const APP = process.env.APP_URL;
             const API = process.env.API_URL;
-            const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required'] });
+            const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--use-file-for-fake-video-capture=/tmp/fake-camera.y4m','--autoplay-policy=no-user-gesture-required'] });
             const context = await browser.newContext({
               permissions: ['camera', 'microphone'], viewport: { width: 393, height: 852 }, deviceScaleFactor: 3,
               isMobile: true, hasTouch: true,
