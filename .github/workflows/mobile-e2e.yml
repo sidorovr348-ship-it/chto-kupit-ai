@@ -72,6 +72,16 @@ jobs:
             });
             const page = await context.newPage();
             const errors = [];
+            let liveReady = false;
+            for (let i=0;i<30;i++) {
+              try {
+                const r = await fetch(APP + '?livecheck=' + Date.now(), {cache:'no-store'});
+                const t = await r.text();
+                if (t.includes("API+'/voice'") && t.includes('MediaRecorder') && t.includes('EY_WAKE_WORD_V1')) { liveReady=true; break; }
+              } catch {}
+              await new Promise(r=>setTimeout(r,3000));
+            }
+            if (!liveReady) throw new Error('Pages did not expose the current voice-enabled build within 90s');
             page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
             page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
             page.on('requestfailed', r => errors.push(`requestfailed: ${r.method()} ${r.url()} ${r.failure()?.errorText||'unknown'}`));
