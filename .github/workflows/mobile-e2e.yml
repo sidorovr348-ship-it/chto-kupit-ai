@@ -174,7 +174,12 @@ jobs:
               await waitAI(before,120000);
 
               // 5. Voice UI: permission, MediaRecorder start/stop and cleanup.
-              await voice.tap(); await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000}); await voice.tap(); await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
+              const hasSpeechRecognition = await page.evaluate(() => !!(window.SpeechRecognition||window.webkitSpeechRecognition));
+    await voice.tap();
+    await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
+    await voice.tap();
+    await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
+    if (hasSpeechRecognition) await page.waitForTimeout(1000);
 
               // 6. Image-generation UI: real prompt dialog opens and can be safely cancelled.
               let dialogSeen=false; page.once('dialog',async d=>{dialogSeen=true;await d.dismiss();}); await imageButton.tap(); await page.waitForTimeout(200); if(!dialogSeen) fail('image generation prompt did not open');
