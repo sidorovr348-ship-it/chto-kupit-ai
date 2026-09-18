@@ -14,6 +14,9 @@ jobs:
       - name: 35 complete cycles
         run: |
           set -euo pipefail
+          echo 'Waiting for production rollout...'
+          for i in $(seq 1 24); do if curl -fsS --max-time 10 "$API/health?rollout=$i" >/dev/null; then break; fi; sleep 5; done
+          sleep 30
           for n in $(seq 1 35); do
             echo "=== FULL_TEST_$n/35 ==="
             curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 "$API/health?test=$n" >/tmp/h
