@@ -71,7 +71,7 @@ jobs:
                 const nodes = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')];
                 return nodes.length > n && nodes.some(x => { const t=x.textContent.trim(); return t.length>0 && !t.includes('⏳'); });
               }, before, { timeout });
-              const latest = [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')].slice(-1)[0]?.textContent?.trim() || '';
+              const latest = await page.evaluate(() => [...document.querySelectorAll('#chat .msg.ai, #chat .m.a')].slice(-1)[0]?.textContent?.trim() || '');
               if (latest.startsWith('🔴')) throw new Error('AI UI error: '+latest);
               if (latest.length < 3) throw new Error('AI UI returned empty response');
             };
