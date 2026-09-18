@@ -153,7 +153,7 @@ jobs:
           for n in $(seq 1 35); do
             echo "=== FULL_ACCEPTANCE_$n/35 ==="
             ACCEPTANCE_RUN=$n node production-acceptance.mjs
-            echo "FULL_ACCEPTANCE_$n_PASS"
+            echo "FULL_ACCEPTANCE_${n}_PASS"
             sleep 2
           done
           echo 'FULL_APPLICATION_35_OF_35_PASSED'
