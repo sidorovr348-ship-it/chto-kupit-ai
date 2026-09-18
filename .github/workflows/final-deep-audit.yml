@@ -22,7 +22,7 @@ jobs:
           node --check image-generation-fallback.js
           node --test test-local-gateway.js
           test -s smart-index.html
-          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/transcribe' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
+          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/chat' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
           echo STATIC_AUDIT_OK
       - name: Verify live Pages
         run: |
