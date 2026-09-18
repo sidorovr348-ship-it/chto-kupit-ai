@@ -108,7 +108,7 @@ jobs:
               });
               // 1. Chat through the real mobile UI.
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
-              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.tap(); await waitAI(before,180000);
+              await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.click(); await waitAI(before,180000);
 
               // 2. Live camera path: permission, stream, mobile UI state, shutdown.
               await cameraButton.tap();
