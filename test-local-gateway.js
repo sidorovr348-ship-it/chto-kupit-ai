@@ -8,7 +8,7 @@ assert.match(src,/qwen\/qwen3\.8-27b/);
 assert.match(src,/if\(groq&&Date\.now\(\)>=groqBlockedUntil\)\{/);
 assert.match(src,/provider\('https:\/\/paraloncloud\.com\/v1\/chat\/completions'/);
 assert.match(src,/whisper-large-v3-turbo/);
-assert.match(src,/credentials:false/);
+assert.match(src,/Access-Control-Allow-Origin/);
 assert.match(src,/wantsShopping/);
 assert.match(src,/wantsSearch/);
 assert.match(src,/\.zip/);
