@@ -101,6 +101,11 @@ jobs:
               let probeJson; try { probeJson=JSON.parse(probe.text); } catch {}
               if (probe.status!==200 || !probeJson?.ok || !probeJson?.result) fail('browser API probe bad response: '+JSON.stringify(probe));
               
+              page.on('response', async response => {
+                if (response.url().endsWith('/chat') && response.request().method()==='POST') {
+                  try { console.log('UI_CHAT_RESPONSE', response.status(), (await response.text()).slice(0,1200)); } catch {}
+                }
+              });
               // 1. Chat through the real mobile UI.
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
               await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.tap(); await waitAI(before,180000);
