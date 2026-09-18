@@ -88,6 +88,19 @@ jobs:
               const health = await page.evaluate(async api => { const r=await fetch(`${api}/health?mobile_e2e=${Date.now()}`); return {status:r.status,body:await r.json()}; }, API);
               if (health.status !== 200 || !health.body.ok) fail(`health failed: ${JSON.stringify(health)}`);
 
+              // Browser-origin API probe: verify the exact cross-origin response used by the UI.
+              const probe = await page.evaluate(async api => {
+                try {
+                  const r = await fetch(api + '/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt:'Ответь одним словом: ОК',memoryId:'mobile-probe-'+Date.now()})});
+                  const text = await r.text();
+                  return {status:r.status, text:text.slice(0,1000)};
+                } catch (e) { return {error:String(e)}; }
+              }, API);
+              console.log('BROWSER_API_PROBE', JSON.stringify(probe));
+              if (probe.error) fail('browser API probe failed: '+probe.error);
+              let probeJson; try { probeJson=JSON.parse(probe.text); } catch {}
+              if (probe.status!==200 || !probeJson?.ok || !probeJson?.result) fail('browser API probe bad response: '+JSON.stringify(probe));
+              
               // 1. Chat through the real mobile UI.
               let before = await page.locator('#chat .m.a, #chat .msg.ai').count();
               await input.fill('Кто ты? Ответь одним коротким предложением.'); await send.tap(); await waitAI(before,180000);
