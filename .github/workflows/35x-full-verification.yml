@@ -1,0 +1,49 @@
+name: My AI Unified — 35x full verification
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["My AI Unified — final deep audit"]
+    types: [completed]
+    branches: [main]
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: 35 complete cycles
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 35); do
+            echo "=== FULL_TEST_$n/35 ==="
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 "$API/health?test=$n" >/tmp/h
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 90 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Кто ты?"}' >/tmp/c
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 150 -X POST "$API/chat" -H 'Content-Type: application/json' --data '{"prompt":"Найди iPhone 18 Pro в Москве где купить дешевле"}' >/tmp/s
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/photo" -H 'Content-Type: application/json' --data '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="],"prompt":"Ответь одним словом: ОК"}' >/tmp/p
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/document" -H 'Content-Type: application/json' --data '{"name":"test.txt","mime":"text/plain","text":"Тест документа"}' >/tmp/d
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 120 -X POST "$API/tts" -H 'Content-Type: application/json' --data '{"text":"Проверка голоса"}' -o /tmp/t
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 60 "$API/autonomy/status" >/tmp/a
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 60 -X POST "$API/autonomy/self-check" >/tmp/sc
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 1 --max-time 60 -X POST "$API/alice" -H 'Content-Type: application/json' --data '{"request":{"command":"Кто ты?"}}' >/tmp/al
+            python3 - "$n" <<'PY'
+import json,sys,os
+n=sys.argv[1]
+def j(p): return json.load(open(p))
+h,c,s,p,d,a,sc,al=map(j,['/tmp/h','/tmp/c','/tmp/s','/tmp/p','/tmp/d','/tmp/a','/tmp/sc','/tmp/al'])
+assert h.get('ok') and h.get('dispatcher')
+assert c.get('ok') and c.get('result')
+assert s.get('ok') and s.get('route')=='shopping' and s.get('results')
+assert p.get('ok') and p.get('result')
+assert d.get('ok') and d.get('result')
+assert a.get('ok') and a.get('autonomy',{}).get('enabled')
+assert sc.get('ok') and sc.get('status')=='ACCEPTED'
+assert al.get('response',{}).get('text')
+assert os.path.getsize('/tmp/t')>0
+print('FULL_TEST_'+n+'_PASS')
+PY
+          done
+          echo FULL_APPLICATION_35_OF_35_PASSED
+        env:
+          API: https://ai.aliceq.ru
