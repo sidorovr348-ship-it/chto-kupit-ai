@@ -42,3 +42,32 @@ test('merge readiness requires independent verification evidence', () => {
   const ready = gate.check({ runId: 'x', repo: { fullName: 'sidorovr348-ship-it/chto-kupit-ai' }, branch: 'autonomy-integration-2026-09-17', runtime: { nodeMajor: 22 }, evidence: ['INDEPENDENT_VERIFICATION'] });
   assert.equal(ready.status, 'READY_TO_INTEGRATE');
 });
+
+
+test('autonomy runtime is actually connected to bounded core tools', async () => {
+  const { createAutonomyRuntime } = await import('./autonomy-lab/runtime.mjs');
+  const runtime = createAutonomyRuntime({
+    tools: {
+      chat: async ({ prompt }) => ({ text: 'echo:' + prompt }),
+      search: async ({ query }) => [{ title: query, link: 'https://example.com' }],
+    },
+  });
+  assert.equal(runtime.status().connectedToCore, true);
+  const self = await runtime.selfCheck();
+  assert.equal(self.ok, true);
+  assert.ok(self.tools.includes('chat'));
+  const task = await runtime.executeTask({
+    taskId: 'core-tool-smoke',
+    goal: 'проверить безопасный вызов подключённого инструмента',
+    kind: 'chat',
+    input: { prompt: 'тест' },
+  });
+  assert.equal(task.status, 'ACCEPTED');
+  assert.equal(task.result.verification.status, 'PASS');
+});
+
+test('autonomy runtime refuses unknown task kinds', async () => {
+  const { createAutonomyRuntime } = await import('./autonomy-lab/runtime.mjs');
+  const runtime = createAutonomyRuntime({ tools: {} });
+  await assert.rejects(() => runtime.executeTask({ kind: 'production-deploy' }), /AUTONOMY_TASK_KIND_NOT_ALLOWED/);
+});
