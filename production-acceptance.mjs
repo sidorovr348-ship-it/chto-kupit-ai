@@ -4,6 +4,8 @@ async function req(path,body,opts={}){const max=opts.retries??8;for(let attempt=
 const assert=(x,m)=>{if(!x)throw Error(m)};
 const h=await req('/health',undefined,{method:'GET'});assert(h?.ok&&h.dispatcher,'health');
 for(const k of ['groq','groqVision','search','tts','stt','documents','video','zip','imageGeneration'])assert(h.adapters?.[k],`adapter ${k}`);
+const localTime=await req('/chat',{prompt:'Сколько сейчас времени в Москве?'});assert(localTime?.ok&&localTime.route==='local-time'&&/в Москве/.test(String(localTime.result)),'Moscow local time');
+const localLocation=await req('/chat',{prompt:'Моё текущее местоположение',location:{lat:55.7558,lon:37.6173,address:'Тестовые координаты'}});assert(localLocation?.ok&&localLocation.route==='location'&&localLocation.coordinates&&Number.isFinite(Number(localLocation.coordinates.lat)),'geolocation local route');
 const search=await req('/search',{query:'iPhone 18 Pro Москва цена'});assert(search?.ok&&search.results?.length,'search');
 const shop=await req('/shopping',{query:'Найди iPhone 18 Pro в Москве'});assert(shop?.ok&&shop.results?.length,'shopping empty');
 const bad=/чехол|кейс|стекл|плёнк|кабель|заряд|ремеш|креплен|держател|сумк|футляр|насадк|фильтр|запчаст|аксессуар/i;const real=shop.results.filter(x=>x.url&&x.title&&!bad.test(x.title));assert(real.length>=3,`shopping returned too few real offers: ${real.length}`);assert(real.some(x=>Number.isFinite(Number(x.price))&&Number(x.price)>0),'shopping has no real price');
@@ -12,8 +14,6 @@ const photo=await req('/photo',{images:[png],prompt:'Опиши изображе
 const doc=await req('/document',{name:'production.docx',mime:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',file:'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,'+DOCX_B64});assert(doc?.ok&&doc.result&&doc.extractedChars>0,'docx');
 const ttsr=await fetch(API+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Проверка голоса My AI Unified.'}),signal:AbortSignal.timeout(60000)});assert(ttsr.ok,'tts http');const audio=Buffer.from(await ttsr.arrayBuffer());assert(audio.length>1000,'tts empty');assert(audio.subarray(0,3).toString()==='ID3'||audio[0]===0xff,'tts is not mp3');
 const stt=await req('/voice',{audio:'data:audio/mpeg;base64,'+audio.toString('base64'),mime:'audio/mpeg',filename:'voice.mp3'},{timeout:90000});assert(stt?.ok&&typeof stt.text==='string'&&stt.text.trim(),'stt');
-const localTime=await req('/chat',{prompt:'Сколько сейчас времени в Москве?'});assert(localTime?.ok&&localTime.route==='local-time'&&/в Москве/.test(String(localTime.result)),'Moscow local time');
-const localLocation=await req('/chat',{prompt:'Моё текущее местоположение',location:{lat:55.7558,lon:37.6173,address:'Тестовые координаты'}});assert(localLocation?.ok&&localLocation.route==='location'&&localLocation.coordinates&&Number.isFinite(Number(localLocation.coordinates.lat)),'geolocation local route');
 const chat=await req('/chat',{prompt:'Кто ты?'});assert(chat?.ok&&chat.result,'chat');
 const image=await req('/generate-image',{prompt:'Простой красный круг на белом фоне'},{timeout:240000});assert(image?.ok&&(image.dataUrl||image.url),'image generation');
 const mid='audit-'+Date.now();await req('/chat',{prompt:'Запомни правило: отвечай по-русски',memoryId:mid});const mem=await req('/chat',{prompt:'Что ты запомнил?',memoryId:mid});assert(mem?.ok&&String(mem.result||'').toLowerCase().includes('отвечай по-русски'),'memory');
