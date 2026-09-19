@@ -1,4 +1,5 @@
 name: My AI Unified — production deploy
+# verified redeploy trigger for deterministic time/location fix
 
 on:
   push:
