@@ -48,9 +48,9 @@ jobs:
           y=bytes([128])*(w*h); u=bytes([128])*((w//2)*(h//2)); v=bytes([128])*((w//2)*(h//2))
           frame=y+u+v
           with open('/tmp/fake-camera.y4m','wb') as f:
-            f.write(f'YUV4MPEG2 W{w} H{h} F30:1 Ip A1:1 C420jpeg\\n'.encode())
+            f.write(f'YUV4MPEG2 W{w} H{h} F30:1 Ip A1:1 C420jpeg\n'.encode())
             for _ in range(90):
-              f.write(b'FRAME\\n'); f.write(frame)
+              f.write(b'FRAME\n'); f.write(frame)
           PY
       - name: Run iPhone-sized production end-to-end test
         env:
@@ -77,7 +77,7 @@ jobs:
               try {
                 const r = await fetch(APP + '?livecheck=' + Date.now(), {cache:'no-store'});
                 const t = await r.text();
-                if (t.includes("API+'/voice'") && t.includes('MediaRecorder') && t.includes('EY_WAKE_WORD_V1')) { liveReady=true; break; }
+                if (t.includes('MediaRecorder') && t.includes("API+'/transcribe'") && t.includes('getUserMedia')) { liveReady=true; break; }
               } catch {}
               await new Promise(r=>setTimeout(r,3000));
             }
