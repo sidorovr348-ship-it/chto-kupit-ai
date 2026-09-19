@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const src=fs.readFileSync('local-gateway.js','utf8');
 assert.doesNotMatch(src,/OPENAI_API_KEY\s*[:=]\s*["'][^"']+/i);
 assert.match(src,/app\.get\('\/health'/);
-for(const route of ['/chat','/photo','/search','/shopping','/document','/generate-image','/tts','/transcribe','/alice','/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.match(src,new RegExp(`app\\.post\\('${route.replace('/','\\/')}'`),`missing ${route}`);
+for(const route of ['/chat','/photo','/search','/shopping','/document','/generate-image','/tts','/transcribe','/alice'])assert.match(src,new RegExp(`app\\.post\\('${route.replace('/','\\/')}'`),`missing ${route}`);
 assert.match(src,/qwen\/qwen3\.8-27b/);
 assert.match(src,/if\(groq&&Date\.now\(\)>=groqBlockedUntil\)\{/);
 assert.match(src,/provider\('https:\/\/paraloncloud\.com\/v1\/chat\/completions'/);
@@ -14,6 +14,6 @@ assert.match(src,/wantsSearch/);
 assert.match(src,/\.zip/);
 console.log('SOURCE_SMOKE_OK');
 
-assert.match(src,/initAutonomy/);
+assert.match(src,/initAutonomy/);\nassert.match(src,/app\\.get\\('\/autonomy\\/status'/);\nassert.match(src,/app\\.post\\('\/autonomy\\/self-check'/);\nassert.match(src,/app\\.post\\('\/autonomy\\/task'/);
 assert.match(src,/createAutonomyRuntime\(\{tools:/);
 assert.match(src,/AUTONOMY_TASK_KIND_NOT_ALLOWED/);
