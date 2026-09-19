@@ -1,0 +1,57 @@
+name: My AI Unified — 35x full acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/35x-full-acceptance.yml'
+      - 'production-acceptance.mjs'
+      - 'local-gateway.js'
+      - 'autonomy-lab/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run 35 complete production cycles
+        shell: bash
+        run: |
+          set -euo pipefail
+          pass=0
+          for i in $(seq 1 35); do
+            echo "===== FULL ACCEPTANCE CYCLE $i/35 ====="
+            status=$(curl -fsS --max-time 30 https://ai.aliceq.ru/autonomy/status)
+            echo "$status"
+            echo "$status" | grep -q 'FULL_BOUNDED'
+            self=$(curl -fsS --max-time 45 -X POST -H 'Content-Type: application/json' -d '{}' https://ai.aliceq.ru/autonomy/self-check)
+            echo "$self"
+            echo "$self" | grep -q '"ok":true'
+            run_id="acceptance-35x-$i-$(date +%s)"
+            task=$(curl -fsS --max-time 45 -X POST -H 'Content-Type: application/json' -d "{\"runId\":\"$run_id\",\"taskId\":\"acceptance-cycle-$i\",\"kind\":\"self-check\",\"goal\":\"Полный приёмочный цикл лабораторного контура $i из 35\"}" https://ai.aliceq.ru/autonomy/task)
+            echo "$task"
+            echo "$task" | grep -q '"ok":true'
+            for attempt in 1 2 3; do
+              if node production-acceptance.mjs; then
+                pass=$((pass+1))
+                echo "CYCLE $i/35: PASS"
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo "CYCLE $i/35: FAIL"
+                exit 1
+              fi
+              sleep $((attempt*3))
+            done
+          done
+          test "$pass" -eq 35
+          echo "FULL_ACCEPTANCE_35_OF_35_OK"
