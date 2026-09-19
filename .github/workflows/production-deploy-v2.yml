@@ -68,6 +68,15 @@ jobs:
         run: |
           set -euo pipefail
           node production-acceptance.mjs
+          status=$(curl -fsS --max-time 20 https://ai.aliceq.ru/autonomy/status)
+          echo "$status"
+          echo "$status" | grep -q 'FULL_BOUNDED'
+          self=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{}' https://ai.aliceq.ru/autonomy/self-check)
+          echo "$self"
+          echo "$self" | grep -q '"ok":true'
+          task=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"kind":"self-check","goal":"Публичная проверка лабораторного контура"}' https://ai.aliceq.ru/autonomy/task)
+          echo "$task"
+          echo "$task" | grep -q '"ok":true'
           echo COMPLETE_PUBLIC_PRODUCTION_OK
 
   pages:
