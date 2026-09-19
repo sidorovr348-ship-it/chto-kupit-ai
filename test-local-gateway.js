@@ -14,6 +14,9 @@ assert.match(src,/wantsSearch/);
 assert.match(src,/\.zip/);
 console.log('SOURCE_SMOKE_OK');
 
-assert.match(src,/initAutonomy/);\nassert.match(src,/app\\.get\\('\/autonomy\\/status'/);\nassert.match(src,/app\\.post\\('\/autonomy\\/self-check'/);\nassert.match(src,/app\\.post\\('\/autonomy\\/task'/);
+assert.match(src,/initAutonomy/);
+assert.match(src,/app\\.get\\('\/autonomy\\/status'/);
+assert.match(src,/app\\.post\\('\/autonomy\\/self-check'/);
+assert.match(src,/app\\.post\\('\/autonomy\\/task'/);
 assert.match(src,/createAutonomyRuntime\(\{tools:/);
 assert.match(src,/AUTONOMY_TASK_KIND_NOT_ALLOWED/);
