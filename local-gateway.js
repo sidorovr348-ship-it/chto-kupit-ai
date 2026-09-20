@@ -76,3 +76,5 @@ app.use((err,req,res,next)=>{console.error('UNHANDLED',err.stack||err);if(res.he
 // PROVIDER_FALLBACK_HARDENING_V2
 
 // DEEPSEEK_CURRENT_V1
+
+// SHOPPING_TIMEOUT_HARDENING_V3
