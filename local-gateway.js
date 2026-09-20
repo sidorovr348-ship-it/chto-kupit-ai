@@ -82,3 +82,5 @@ app.use((err,req,res,next)=>{console.error('UNHANDLED',err.stack||err);if(res.he
 // SHOPPING_TIMEOUT_HARDENING_V3
 
 // SHOPPING_JINA_FALLBACK_V1
+
+// SHOPPING_RETAILER_FALLBACK_V1
