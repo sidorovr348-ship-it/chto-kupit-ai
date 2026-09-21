@@ -2,14 +2,16 @@ name: Photo public smoke
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   photo:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
