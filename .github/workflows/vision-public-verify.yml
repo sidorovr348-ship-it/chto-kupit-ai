@@ -2,8 +2,9 @@ name: My AI Unified — vision public verify
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -15,6 +16,7 @@ env:
 
 jobs:
   verify:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
