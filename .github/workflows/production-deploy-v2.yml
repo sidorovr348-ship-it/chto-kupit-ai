@@ -69,7 +69,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node production-acceptance.mjs
+          if ! node production-acceptance.mjs; then
+            printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+            ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+            echo '=== VPS PHOTO DIAGNOSTIC ==='
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
+            rm -f /tmp/vps_key
+            exit 1
+          fi
           status=$(curl -fsS --max-time 20 https://ai.aliceq.ru/autonomy/status)
           echo "$status"
           echo "$status" | grep -q 'FULL_BOUNDED'
