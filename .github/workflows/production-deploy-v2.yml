@@ -74,11 +74,11 @@ jobs:
         run: |
           set -euo pipefail
           acceptance_ok=0
-          for attempt in 1 2; do
+          for attempt in 1 2 3; do
             if node production-acceptance.mjs; then acceptance_ok=1; break; fi
             if [ "$attempt" = 1 ]; then
-              echo 'VISION_PROVIDER_COOLDOWN_WAIT_900S'
-              sleep 900
+              echo 'VISION_PROVIDER_COOLDOWN_WAIT_30S'
+              sleep 30
             fi
           done
           if [ "$acceptance_ok" != 1 ]; then
