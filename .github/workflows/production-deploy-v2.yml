@@ -79,11 +79,10 @@ jobs:
           task=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"kind":"self-check","goal":"Публичная проверка лабораторного контура"}' https://ai.aliceq.ru/autonomy/task)
           echo "$task"
           echo "$task" | grep -q '"ok":true'
-          VISION_SMOKE_IMAGE='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
           for payload in \
             '{"kind":"chat","goal":"Лабораторный smoke-тест чата","input":{"prompt":"Кто ты?"}}' \
             '{"kind":"search","goal":"Лабораторный smoke-тест поиска","input":{"query":"OpenAI"}}' \
-            "$(python3 -c 'import json; print(json.dumps({"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":[__import__("os").environ["VISION_SMOKE_IMAGE"]]}})')"; do do
+            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="]}}'; do
             lab=""
             ok=0
             for attempt in 1 2 3 4 5; do
