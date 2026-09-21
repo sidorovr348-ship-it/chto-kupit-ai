@@ -13,7 +13,9 @@ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAA
 const photo=await req('/photo',{images:[png],prompt:'Опиши изображение одним коротким предложением.'});assert(photo?.ok&&photo.result,'photo');
 const doc=await req('/document',{name:'production.docx',mime:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',file:'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,'+DOCX_B64});assert(doc?.ok&&doc.result&&doc.extractedChars>0,'docx');
 const ttsr=await fetch(API+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Проверка голоса My AI Unified.'}),signal:AbortSignal.timeout(60000)});assert(ttsr.ok,'tts http');const audio=Buffer.from(await ttsr.arrayBuffer());assert(audio.length>1000,'tts empty');assert(audio.subarray(0,3).toString()==='ID3'||audio[0]===0xff,'tts is not mp3');
-const stt=await req('/voice',{audio:'data:audio/mpeg;base64,'+audio.toString('base64'),mime:'audio/mpeg',filename:'voice.mp3'},{timeout:90000});assert(stt?.ok&&typeof stt.text==='string'&&stt.text.trim(),'stt');
+const sttBody={audio:'data:audio/mpeg;base64,'+audio.toString('base64'),mime:'audio/mpeg',filename:'voice.mp3'};
+const stt=await req('/voice',sttBody,{timeout:90000});assert(stt?.ok&&typeof stt.text==='string'&&stt.text.trim(),'stt /voice');
+const sttUi=await req('/transcribe',sttBody,{timeout:90000});assert(sttUi?.ok&&typeof sttUi.text==='string'&&sttUi.text.trim(),'stt /transcribe');
 const chat=await req('/chat',{prompt:'Кто ты?'});assert(chat?.ok&&chat.result,'chat');
 const image=await req('/generate-image',{prompt:'Простой красный круг на белом фоне'},{timeout:240000});assert(image?.ok&&(image.dataUrl||image.url),'image generation');
 const mid='audit-'+Date.now();await req('/chat',{prompt:'Запомни правило: отвечай по-русски',memoryId:mid});const mem=await req('/chat',{prompt:'Что ты запомнил?',memoryId:mid});assert(mem?.ok&&String(mem.result||'').toLowerCase().includes('отвечай по-русски'),'memory');
