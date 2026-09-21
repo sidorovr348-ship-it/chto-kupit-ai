@@ -36,8 +36,8 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
   const errors=[];
   page.on('pageerror',e=>errors.push('pageerror: '+e.message));
   // 5xx may be transient provider retries; UI operations below must still succeed.
-  page.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource: the server responded with a status of 5\\d\\d/i.test(m.text()))errors.push('console: '+m.text())});
-  page.on('requestfailed',r=>{const u=r.url();if(!/ai\\.aliceq\\.ru\\/(photo|chat|tts|voice|transcribe|generate-image)/i.test(u))errors.push('requestfailed: '+u+' '+(r.failure()?.errorText||''))});
+  page.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource: the server responded with a status of 5\d\d/i.test(m.text()))errors.push('console: '+m.text())});
+  page.on('requestfailed',r=>{const u=r.url();if(!/ai\.aliceq\.ru\/(photo|chat|tts|voice|transcribe|generate-image)/i.test(u))errors.push('requestfailed: '+u+' '+(r.failure()?.errorText||''))});
 
   try{
     await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
