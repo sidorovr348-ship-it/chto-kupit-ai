@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           sleep 25
-          printf '%s\n' '{"images":["https://placehold.co/256x256.jpg"],"prompt":"Кратко опиши это изображение. Ответь по-русски."}' >/tmp/photo.json
+          printf '%s\n' '{"images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="],"prompt":"Кратко опиши это изображение. Ответь по-русски."}' >/tmp/photo.json
           set +e
           curl --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out 2>/tmp/photo.err
           rc=$?
