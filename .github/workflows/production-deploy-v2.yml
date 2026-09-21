@@ -79,6 +79,16 @@ jobs:
           task=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"kind":"self-check","goal":"Публичная проверка лабораторного контура"}' https://ai.aliceq.ru/autonomy/task)
           echo "$task"
           echo "$task" | grep -q '"ok":true'
+          for payload in \
+            '{"kind":"chat","goal":"Лабораторный smoke-тест чата","input":{"prompt":"Кто ты?"}}' \
+            '{"kind":"search","goal":"Лабораторный smoke-тест поиска","input":{"query":"OpenAI"}}' \
+            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение"}}'; do
+            lab=$(curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d "$payload" https://ai.aliceq.ru/autonomy/task)
+            echo "$lab"
+            echo "$lab" | grep -q '"ok":true'
+            echo "$lab" | grep -q '"status":"ACCEPTED"'
+          done
+          echo LAB_CONTOUR_PUBLIC_SMOKE_OK
           echo COMPLETE_PUBLIC_PRODUCTION_OK
       - name: Verify production app root
         run: |
