@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: my-ai-unified-production
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pages: write
