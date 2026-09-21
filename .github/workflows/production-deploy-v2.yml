@@ -73,7 +73,7 @@ jobs:
             printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
             ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
             echo '=== VPS PHOTO DIAGNOSTIC ==='
-            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGjqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDz2iiivlD6UKKKKACiiigAooooA//Z\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
             rm -f /tmp/vps_key
             exit 1
           fi
@@ -89,7 +89,7 @@ jobs:
           for payload in \
             '{"kind":"chat","goal":"Лабораторный smoke-тест чата","input":{"prompt":"Кто ты?"}}' \
             '{"kind":"search","goal":"Лабораторный smoke-тест поиска","input":{"query":"OpenAI"}}' \
-            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="]}}'; do
+            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGjqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDz2iiivlD6UKKKKACiiigAooooA//Z"]}}'; do
             lab=""
             ok=0
             for attempt in 1 2 3 4 5; do
