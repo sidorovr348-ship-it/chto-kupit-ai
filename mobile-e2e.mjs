@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
 
-const APP='https://sidorovr348-ship-it.github.io/chto-kupit-ai/';
+const APP='https://ai.aliceq.ru/';
 const API='https://ai.aliceq.ru';
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
 
