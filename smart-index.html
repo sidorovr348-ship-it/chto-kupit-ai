@@ -22,7 +22,7 @@
       try{
         add('⏳ Распознаю весь вопрос…');
         const ext=b.type.includes('mp4')?'m4a':b.type.includes('ogg')?'ogg':'webm';
-        const tr=await fetch(API+'/transcribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store'});
+        const tr=await fetch(API+'/transcribe',{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store'});
         const j=await tr.json();if(!tr.ok)throw Error(j.error||'Ошибка распознавания');
         const text=String(j.text||'').trim();if(!text)throw Error('Речь не распознана');
         input.value=text;
