@@ -1,17 +1,14 @@
 name: My AI Unified — mobile end-to-end
 
 on:
-  workflow_run:
-    workflows: ["My AI Unified — production deploy"]
-    types: [completed]
+  push:
+    branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
 
 jobs:
   mobile-e2e:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -58,6 +55,17 @@ jobs:
           API_URL: https://ai.aliceq.ru
         run: |
           set -euo pipefail
+          echo 'Waiting for production deploy and Pages to expose the current build...'
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 15 'https://ai.aliceq.ru/health' >/tmp/mobile-health.json 2>/dev/null && curl -LfsS --max-time 20 "https://sidorovr348-ship-it.github.io/chto-kupit-ai/?mobile_wait=$i" -o /tmp/mobile-page.html 2>/dev/null && grep -q 'MediaRecorder' /tmp/mobile-page.html && grep -q 'EY_WAKE_WORD_V1' /tmp/mobile-page.html; then
+              echo 'CURRENT_PRODUCTION_BUILD_VISIBLE'
+              break
+            fi
+            sleep 10
+          done
+          test -s /tmp/mobile-health.json
+          grep -q 'MediaRecorder' /tmp/mobile-page.html
+          grep -q 'EY_WAKE_WORD_V1' /tmp/mobile-page.html
           node <<'NODE'
           (async () => {
             const { chromium } = require('playwright');
