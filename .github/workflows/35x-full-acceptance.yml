@@ -1,13 +1,10 @@
 name: My AI Unified — 35x full acceptance
 
 on:
-  push:
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
     branches: [main]
-    paths:
-      - '.github/workflows/35x-full-acceptance.yml'
-      - 'production-acceptance.mjs'
-      - 'local-gateway.js'
-      - 'autonomy-lab/**'
   workflow_dispatch:
 
 permissions:
@@ -15,6 +12,7 @@ permissions:
 
 jobs:
   acceptance:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
