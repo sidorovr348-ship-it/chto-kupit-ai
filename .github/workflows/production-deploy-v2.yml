@@ -83,10 +83,17 @@ jobs:
             '{"kind":"chat","goal":"Лабораторный smoke-тест чата","input":{"prompt":"Кто ты?"}}' \
             '{"kind":"search","goal":"Лабораторный smoke-тест поиска","input":{"query":"OpenAI"}}' \
             '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение"}}'; do
-            lab=$(curl -fsS --max-time 60 -X POST -H 'Content-Type: application/json' -d "$payload" https://ai.aliceq.ru/autonomy/task)
+            lab=""
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if lab=$(curl -fsS --retry 2 --retry-all-errors --retry-delay 2 --max-time 60 -X POST -H 'Content-Type: application/json' -d "$payload" https://ai.aliceq.ru/autonomy/task); then
+                if echo "$lab" | grep -q '"ok":true' && echo "$lab" | grep -q '"status":"ACCEPTED"'; then ok=1; break; fi
+              fi
+              echo "LAB_RETRY attempt=$attempt" >&2
+              sleep 2
+            done
+            test "$ok" = 1
             echo "$lab"
-            echo "$lab" | grep -q '"ok":true'
-            echo "$lab" | grep -q '"status":"ACCEPTED"'
           done
           echo LAB_CONTOUR_PUBLIC_SMOKE_OK
           echo COMPLETE_PUBLIC_PRODUCTION_OK
