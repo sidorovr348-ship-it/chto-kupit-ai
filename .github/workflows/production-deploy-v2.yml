@@ -79,6 +79,15 @@ jobs:
           echo "$task"
           echo "$task" | grep -q '"ok":true'
           echo COMPLETE_PUBLIC_PRODUCTION_OK
+      - name: Verify production app root
+        run: |
+          set -euo pipefail
+          curl -LfsS --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 'https://ai.aliceq.ru/?root-audit=1' -o /tmp/live-app.html
+          grep -q 'EY_WAKE_WORD_V1' /tmp/live-app.html
+          grep -q 'commandBuffer' /tmp/live-app.html
+          grep -q 'MediaRecorder' /tmp/live-app.html
+          grep -q 'navigator.geolocation' /tmp/live-app.html
+          echo PRODUCTION_APP_ROOT_OK
 
   pages:
     needs: deploy
