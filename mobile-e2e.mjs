@@ -62,10 +62,10 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.locator('#camOff').tap();
     await page.waitForFunction(()=>{const b=document.querySelector('#cameraBox');return b?.style.display==='none'},null,{timeout:5000});
 
-    const pc=await page.locator('#photoInput').count()?page.locator('#photoInput'):page.locator('#pi');
     n=await before();
+    const fcPromise=page.waitForEvent('filechooser');
     await page.locator('#photo').tap();
-    const fc=await page.waitForEvent('filechooser');
+    const fc=await fcPromise;
     await fc.setFiles({name:'mobile.png',mimeType:'image/png',buffer:png});
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:120000});
 
