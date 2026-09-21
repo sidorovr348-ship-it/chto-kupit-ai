@@ -25,3 +25,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run mobile production test
         run: node mobile-e2e.mjs
+      - name: Run hands-free wake buffering test
+        run: node wake-buffer-e2e.mjs
