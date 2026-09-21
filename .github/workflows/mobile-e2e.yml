@@ -26,4 +26,5 @@ jobs:
       - name: Run mobile production test
         run: node mobile-e2e.mjs
       - name: Run hands-free wake buffering test
+        if: ${{ always() }}
         run: node wake-buffer-e2e.mjs
