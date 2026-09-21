@@ -24,7 +24,8 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     '--autoplay-policy=no-user-gesture-required'
   ]});
   const context=await browser.newContext({
-    permissions:['camera','microphone'],
+    permissions:['camera','microphone','geolocation'],
+    geolocation:{latitude:55.7558,longitude:37.6173},
     viewport:{width:393,height:852},
     deviceScaleFactor:3,
     isMobile:true,
@@ -56,6 +57,17 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await input.fill('Кто ты? Ответь одним коротким предложением.');
     await send.click();
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:30000});
+
+    // Verify the two user-critical deterministic flows through the real mobile UI.
+    n=await before();
+    await input.fill('Сколько сейчас времени в Москве?');
+    await send.click();
+    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:15000});
+
+    n=await before();
+    await input.fill('Моё текущее местоположение');
+    await send.click();
+    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Ваше текущее местоположение/.test(x.textContent||'')),n,{timeout:30000});
 
     const cam=page.locator('#camera');
     await cam.tap();
