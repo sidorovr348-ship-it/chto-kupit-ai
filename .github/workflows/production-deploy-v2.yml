@@ -85,7 +85,7 @@ jobs:
             printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
             ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
             echo '=== VPS PHOTO DIAGNOSTIC ==='
-            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
             rm -f /tmp/vps_key
             exit 1
           fi
@@ -101,7 +101,7 @@ jobs:
           for payload in \
             '{"kind":"chat","goal":"Лабораторный smoke-тест чата","input":{"prompt":"Кто ты?"}}' \
             '{"kind":"search","goal":"Лабораторный smoke-тест поиска","input":{"query":"OpenAI"}}' \
-            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="]}}'; do
+            '{"kind":"vision","goal":"Лабораторный smoke-тест зрения","input":{"prompt":"Опиши тестовое изображение","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC"]}}'; do
             lab=""
             ok=0
             for attempt in 1 2 3 4 5; do
