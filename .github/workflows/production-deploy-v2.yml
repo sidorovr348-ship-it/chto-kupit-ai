@@ -1,6 +1,6 @@
 name: My AI Unified — production deploy
 # production root audit is mandatory before downstream mobile and deep-audit checks
-# verified redeploy trigger for deterministic time/location fix
+# verified redeploy trigger for deterministic time/location and final vision fallback
 
 on:
   push:
