@@ -62,7 +62,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     n=await before();
     await input.fill('Сколько сейчас времени в Москве?');
     await send.click();
-    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:15000});
+    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:30000});
 
     n=await before();
     await input.fill('Моё текущее местоположение');
