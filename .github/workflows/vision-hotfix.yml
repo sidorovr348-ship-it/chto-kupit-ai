@@ -20,10 +20,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY' >/tmp/photo.json
-          import base64, json
-          b = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==')
+          import json
           print(json.dumps({
-              'images': ['data:image/png;base64,' + base64.b64encode(b).decode()],
+              'images': ['https://docs.mistral.ai/img/eiffel-tower-paris.jpg'],
               'prompt': 'Кратко опиши это изображение. Ответь по-русски.'
           }))
           PY
