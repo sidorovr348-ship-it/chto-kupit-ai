@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           sleep 25
-          printf '%s\n' '{"images":["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAgACADASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAACAAH/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABUBAQEAAAAAAAAAAAAAAAAAAAAE/8QAGBEAAgMAAAAAAAAAAAAAAAAABBEAFCH/2gAMAwEAAhEDEQA/ANwSHVYIJYepSMoqusbiKQ6kUFiV1rcClWHiUh1IpAhdd43BQthalDqRSQWXYWJQKLXetz//2Q=="],"prompt":"Кратко опиши это изображение. Ответь по-русски."}' >/tmp/photo.json
+          printf '%s\n' '{"images":["https://docs.mistral.ai/img/eiffel-tower-paris.jpg"],"prompt":"Кратко опиши это изображение. Ответь по-русски."}' >/tmp/photo.json
           set +e
           curl --silent --show-error --max-time 120 -X POST 'https://ai.aliceq.ru/photo' -H 'Content-Type: application/json' --data-binary @/tmp/photo.json >/tmp/photo.out 2>/tmp/photo.err
           rc=$?
