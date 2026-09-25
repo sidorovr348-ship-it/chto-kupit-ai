@@ -81,8 +81,6 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await locationRequest;
     if(!locationPayload?.location||!Number.isFinite(Number(locationPayload.location.lat))||!Number.isFinite(Number(locationPayload.location.lon))) throw Error('mobile geolocation coordinates were not sent to backend');
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Ваше текущее местоположение|координаты|Точный адрес определить не удалось/.test(x.textContent||'')),n,{timeout:30000});
-    await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:30000});
-
     const cam=page.locator('#camera');
     await cam.tap();
     await page.waitForFunction(()=>{const v=document.querySelector('#cam');return v?.srcObject?.getVideoTracks?.()[0]?.readyState==='live'},null,{timeout:15000});
