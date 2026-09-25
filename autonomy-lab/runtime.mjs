@@ -49,6 +49,6 @@ export function createAutonomyRuntime({ tools = {} } = {}) {
       const run = await orchestrator.run({ runId: id, taskId: 'runtime-self-check', goal: 'Проверить целостность автономного контура без изменения production', action: 'sandbox_execute', maxSteps: 1, step: async () => ({ ok: true, scope: 'bounded-runtime' }), verify: async ({ output }) => output?.ok ? { status: 'PASS', reason: 'BOUNDED_RUNTIME_OK' } : { status: 'FAIL' }, successCriteria: ['bounded runtime executes and verifies'] });
       return { ok: run.status === 'ACCEPTED', status: run.status, integrity: orchestrator.integrity(id), coreConnected: Object.keys(toolMap).length > 0, tools: Object.keys(toolMap) };
     },
-    status() { return { enabled: true, active: true, mode: 'FULL_BOUNDED', connectedToCore: true, safeMode: true, killSwitch: process.env.AUTONOMY_KILL_SWITCH === '1', stateFile, capabilities: ['self-check','persistent-state','audit-log','bounded-orchestration','branch-only-planning','merge-readiness-gate','rollback-controller',...Object.keys(toolMap).map(k => `tool:${k}`)] }; }
+    status() { return { enabled: true, active: true, mode: 'FULL_BOUNDED', connectedToCore: Object.keys(toolMap).length > 0, safeMode: true, killSwitch: process.env.AUTONOMY_KILL_SWITCH === '1', stateFile, capabilities: ['self-check','persistent-state','audit-log','bounded-orchestration','branch-only-planning','merge-readiness-gate','rollback-controller',...Object.keys(toolMap).map(k => `tool:${k}`)] }; }
   };
 }
