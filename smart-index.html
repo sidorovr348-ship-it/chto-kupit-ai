@@ -72,7 +72,7 @@ return r}
 function start(){if(!SR||!enabled||paused||starting)return;if(!r)make();try{starting=true;r.start()}catch(e){starting=false;setTimeout(()=>{if(enabled&&!paused)start()},1000)}}
 function kick(){if(!SR){status('🎙️ В этом браузере режим «Эй» недоступен');return}if(!paused&&!startedOnce)start()}
 window.__pauseWake=()=>{paused=true;armedUntil=0;commandBuffer='';clearTimeout(commandTimer);try{r?.stop()}catch{}status('')};
-window.__resumeWake=()=>{if(!enabled)return;paused=false;setTimeout(start,300)};
+window.__resumeWake=()=>{if(!enabled)return;paused=false;clearTimeout(commandTimer);setTimeout(()=>{if(!enabled||paused)return;try{const p=navigator.mediaDevices?.getUserMedia?.({audio:true});if(p&&typeof p.then==='function'){p.then(stream=>{try{stream.getTracks().forEach(t=>t.stop())}catch{};setTimeout(()=>{if(!paused)start()},250)}).catch(()=>setTimeout(()=>{if(!paused)start()},250));}else start()}catch{start()}},sound===false?300:4000)};
 window.__wakeStart=start;
 if(SR){
 window.addEventListener('load',()=>setTimeout(kick,700));
