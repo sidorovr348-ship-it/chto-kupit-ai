@@ -145,6 +145,11 @@ jobs:
           import json
           j=json.load(open('/tmp/image.json')); assert j.get('ok') and (j.get('dataUrl') or j.get('url')),j; print('IMAGE_GEN_OK')
           PY
+      - name: Full autonomy capability E2E
+        run: |
+          set -euo pipefail
+          node autonomy-full-capability-e2e.mjs
+
       - name: Final audit summary
         run: echo 'FINAL_DEEP_AUDIT_ALL_CHECKS_PASSED'
       - name: 35 full acceptance cycles
