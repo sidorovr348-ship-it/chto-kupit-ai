@@ -22,7 +22,7 @@ export function createAutonomyRuntime({ tools = {} } = {}) {
   const bridge = new ProjectTaskBridge({ adapter });
   const gate = new MergeReadinessGate({ orchestrator, adapter });
   const toolMap = Object.fromEntries(Object.entries(tools).filter(([, fn]) => typeof fn === 'function'));
-  const allowedTaskKinds = new Set(['chat','search','shopping','vision','document','self-check','branch-plan']);
+  const allowedTaskKinds = new Set(['chat','search','shopping','vision','document','tts','stt','location','time','image-generation','alice','self-check','branch-plan']);
   const executeTask = async ({ runId, taskId, goal, kind = 'self-check', input = {} } = {}) => {
     if (!allowedTaskKinds.has(kind)) throw new Error('AUTONOMY_TASK_KIND_NOT_ALLOWED');
     const id = runId || 'autonomy-' + Date.now().toString(36);
