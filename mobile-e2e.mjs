@@ -67,7 +67,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     n=await before();
     let locationPayload=null;
     const locationRequest=page.waitForRequest(req=>{
-      if(!/ai\\.aliceq\\.ru\\/chat$/i.test(req.url())||req.method()!=='POST') return false;
+      if(!/ai\.aliceq\.ru\/chat$/i.test(req.url())||req.method()!=='POST') return false;
       try{
         const body=req.postDataJSON();
         if(body?.prompt==='Моё текущее местоположение'){locationPayload=body;return true;}
