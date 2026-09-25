@@ -65,9 +65,20 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:30000});
 
     n=await before();
+    let locationPayload=null;
+    const locationRequest=page.waitForRequest(req=>{
+      if(!/ai\\.aliceq\\.ru\\/chat$/i.test(req.url())||req.method()!=='POST') return false;
+      try{
+        const body=req.postDataJSON();
+        if(body?.prompt==='Моё текущее местоположение'){locationPayload=body;return true;}
+      }catch{}
+      return false;
+    });
     await input.fill('Моё текущее местоположение');
     await send.click();
-    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Ваше текущее местоположение/.test(x.textContent||'')),n,{timeout:30000});
+    await locationRequest;
+    if(!locationPayload?.location||!Number.isFinite(Number(locationPayload.location.lat))||!Number.isFinite(Number(locationPayload.location.lon))) throw Error('mobile geolocation coordinates were not sent to backend');
+    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Ваше текущее местоположение|координаты|Точный адрес определить не удалось/.test(x.textContent||'')),n,{timeout:30000});
 
     const cam=page.locator('#camera');
     await cam.tap();

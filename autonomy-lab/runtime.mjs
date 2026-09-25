@@ -22,7 +22,7 @@ export function createAutonomyRuntime({ tools = {} } = {}) {
   const bridge = new ProjectTaskBridge({ adapter });
   const gate = new MergeReadinessGate({ orchestrator, adapter });
   const toolMap = Object.fromEntries(Object.entries(tools).filter(([, fn]) => typeof fn === 'function'));
-  const allowedTaskKinds = new Set(['chat','search','shopping','vision','document','self-check','branch-plan']);
+  const allowedTaskKinds = new Set(['chat','search','shopping','vision','document','tts','stt','location','time','image-generation','alice','self-check','branch-plan']);
   const executeTask = async ({ runId, taskId, goal, kind = 'self-check', input = {} } = {}) => {
     if (!allowedTaskKinds.has(kind)) throw new Error('AUTONOMY_TASK_KIND_NOT_ALLOWED');
     const id = runId || 'autonomy-' + Date.now().toString(36);
@@ -49,6 +49,6 @@ export function createAutonomyRuntime({ tools = {} } = {}) {
       const run = await orchestrator.run({ runId: id, taskId: 'runtime-self-check', goal: 'Проверить целостность автономного контура без изменения production', action: 'sandbox_execute', maxSteps: 1, step: async () => ({ ok: true, scope: 'bounded-runtime' }), verify: async ({ output }) => output?.ok ? { status: 'PASS', reason: 'BOUNDED_RUNTIME_OK' } : { status: 'FAIL' }, successCriteria: ['bounded runtime executes and verifies'] });
       return { ok: run.status === 'ACCEPTED', status: run.status, integrity: orchestrator.integrity(id), coreConnected: Object.keys(toolMap).length > 0, tools: Object.keys(toolMap) };
     },
-    status() { return { enabled: true, active: true, mode: 'FULL_BOUNDED', connectedToCore: true, safeMode: true, killSwitch: process.env.AUTONOMY_KILL_SWITCH === '1', stateFile, capabilities: ['self-check','persistent-state','audit-log','bounded-orchestration','branch-only-planning','merge-readiness-gate','rollback-controller',...Object.keys(toolMap).map(k => `tool:${k}`)] }; }
+    status() { return { enabled: true, active: true, mode: 'FULL_BOUNDED', connectedToCore: Object.keys(toolMap).length > 0, safeMode: true, killSwitch: process.env.AUTONOMY_KILL_SWITCH === '1', stateFile, capabilities: ['self-check','persistent-state','audit-log','bounded-orchestration','branch-only-planning','merge-readiness-gate','rollback-controller',...Object.keys(toolMap).map(k => `tool:${k}`)] }; }
   };
 }
