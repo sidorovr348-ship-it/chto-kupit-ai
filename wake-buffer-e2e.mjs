@@ -19,15 +19,16 @@ const API='https://ai.aliceq.ru';
       static commands=[['Эй','сколько','времени в Москве'],['Эй','сколько','времени в Москве'],['Эй','сколько','времени в Москве']];
       constructor(){
         this.continuous=true;
+        this.ended=false;
         this.interimResults=false;
         this.lang='';
         this.onstart=null; this.onresult=null; this.onerror=null; this.onend=null;
       }
-      stop(){setTimeout(()=>this.onend?.(),10)}
-      abort(){setTimeout(()=>this.onend?.(),10)}
+      stop(){if(this.ended)return;this.ended=true;setTimeout(()=>this.onend?.(),10)}
+      abort(){if(this.ended)return;this.ended=true;setTimeout(()=>this.onend?.(),10)}
       start(){
+        if(FakeSpeechRecognition.runs>=FakeSpeechRecognition.commands.length)return;
         const run=FakeSpeechRecognition.runs++;
-        if(run>=FakeSpeechRecognition.commands.length){setTimeout(()=>this.onend?.(),20);return;}
         setTimeout(()=>this.onstart?.(),50);
         const emit=(transcript)=>{
           const result={0:{transcript},length:1,isFinal:true};
