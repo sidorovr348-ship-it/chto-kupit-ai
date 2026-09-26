@@ -38,8 +38,8 @@ const API='https://ai.aliceq.ru';
         setTimeout(()=>this.onend?.(),1800);
       }
     }
-    window.SpeechRecognition=FakeSpeechRecognition;
-    window.webkitSpeechRecognition=FakeSpeechRecognition;
+    Object.defineProperty(window,'SpeechRecognition',{configurable:true,writable:true,value:FakeSpeechRecognition});
+    Object.defineProperty(window,'webkitSpeechRecognition',{configurable:true,writable:true,value:FakeSpeechRecognition});
   });
 
   const page=await context.newPage();
@@ -50,7 +50,8 @@ const API='https://ai.aliceq.ru';
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
     const sound=page.locator('#sound');
     if(await sound.textContent()==='🔊 Звук') await sound.click();
-    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:60000});
+    await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
+    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:90000});
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='сколько времени в Москве');
     if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled`);
