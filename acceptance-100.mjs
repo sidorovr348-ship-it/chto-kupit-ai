@@ -1,5 +1,5 @@
 const API='https://ai.aliceq.ru';
-const APP='https://sidorovr348-ship-it.github.io/chto-kupit-ai/';
+const APP='https://ai.aliceq.ru/';
 const TIMEOUT=25000;
 let n=0,failed=0;const fail=[];
 async function check(name,fn){n++;try{await fn();console.log('PASS',String(n).padStart(3,'0'),name)}catch(e){failed++;fail.push({n,name,error:String(e.message||e)});console.error('FAIL',String(n).padStart(3,'0'),name,e.message||e)}}
@@ -24,16 +24,16 @@ for(let i=0;i<5;i++)await check('autonomy status '+(i+1),async()=>{const x=await
 for(let i=0;i<5;i++)await check('autonomy self-check '+(i+1),async()=>{const x=await req('/autonomy/self-check',{},'POST',30000);ok(x.ok,'self-check')});
 for(let i=0;i<5;i++)await check('autonomy chat task '+(i+1),async()=>{const x=await req('/autonomy/task',{kind:'chat',goal:'100-test '+i,input:{prompt:'Кто ты?'}},'POST',30000);ok(x.ok&&x.status==='ACCEPTED','task')});
 
-for(const q of ['Сколько времени в Москве?','Который час в Москве?','Какое сейчас время в Москве?','Сколько сейчас часов в Москве?','Московское время сейчас?','Время в Москве','Скажи время в Москве','Который сейчас час в Москве?'])await check('Moscow time: '+q,async()=>{const x=await req('/chat',{messages:[{role:'user',content:q}]});ok(x.ok&&x.route==='local-time'&&/Москва/.test(textOf(x))&&/\d{2}:\d{2}:\d{2}/.test(textOf(x)),'time')});
-for(const q of ['Где я сейчас?','Моё текущее местоположение','Какая моя геолокация?','Определи моё местоположение'])await check('location without coords: '+q,async()=>{const x=await req('/chat',{messages:[{role:'user',content:q}]});ok(x.ok&&/геолокац|местополож/i.test(textOf(x)),'location fallback')});
+for(const q of ['Сколько времени в Москве?','Который час в Москве?','Какое сейчас время в Москве?','Сколько сейчас часов в Москве?','Московское время сейчас?','Время в Москве','Скажи время в Москве','Который сейчас час в Москве?'])await check('Moscow time: '+q,async()=>{const x=await req('/chat',{prompt:q});ok(x.ok&&x.route==='local-time'&&/Москва/.test(textOf(x))&&/\d{2}:\d{2}:\d{2}/.test(textOf(x)),'time')});
+for(const q of ['Где я сейчас?','Моё текущее местоположение','Какая моя геолокация?','Определи моё местоположение'])await check('location without coords: '+q,async()=>{const x=await req('/chat',{prompt:q});ok(x.ok&&/геолокац|местополож/i.test(textOf(x)),'location fallback')});
 for(const [lat,lon] of [[55.7558,37.6173],[55.7522,37.6156],[59.9343,30.3351],[40.7128,-74.006]])await check('location coords '+lat+','+lon,async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Где я сейчас?'}],location:{lat,lon}});ok(x.ok&&x.route==='location'&&x.coordinates,'coords')});
 
-for(const q of ['Кто такой Пётр Первый?','Кто такой Александр Пушкин?','Что такое фотосинтез?','Объясни простыми словами, что такое DNS.','Назови три планеты Солнечной системы.','Чем отличается SSD от HDD?','Что такое HTTP?','Как работает GPS?'])await check('chat: '+q,async()=>{const x=await req('/chat',{messages:[{role:'user',content:q}]});ok(x.ok&&textOf(x).length>10,'answer')});
+for(const q of ['Кто такой Пётр Первый?','Кто такой Александр Пушкин?','Что такое фотосинтез?','Объясни простыми словами, что такое DNS.','Назови три планеты Солнечной системы.','Чем отличается SSD от HDD?','Что такое HTTP?','Как работает GPS?'])await check('chat: '+q,async()=>{const x=await req('/chat',{prompt:q});ok(x.ok&&textOf(x).length>10,'answer')});
 for(const q of ['OpenAI','новости технологий сегодня','погода Москва сегодня','курс евро к рублю','история Петра Первого','официальный сайт Apple','GitHub','последняя версия Node.js'])await check('search: '+q,async()=>{const x=await req('/search',{query:q});ok(x.ok&&Array.isArray(x.results),'search')});
 for(let i=0;i<3;i++)await check('search repeat '+(i+1),async()=>{const x=await req('/search',{query:'OpenAI'});ok(x.ok&&Array.isArray(x.results),'repeat search')});
 
 for(const [path,body] of [['/chat',{}],['/chat',{prompt:''}],['/photo',{}],['/generate-image',{prompt:''}],['/voice',{audio:''}],['/transcribe',{audio:''}],['/document',{}],['/search',{query:''}]])await check('negative '+path,async()=>{try{await req(path,body);throw Error('expected controlled error')}catch(e){ok(!/ECONNRESET/i.test(e.message),'controlled error')}});
-for(let i=0;i<3;i++)await check('identity '+(i+1),async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Кто ты?'}]});ok(x.ok&&/Эй|My AI Unified/i.test(textOf(x)),'identity')});
+for(let i=0;i<3;i++)await check('identity '+(i+1),async()=>{const x=await req('/chat',{prompt:'Кто ты?'});ok(x.ok&&/Эй|My AI Unified/i.test(textOf(x)),'identity')});
 for(let i=0;i<4;i++)await check('TTS '+(i+1),async()=>{const r=await fetch(API+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Проверка голоса '+i}),signal:AbortSignal.timeout(25000)});const b=Buffer.from(await r.arrayBuffer());ok(r.ok&&b.length>100,'tts')});
 const p=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64').toString('base64');
 for(let i=0;i<4;i++)await check('photo '+(i+1),async()=>{const x=await req('/photo',{images:['data:image/png;base64,'+p],prompt:'Опиши тестовое изображение.'},'POST',25000);ok(x.ok&&textOf(x).length>0,'photo')});
