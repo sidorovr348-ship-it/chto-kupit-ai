@@ -3,27 +3,25 @@
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){add('🔴 Этот браузер не поддерживает запись голоса.');return}
   window.__pauseWake?.();
   try{
-    add('🎙️ Говорите. Запись остановится после паузы.');
-    const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    add('🎙️ Говорите. Запись остановится через 12 секунд или кнопкой «Остановить».');
+    const s=await navigator.mediaDevices.getUserMedia({audio:true});
     chunks=[];
-    const types=['audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'];
-    const m=types.find(x=>MediaRecorder.isTypeSupported(x))||'';
-    recorder=new MediaRecorder(s,m?{mimeType:m}:undefined);
-    let lastVoice=Date.now(),heard=false;
-    const started=Date.now();
-    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+    let r;
+    try{r=new MediaRecorder(s)}catch(e){s.getTracks().forEach(t=>t.stop());throw e}
+    recorder=r;
+    recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
     const finish=async()=>{
-      const r=recorder;recorder=null;clearTimeout(voiceTimer);voiceTimer=null;
-      try{voiceCtx?.close()}catch{}voiceCtx=null;
+      const rr=recorder;recorder=null;clearTimeout(voiceTimer);voiceTimer=null;
       s.getTracks().forEach(t=>t.stop());
       $('#voice').textContent='🎙️ Голос';$('#voice').classList.remove('recording');
-      const b=new Blob(chunks,{type:r?.mimeType||m||'audio/mp4'});
+      const b=new Blob(chunks,{type:rr?.mimeType||'audio/mp4'});
       if(!b.size){window.__resumeWake?.();return add('🔴 Микрофон не записал звук.')}
       try{
         add('⏳ Распознаю весь вопрос…');
         const ext=b.type.includes('mp4')?'m4a':b.type.includes('ogg')?'ogg':'webm';
         const tr=await fetch(API+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store'});
-        const j=await tr.json();if(!tr.ok)throw Error(j.error||'Ошибка распознавания');
+        const raw=await tr.text();let j={};try{j=JSON.parse(raw)}catch{}
+        if(!tr.ok)throw Error(j.error||'Ошибка распознавания');
         const text=String(j.text||'').trim();if(!text)throw Error('Речь не распознана');
         input.value=text;
         await send();
@@ -31,26 +29,11 @@
       finally{window.__resumeWake?.()}
     };
     recorder.onstop=finish;
-    recorder.start(250);
+    recorder.start();
     $('#voice').textContent='⏹ Остановить';$('#voice').classList.add('recording');
-    voiceTimer=setTimeout(()=>{if(recorder)try{recorder.stop()}catch{}},15000);
-    try{
-      voiceCtx=new(window.AudioContext||window.webkitAudioContext)();
-      await voiceCtx.resume().catch(()=>{});
-      const src=voiceCtx.createMediaStreamSource(s),an=voiceCtx.createAnalyser();
-      an.fftSize=1024;const arr=new Uint8Array(an.fftSize);
-      const tick=()=>{
-        if(!recorder)return;
-        an.getByteTimeDomainData(arr);
-        let sum=0;for(let i=0;i<arr.length;i++){const v=(arr[i]-128)/128;sum+=v*v}
-        const rms=Math.sqrt(sum/arr.length),now=Date.now();
-        if(rms>.018){heard=true;lastVoice=now}
-        if(heard&&now-lastVoice>=1200&&now-started>=1200)try{recorder.stop()}catch{}
-        if(recorder)requestAnimationFrame(tick)
-      };
-      requestAnimationFrame(tick);
-    }catch{}
+    voiceTimer=setTimeout(()=>{if(recorder)try{recorder.stop()}catch{}},12000);
   }catch(e){
+    recorder=null;
     $('#voice').classList.remove('recording');$('#voice').textContent='🎙️ Голос';
     window.__resumeWake?.();add('🔴 Микрофон: '+e.message)
   }
