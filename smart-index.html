@@ -43,26 +43,21 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let r=null,starting=false,enabled=true,paused=false,armedUntil=0,restarting=false,startedOnce=false,commandBuffer='',commandTimer=null;
 const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
 function status(t){let e=document.getElementById('wakeStatus');if(!e){e=document.createElement('div');e.id='wakeStatus';e.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:99;padding:8px 12px;border-radius:14px;background:rgba(20,20,24,.9);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;backdrop-filter:blur(10px)';document.body.appendChild(e)}e.textContent=t;e.style.opacity=t?'1':'0'}
-function make(){r=new SR();r.lang='ru-RU';r.continuous=true;r.interimResults=false;r.maxAlternatives=3;
-r.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status('🟢 Слушаю «Эй»')};
-r.onresult=e=>{if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;
+function make(){const x=new SR();x.lang='ru-RU';x.continuous=true;x.interimResults=false;x.maxAlternatives=3;
+x.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status('🟢 Слушаю «Эй»')};
+x.onresult=e=>{if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;
 let m=text.match(wake);
-if(m){let cmd=text.slice(m[0].length).trim();armedUntil=Date.now()+12000;commandBuffer=cmd;clearTimeout(commandTimer);status(cmd?'🟢 '+cmd:'🟢 Слушаю…');if(cmd){commandTimer=setTimeout(()=>{if(!paused&&commandBuffer){const q=commandBuffer.trim();commandBuffer='';armedUntil=0;try{r.stop()}catch{}status('🟢 Выполняю…');setTimeout(()=>{if(!paused){document.getElementById('input').value=q;window.send?.()}},120)}},1000)}}
-else if(Date.now()<armedUntil){commandBuffer=(commandBuffer+' '+text).trim();armedUntil=Date.now()+12000;clearTimeout(commandTimer);status('🟢 '+commandBuffer);commandTimer=setTimeout(()=>{if(!paused&&commandBuffer){const q=commandBuffer.trim();commandBuffer='';armedUntil=0;try{r.stop()}catch{}status('🟢 Выполняю…');setTimeout(()=>{if(!paused){document.getElementById('input').value=q;window.send?.()}},120)}},1000)}};
-r.onerror=e=>{starting=false;restarting=false;const code=e?.error||'unknown';if(code==='not-allowed'||code==='service-not-allowed'){status('🎙️ Разреши микрофон для Safari');return}if(enabled&&!paused&&code!=='aborted')status('🟡 Возобновляю слушание…')};
-r.onend=()=>{starting=false;if(!enabled||paused||restarting)return;restarting=true;setTimeout(()=>{restarting=false;if(enabled&&!paused)start()},500)};
-return r}
-function start(){if(!SR||!enabled||paused||starting)return;if(!r)make();try{starting=true;r.start()}catch(e){starting=false;setTimeout(()=>{if(enabled&&!paused)start()},1000)}}
-function kick(){if(!SR){status('🎙️ В этом браузере режим «Эй» недоступен');return}if(!paused&&!startedOnce)start()}
-window.__pauseWake=()=>{paused=true;armedUntil=0;commandBuffer='';clearTimeout(commandTimer);try{r?.stop()}catch{}status('')};
-window.__resumeWake=()=>{if(!enabled)return;paused=false;clearTimeout(commandTimer);setTimeout(()=>{if(!enabled||paused)return;try{const p=navigator.mediaDevices?.getUserMedia?.({audio:true});if(p&&typeof p.then==='function'){p.then(stream=>{try{stream.getTracks().forEach(t=>t.stop())}catch{};setTimeout(()=>{if(!paused)start()},250)}).catch(()=>setTimeout(()=>{if(!paused)start()},250));}else start()}catch{start()}},sound===false?300:4000)};
-window.__wakeStart=start;
-if(SR){
-window.addEventListener('load',()=>setTimeout(kick,700));
-document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));
-['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(!paused)start()},{passive:true}));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&enabled)setTimeout(start,300)});
-}
-window.addEventListener('beforeunload',()=>{enabled=false;try{r?.stop()}catch{}});
+if(m){let cmd=text.slice(m[0].length).trim();armedUntil=Date.now()+12000;commandBuffer=cmd;clearTimeout(commandTimer);status(cmd?'🟢 '+cmd:'🟢 Слушаю…');if(cmd){commandTimer=setTimeout(()=>{if(!paused&&commandBuffer){const q=commandBuffer.trim();commandBuffer='';armedUntil=0;try{x.stop()}catch{}status('🟢 Выполняю…');setTimeout(()=>{if(!paused){document.getElementById('input').value=q;window.send?.()}},120)}},1000)}}
+else if(Date.now()<armedUntil){commandBuffer=(commandBuffer+' '+text).trim();armedUntil=Date.now()+12000;clearTimeout(commandTimer);status('🟢 '+commandBuffer);commandTimer=setTimeout(()=>{if(!paused&&commandBuffer){const q=commandBuffer.trim();commandBuffer='';armedUntil=0;try{x.stop()}catch{}status('🟢 Выполняю…');setTimeout(()=>{if(!paused){document.getElementById('input').value=q;window.send?.()}},120)}},1000)}};
+x.onerror=e=>{starting=false;restarting=false;const code=e?.error||'unknown';if(code==='not-allowed'||code==='service-not-allowed'){status('🎙️ Разреши микрофон для Safari');return}if(enabled&&!paused&&code!=='aborted')status('🟡 Возобновляю слушание…')};
+x.onend=()=>{starting=false;if(!enabled||paused||restarting)return;restarting=true;setTimeout(()=>{restarting=false;if(enabled&&!paused)start(true)},500)};
+return x}
+function start(forceNew=false){if(!SR||!enabled||paused||starting)return;if(forceNew||!r){try{r?.abort?.()}catch{};r=make()}try{starting=true;r.start()}catch(e){starting=false;r=null;setTimeout(()=>{if(enabled&&!paused)start(true)},700)}}
+function kick(){if(!SR){status('🎙️ В этом браузере режим «Эй» недоступен');return}if(!paused&&!startedOnce)start(true)}
+window.__pauseWake=()=>{paused=true;armedUntil=0;commandBuffer='';clearTimeout(commandTimer);try{r?.abort?.()}catch{};try{r?.stop?.()}catch{};r=null;starting=false;restarting=false;status('')};
+window.__resumeWake=()=>{if(!enabled)return;paused=false;clearTimeout(commandTimer);armedUntil=0;commandBuffer='';setTimeout(()=>{if(!enabled||paused)return;start(true)},sound===false?300:900)};
+window.__wakeStart=()=>start(true);
+if(SR){window.addEventListener('load',()=>setTimeout(kick,700));document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(!paused)start(false)},{passive:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&enabled)setTimeout(()=>start(true),300)});}
+window.addEventListener('beforeunload',()=>{enabled=false;try{r?.abort?.()}catch{};try{r?.stop?.()}catch{}});
 })();</script></main></html>
 <!-- MOBILE_WAKE_CORS_HARDENED_V1 -->
