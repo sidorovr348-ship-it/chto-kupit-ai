@@ -55,7 +55,19 @@ const API='https://ai.aliceq.ru';
     if(await sound.textContent()==='🔊 Звук') await sound.click();
     await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
     await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:30000});
-    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:90000});
+    try{
+      await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:90000});
+    }catch(e){
+      const d=await page.evaluate(()=>({
+        runs:window.__wakeFake?.runs,
+        status:document.getElementById('wakeStatus')?.textContent||'',
+        users:[...document.querySelectorAll('#chat .msg.user')].map(x=>x.textContent?.trim()),
+        ais:[...document.querySelectorAll('#chat .msg.ai')].map(x=>x.textContent?.trim()),
+        input:document.getElementById('input')?.value||'',
+        busy:window.__myAiBusy?.()
+      }));
+      throw Error(e.message+' | WAKE_DEBUG '+JSON.stringify(d));
+    }
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='сколько времени в Москве');
     if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled; fake recognition runs=${await page.evaluate(()=>window.__wakeFake?.runs)}`);
