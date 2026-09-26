@@ -48,6 +48,8 @@ const API='https://ai.aliceq.ru';
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   try{
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
+    const sound=page.locator('#sound');
+    if(await sound.textContent()==='🔊 Звук') await sound.click();
     await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:60000});
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='сколько времени в Москве');
