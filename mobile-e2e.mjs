@@ -56,8 +56,8 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     let n=await before();
     await input.fill('Кто ты? Ответь одним коротким предложением.');
     await send.click();
-    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:30000});
-    await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:30000});
+    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:75000});
+    await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:75000});
 
     // Verify the two user-critical deterministic flows through the real mobile UI.
     n=await before();
