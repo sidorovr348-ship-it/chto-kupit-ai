@@ -23,6 +23,8 @@ const API='https://ai.aliceq.ru';
         this.lang='';
         this.onstart=null; this.onresult=null; this.onerror=null; this.onend=null;
       }
+      stop(){setTimeout(()=>this.onend?.(),10)}
+      abort(){setTimeout(()=>this.onend?.(),10)}
       start(){
         const run=FakeSpeechRecognition.runs++;
         if(run>=FakeSpeechRecognition.commands.length){setTimeout(()=>this.onend?.(),20);return;}
@@ -38,6 +40,7 @@ const API='https://ai.aliceq.ru';
         setTimeout(()=>this.onend?.(),1800);
       }
     }
+    window.__wakeFake=FakeSpeechRecognition;
     Object.defineProperty(window,'SpeechRecognition',{configurable:true,writable:true,value:FakeSpeechRecognition});
     Object.defineProperty(window,'webkitSpeechRecognition',{configurable:true,writable:true,value:FakeSpeechRecognition});
   });
@@ -51,10 +54,11 @@ const API='https://ai.aliceq.ru';
     const sound=page.locator('#sound');
     if(await sound.textContent()==='🔊 Звук') await sound.click();
     await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
+    await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:30000});
     await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:90000});
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='сколько времени в Москве');
-    if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled`);
+    if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled; fake recognition runs=${await page.evaluate(()=>window.__wakeFake?.runs)}`);
     await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.ai')].filter(x=>/Сейчас в Москве/.test(x.textContent||'')).length>=3,null,{timeout:60000});
     if(errors.length) throw Error(errors.join('\n'));
     const apiCheck=await page.evaluate(async api=>(await (await fetch(api+'/health')).json()),API);
