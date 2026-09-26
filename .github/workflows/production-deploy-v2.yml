@@ -116,6 +116,12 @@ jobs:
           done
           echo LAB_CONTOUR_PUBLIC_SMOKE_OK
           echo COMPLETE_PUBLIC_PRODUCTION_OK
+      - name: Run 100-case production acceptance
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          node acceptance-100.mjs
+
       - name: Verify production app root
         run: |
           set -euo pipefail
