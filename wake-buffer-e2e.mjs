@@ -16,7 +16,7 @@ const API='https://ai.aliceq.ru';
   await context.addInitScript(()=>{
     class FakeSpeechRecognition{
       static runs=0;
-      static commands=[['Эй','сколько','времени в Москве'],['Эй','сколько','времени в Москве'],['Эй','сколько','времени в Москве']];
+      static commands=[['Эй','кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый']];
       constructor(){
         this.continuous=true;
         this.ended=false;
@@ -57,7 +57,7 @@ const API='https://ai.aliceq.ru';
     await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
     await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:30000});
     try{
-      await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='сколько времени в Москве').length>=3,null,{timeout:90000});
+      await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=3,null,{timeout:90000});
     }catch(e){
       const d=await page.evaluate(()=>({
         runs:window.__wakeFake?.runs,
@@ -70,9 +70,9 @@ const API='https://ai.aliceq.ru';
       throw Error(e.message+' | WAKE_DEBUG '+JSON.stringify(d));
     }
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
-    const wakeCommands=users.filter(x=>x.trim()==='сколько времени в Москве');
+    const wakeCommands=users.filter(x=>x.trim()==='кто такой Пётр Первый');
     if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled; fake recognition runs=${await page.evaluate(()=>window.__wakeFake?.runs)}`);
-    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.ai')].filter(x=>/Сейчас в Москве/.test(x.textContent||'')).length>=3,null,{timeout:60000});
+    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.ai')].filter(x=>/Пётр Первый/.test(x.textContent||'')).length>=3,null,{timeout:60000});
     if(errors.length) throw Error(errors.join('\n'));
     const apiCheck=await page.evaluate(async api=>(await (await fetch(api+'/health')).json()),API);
     if(!apiCheck.ok) throw Error('API health failed');
