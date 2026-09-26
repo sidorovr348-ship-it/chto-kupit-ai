@@ -52,7 +52,7 @@ else if(Date.now()<armedUntil){commandBuffer=(commandBuffer+' '+text).trim();arm
 x.onerror=e=>{starting=false;restarting=false;const code=e?.error||'unknown';if(code==='not-allowed'||code==='service-not-allowed'){status('🎙️ Разреши микрофон для Safari');return}if(enabled&&!paused&&code!=='aborted')status('🟡 Возобновляю слушание…')};
 x.onend=()=>{starting=false;if(r===x)r=null;if(!enabled||paused||restarting)return;restarting=true;setTimeout(()=>{restarting=false;if(enabled&&!paused)start(true)},350)};
 return x}
-function start(forceNew=false){if(!SR||!enabled||paused||starting||r)return;if(forceNew||!r){r=make()}try{starting=true;r.start()}catch(e){starting=false;r=null;setTimeout(()=>{if(enabled&&!paused)start(true)},500)}}
+function start(forceNew=false){if(!SR||!enabled||paused||starting)return;if(forceNew){try{r?.abort?.()}catch{};r=null}if(!r){r=make()}try{starting=true;r.start()}catch(e){starting=false;r=null;setTimeout(()=>{if(enabled&&!paused)start(true)},500)}}
 function kick(){if(!SR){status('🎙️ В этом браузере режим «Эй» недоступен');return}if(!paused&&!startedOnce)start(true)}
 window.__pauseWake=()=>{paused=true;processing=false;armedUntil=0;commandBuffer='';clearTimeout(commandTimer);try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}r=null;starting=false;restarting=false;status('')};
 window.__resumeWake=()=>{if(!enabled)return;paused=false;processing=false;clearTimeout(commandTimer);armedUntil=0;commandBuffer='';setTimeout(()=>{if(!enabled||paused)return;if(!r)start(true);else status('🟢 Слушаю «Эй»')},300)};
