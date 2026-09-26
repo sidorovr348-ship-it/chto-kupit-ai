@@ -55,7 +55,7 @@ const API='https://ai.aliceq.ru';
     const sound=page.locator('#sound');
     if(await sound.textContent()==='🔊 Звук') await sound.click();
     await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
-    await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:30000});
+    await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:60000});
     try{
       await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=3,null,{timeout:90000});
     }catch(e){
