@@ -24,17 +24,18 @@ const API='https://ai.aliceq.ru';
         this.onstart=null; this.onresult=null; this.onerror=null; this.onend=null;
       }
       start(){
-        if(FakeSpeechRecognition.runs++) return;
+        const run=FakeSpeechRecognition.runs++;
+        if(run>=FakeSpeechRecognition.commands.length){setTimeout(()=>this.onend?.(),20);return;}
         setTimeout(()=>this.onstart?.(),50);
         const emit=(transcript)=>{
           const result={0:{transcript},length:1,isFinal:true};
           this.onresult?.({resultIndex:0,results:[result]});
         };
-        setTimeout(()=>emit('Эй'),150);
-        setTimeout(()=>emit('сколько'),300);
-        setTimeout(()=>emit('времени в Москве'),450);
+        const command=FakeSpeechRecognition.commands[run];
+        setTimeout(()=>emit(command[0]),150);
+        setTimeout(()=>emit(command[1]),300);
+        setTimeout(()=>emit(command[2]),450);
       }
-      stop(){setTimeout(()=>this.onend?.(),20)}
     }
     window.SpeechRecognition=FakeSpeechRecognition;
     window.webkitSpeechRecognition=FakeSpeechRecognition;
