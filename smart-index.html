@@ -86,7 +86,7 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let r=null,starting=false,enabled=true,paused=false,processing=false,armedUntil=0,restarting=false,startedOnce=false,commandBuffer='',commandTimer=null;
 const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
 function status(t){let e=document.getElementById('wakeStatus');if(!e){e=document.createElement('div');e.id='wakeStatus';e.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;z-index:99;padding:8px 12px;border-radius:14px;background:rgba(20,20,24,.9);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;backdrop-filter:blur(10px)';document.body.appendChild(e)}e.textContent=t;e.style.opacity=t?'1':'0'}
-function make(){const x=new SR();x.lang='ru-RU';x.continuous=true;x.interimResults=false;x.maxAlternatives=3;
+function make(){const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
 x.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status(processing?'🟡 Обрабатываю…':'🟢 Слушаю «Эй»')};
 x.onresult=e=>{if(paused||processing||busy)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;
 const m=text.match(wake);
