@@ -109,3 +109,5 @@ app.use((err,req,res,next)=>{console.error('UNHANDLED',err.stack||err);if(res.he
 // SHOPPING_JINA_FALLBACK_V1
 
 // SHOPPING_RETAILER_FALLBACK_V1
+
+// STABILITY_GATE_SYNC_2026-09-26
