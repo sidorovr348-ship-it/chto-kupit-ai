@@ -1,0 +1,52 @@
+name: My AI Unified — lab self-healing fault injection
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fault-injection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Controlled backend fault and watchdog recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key
+          chmod 600 /tmp/vps_key
+          opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+          host="$VPS_USER@$VPS_HOST"
+          restore() {
+            ssh "${opts[@]}" "$host" "sudo -n systemctl start my-ai-unified || true"
+            rm -f /tmp/vps_key
+          }
+          trap restore EXIT
+
+          echo "LAB_FAULT_INJECTION_BEGIN"
+          ssh "${opts[@]}" "$host" "sudo -n systemctl stop my-ai-unified"
+          echo "BACKEND_STOPPED"
+
+          recovered=0
+          for i in $(seq 1 8); do
+            sleep 5
+            if ssh "${opts[@]}" "$host" "systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 5 http://127.0.0.1:3000/health >/tmp/health.json"; then
+              recovered=1
+              echo "LAB_WATCHDOG_RECOVERED attempt=$i"
+              cat /tmp/health.json
+              break
+            fi
+          done
+
+          if [ "$recovered" -ne 1 ]; then
+            echo "LAB_WATCHDOG_RECOVERY_FAILED"
+            ssh "${opts[@]}" "$host" "systemctl --no-pager status my-ai-unified || true"
+            ssh "${opts[@]}" "$host" "journalctl -u my-ai-unified-supervisor -n 80 --no-pager || true"
+            exit 1
+          fi
+
+          curl -fsS --retry 5 --retry-delay 2 --max-time 20 https://ai.aliceq.ru/health
+          echo
+          echo "LAB_SELF_HEALING_FAULT_INJECTION_OK"
