@@ -40,7 +40,7 @@ jobs:
           recovered=0
           for i in $(seq 1 8); do
             sleep 5
-            if ssh "${opts[@]}" "$host" "systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 5 http://127.0.0.1:3020/health >/tmp/health.json"; then
+            if ssh "${opts[@]}" "$host" "systemctl is-active --quiet my-ai-unified" && health=$(ssh "${opts[@]}" "$host" "curl -fsS --max-time 5 http://127.0.0.1:3020/health"); then
               recovered=1
               echo "LAB_WATCHDOG_RECOVERED attempt=$i"
               ssh "${opts[@]}" "$host" "cat /tmp/health.json || true"
