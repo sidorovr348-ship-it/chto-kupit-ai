@@ -35,10 +35,8 @@ const API='https://ai.aliceq.ru';
           this.onresult?.({resultIndex:0,results:[result]});
         };
         const command=FakeSpeechRecognition.commands[run];
-        setTimeout(()=>emit(command[0]),150);
-        setTimeout(()=>emit(command[1]),300);
-        setTimeout(()=>emit(command[2]),450);
-        setTimeout(()=>this.onend?.(),10000);
+        setTimeout(()=>emit(command.join(' ')),150);
+        setTimeout(()=>this.onend?.(),1200);
       }
     }
     window.__wakeFake=FakeSpeechRecognition;
