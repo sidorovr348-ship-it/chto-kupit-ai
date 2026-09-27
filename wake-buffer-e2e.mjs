@@ -54,7 +54,19 @@ const API='https://ai.aliceq.ru';
     if(await sound.textContent()==='🔊 Звук') await sound.click();
     await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000});
     for(let n=1;n<=3;n++){
-      await page.waitForFunction((count)=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=count,n,{timeout:90000});
+      try{
+        await page.waitForFunction((count)=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=count,n,{timeout:90000});
+      }catch(err){
+        const d=await page.evaluate(()=>({
+          runs:window.__wakeFake?.runs,
+          status:document.getElementById('wakeStatus')?.textContent||'',
+          users:[...document.querySelectorAll('#chat .msg.user')].map(x=>x.textContent?.trim()),
+          ais:[...document.querySelectorAll('#chat .msg.ai')].map(x=>x.textContent?.trim()),
+          input:document.getElementById('input')?.value||'',
+          busy:window.__myAiBusy?.()
+        }));
+        throw Error('wake cycle '+n+' timeout: '+err.message+' | WAKE_DEBUG '+JSON.stringify(d));
+      }
       if(n<3) await page.waitForFunction((count)=>window.__wakeFake?.runs>=count,count+1,{timeout:90000});
     }
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
