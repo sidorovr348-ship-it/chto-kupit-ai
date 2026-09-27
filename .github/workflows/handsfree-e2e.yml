@@ -8,7 +8,7 @@ on:
 jobs:
   handsfree:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 8 # wake-gate-v2
     steps:
       - uses: actions/checkout@v4
       - name: Install Playwright
