@@ -39,7 +39,7 @@ const p=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3
 for(let i=0;i<4;i++)await check('photo '+(i+1),async()=>{const x=await req('/photo',{images:['data:image/png;base64,'+p],prompt:'Опиши тестовое изображение.'},'POST',25000);ok(x.ok&&textOf(x).length>0,'photo')});
 for(let i=0;i<4;i++)await check('sequential Peter '+(i+1),async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Кто такой Пётр Первый?'}]},'POST',25000);ok(x.ok&&textOf(x).length>20,'Peter')});
 const concurrent=await Promise.allSettled(Array.from({length:4},(_,i)=>req('/chat',{messages:[{role:'user',content:'Кратко: что такое HTTP? Запрос '+i}]})));
-for(let i=0;i<4;i++)await check('concurrent '+(i+1),async()=>{const x=concurrent[i];ok(x.status==='fulfilled'&&x.value?.ok&&textOf(x.value).length>5,'concurrent')});
+for(let i=0;i<4;i++)await check('concurrent '+(i+1),async()=>{const x=concurrent[i];if(x.status!=='fulfilled')throw Error('concurrent rejected: '+String(x.reason?.message||x.reason));if(!x.value?.ok)throw Error('concurrent bad response: '+JSON.stringify(x.value).slice(0,800));ok(textOf(x.value).length>5,'concurrent response too short')});
 for(let i=0;i<4;i++)await check('wake prerequisites '+(i+1),async()=>{const h=await req('/health',undefined,'GET');ok(h.ok,'backend');const html=await (await fetch(APP+'?wake='+i)).text();ok(html.includes('EY_WAKE_WORD_V1')&&html.includes('commandBuffer'),'wake')});
 for(let i=0;i<4;i++)await check('Moscow exact consistency '+(i+1),async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Сколько времени в Москве?'}]});ok(/^Сейчас в Москве \d{2}:\d{2}:\d{2}\.$/.test(textOf(x)),'format')});
 
