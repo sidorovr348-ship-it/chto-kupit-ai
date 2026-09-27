@@ -67,7 +67,7 @@ const API='https://ai.aliceq.ru';
         }));
         throw Error('wake cycle '+n+' timeout: '+err.message+' | WAKE_DEBUG '+JSON.stringify(d));
       }
-      if(n<3) await page.waitForFunction((count)=>window.__wakeFake?.runs>=count,count+1,{timeout:90000});
+      if(n<3) await page.waitForFunction((count)=>window.__wakeFake?.runs>=(n+1),n+1,{timeout:90000});
     }
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='кто такой Пётр Первый');
