@@ -122,6 +122,24 @@ jobs:
           set -euo pipefail
           node acceptance-100.mjs
 
+      - name: Diagnose backend after acceptance failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+          echo '=== SERVICE STATUS ==='
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl --no-pager --full status my-ai-unified || true"
+          echo '=== SERVICE JOURNAL ==='
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified --since '2026-09-27 14:59:00' --until '2026-09-27 15:02:00' --no-pager || true"
+          echo '=== WATCHDOG JOURNAL ==='
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified-supervisor --since '2026-09-27 14:59:00' --until '2026-09-27 15:02:00' --no-pager || true"
+          echo '=== WATCHDOG LOG ==='
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "tail -n 120 /root/my-ai-unified/data/supervisor/daemon.log 2>/dev/null || true"
+          echo '=== OOM ==='
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "dmesg -T 2>/dev/null | grep -Ei 'out of memory|oom|killed process|my-ai-unified' | tail -n 80 || true"
+          rm -f /tmp/vps_key
       - name: Run repeated hands-free wake test
         timeout-minutes: 8
         run: |
