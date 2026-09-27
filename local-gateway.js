@@ -41,7 +41,7 @@ if(vision){const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(mk&&Date.now()>=mi
 if(!vision){const q=textOf(messages);if(/^(ответь одним словом|ответь кратко|кто ты|ты кто|как тебя зовут|представься)/iu.test(q))return{text:/^(кто ты|ты кто|как тебя зовут|представься)/iu.test(q)?'Я Эй — My AI Unified, универсальный AI-помощник.':'ОК',provider:'local-fallback',model:'deterministic'};try{const local=await callOllama(messages,{numPredict:300,timeoutMs:7000});if(local)return{text:local,provider:'ollama-local',model:process.env.OLLAMA_MODEL||'qwen3:0.6b',warning:'external providers unavailable'}}catch(e){errors.push('Ollama: '+e.message)}return{text:'Я Эй — My AI Unified. Основные AI-провайдеры сейчас временно недоступны; локальный резерв тоже недоступен. Запрос не потерян.',provider:'local-fallback',model:'deterministic',warning:'AI providers unavailable'}}const e=Error(errors.join(' | ')||'AI provider is not configured');e.status=502;throw e}
 let textActive=0,textWaiters=[];
 async function acquireTextSlot(){if(textActive<1){textActive++;return}await new Promise(resolve=>textWaiters.push(resolve));textActive++}
-function releaseTextSlot(){const next=textWaiters.shift();if(next)next();else textActive=Math.max(0,textActive-1)}
+function releaseTextSlot(){const next=textWaiters.shift();if(next){next()}else{textActive=Math.max(0,textActive-1)}}
 async function askInternal(messages,vision=false){
  if(vision)return askInternalCore(messages,vision);
  await acquireTextSlot();
