@@ -5,7 +5,7 @@ const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS || 60000);
 const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсальный AI-помощник пользователя. Отвечай по-русски, если пользователь пишет по-русски. Не называй себя ChatGPT, OpenAI, Qwen или Ollama: это внутренние технологии. Не выдумывай выполненные действия. Будь естественным, понятным и полезным. Отвечай кратко, если вопрос простой.`;
 
 async function callOllama(messages, options = {}) {
-  const timeoutMs = Math.max(Number(options.timeoutMs || 0), OLLAMA_TIMEOUT_MS);
+  const requestedTimeout = Number(options.timeoutMs || 0); const timeoutMs = requestedTimeout > 0 ? requestedTimeout : OLLAMA_TIMEOUT_MS;
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
