@@ -52,7 +52,12 @@ const API='https://ai.aliceq.ru';
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
     const sound=page.locator('#sound');
     if(await sound.textContent()==='🔊 Звук') await sound.click();
-    await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
+    try{
+      await page.waitForFunction(()=>document.getElementById('wakeStatus')?.textContent?.includes('Слушаю'),null,{timeout:10000});
+    }catch(e){
+      const d=await page.evaluate(()=>({runs:window.__wakeFake?.runs||0,status:document.getElementById('wakeStatus')?.textContent||'',sr:!!window.SpeechRecognition,webkit:!!window.webkitSpeechRecognition,ready:document.readyState}));
+      throw Error(e.message+' | WAKE_START_DEBUG '+JSON.stringify(d)+' | ERRORS '+JSON.stringify(errors));
+    }
     await page.waitForFunction(()=>window.__wakeFake?.runs>=3,null,{timeout:60000});
     try{
       await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=3,null,{timeout:90000});
