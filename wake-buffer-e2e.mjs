@@ -52,6 +52,7 @@ const API='https://ai.aliceq.ru';
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
     const sound=page.locator('#sound');
     if(await sound.count() && await sound.textContent()==='🔊 Звук') await sound.click();
+    await page.locator('body').click({position:{x:196,y:400}});
     await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000});
     for(let n=1;n<=3;n++){
       try{
