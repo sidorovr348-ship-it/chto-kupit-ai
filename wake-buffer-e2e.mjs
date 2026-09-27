@@ -57,17 +57,6 @@ const API='https://ai.aliceq.ru';
       await page.waitForFunction((count)=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=count,n,{timeout:90000});
       if(n<3) await page.waitForFunction((count)=>window.__wakeFake?.runs>=count,count+1,{timeout:90000});
     }
-    try{
-      const d=await page.evaluate(()=>({
-        runs:window.__wakeFake?.runs,
-        status:document.getElementById('wakeStatus')?.textContent||'',
-        users:[...document.querySelectorAll('#chat .msg.user')].map(x=>x.textContent?.trim()),
-        ais:[...document.querySelectorAll('#chat .msg.ai')].map(x=>x.textContent?.trim()),
-        input:document.getElementById('input')?.value||'',
-        busy:window.__myAiBusy?.()
-      }));
-      throw Error(e.message+' | WAKE_DEBUG '+JSON.stringify(d));
-    }
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='кто такой Пётр Первый');
     if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled; fake recognition runs=${await page.evaluate(()=>window.__wakeFake?.runs)}`);
