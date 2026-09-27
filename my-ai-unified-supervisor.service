@@ -10,7 +10,6 @@ Environment=MY_AI_PORT=3020
 ExecStart=/usr/bin/node /root/my-ai-unified/supervisor-daemon.js
 Restart=always
 RestartSec=5
-NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target
