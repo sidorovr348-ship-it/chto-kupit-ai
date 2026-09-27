@@ -127,6 +127,7 @@ jobs:
         run: |
           set -euo pipefail
           node -e "require('playwright')" >/dev/null 2>&1 || npm install --no-save --ignore-scripts playwright
+          npx playwright install --with-deps chromium
           node wake-buffer-e2e.mjs
 
       - name: Verify production app root
