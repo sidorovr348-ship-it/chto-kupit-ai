@@ -43,7 +43,7 @@ jobs:
             if ssh "${opts[@]}" "$host" "systemctl is-active --quiet my-ai-unified && curl -fsS --max-time 5 http://127.0.0.1:3020/health >/tmp/health.json"; then
               recovered=1
               echo "LAB_WATCHDOG_RECOVERED attempt=$i"
-              cat /tmp/health.json
+              ssh "${opts[@]}" "$host" "cat /tmp/health.json || true"
               break
             fi
           done
