@@ -46,14 +46,15 @@ const API='https://ai.aliceq.ru';
 
   const page=await context.newPage();
   const errors=[];
-  page.on('pageerror',e=>errors.push(e.message));
+  page.on('pageerror',e=>{errors.push(e.message);});
+  await page.exposeFunction('__wakeRecordError',m=>errors.push(String(m)));
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   try{
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
     const sound=page.locator('#sound');
     if(await sound.count() && await sound.textContent()==='🔊 Звук') await sound.click();
     await page.locator('body').click({position:{x:196,y:400}});
-    await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000});
+    try{await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000})}catch(err){const d=await page.evaluate(()=>({runs:window.__wakeFake?.runs,hasSR:!!window.SpeechRecognition,hasWakeStart:typeof window.__wakeStart,html:document.documentElement.innerHTML.includes('EY_WAKE_WORD_V1'),status:document.getElementById('wakeStatus')?.textContent||'',errors:window.__wakeTestErrors||[]}));throw Error('wake startup timeout: '+err.message+' | WAKE_START_DEBUG '+JSON.stringify(d));}
     for(let n=1;n<=3;n++){
       try{
         await page.waitForFunction((count)=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=count,n,{timeout:90000});
