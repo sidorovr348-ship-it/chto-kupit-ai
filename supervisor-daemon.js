@@ -20,7 +20,21 @@ async function check() {
 }
 async function main() {
   log('watchdog started');
-  await check();
-  setInterval(check, 60000);
+  let failures=0,lastRestart=0;
+  const tick=async()=>{
+    const port=process.env.MY_AI_PORT||'3020';
+    const h=await get(`http://127.0.0.1:${port}/health`,5000);
+    if(h.ok){failures=0;return}
+    failures++;
+    log(`Health failed #${failures}: ${JSON.stringify(h)}`);
+    if(failures>=2 && Date.now()-lastRestart>30000){
+      try{
+        execFileSync('sudo',['-n','systemctl','restart','my-ai-unified.service'],{stdio:'ignore',timeout:30000});
+        lastRestart=Date.now(); failures=0; log('Service restarted after consecutive health failures');
+      }catch(e){log(`Restart failed: ${e.message}`)}
+    }
+  };
+  await tick();
+  setInterval(tick,10000);
 }
 main().catch(e => { log(`fatal: ${e.message}`); process.exit(1); });
