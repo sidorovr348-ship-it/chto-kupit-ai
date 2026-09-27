@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
 
-const APP='https://sidorovr348-ship-it.github.io/chto-kupit-ai/';
+const APP='https://ai.aliceq.ru/';
 const API='https://ai.aliceq.ru';
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
 
@@ -85,7 +85,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await cam.tap();
     await page.waitForFunction(()=>{const v=document.querySelector('#cam');return v?.srcObject?.getVideoTracks?.()[0]?.readyState==='live'},null,{timeout:15000});
     await page.locator('#camOff').tap();
-    await page.waitForFunction(()=>{const b=document.querySelector('#cameraBox');return b?.style.display==='none'},null,{timeout:5000});
+    await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');const tracks=v?.srcObject?.getVideoTracks?.()||[];return tracks.every(t=>t.readyState==='ended') && getComputedStyle(b).display==='none'},null,{timeout:10000});
 
     n=await before();
     const fcPromise=page.waitForEvent('filechooser');
