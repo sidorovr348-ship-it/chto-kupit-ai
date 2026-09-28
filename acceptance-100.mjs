@@ -10,7 +10,7 @@ const staticChecks=[
 ['frontend reachable',async()=>ok((await fetch(APP+'?a=100')).ok,'frontend')],
 ['frontend title',async()=>ok((await (await fetch(APP+'?a=101')).text()).includes('<title>Эй</title>'),'title')],
 ['wake marker',async()=>ok((await (await fetch(APP+'?a=102')).text()).includes('EY_WAKE_WORD_V1'),'wake')],
-['command buffer marker',async()=>ok((await (await fetch(APP+'?a=103')).text()).includes('commandBuffer'),'buffer')],
+['wake queue marker',async()=>{const html=await (await fetch(APP+'?a=103')).text();ok(html.includes('wakeQueue')&&html.includes('function pump()'),'wake queue')}],
 ['MediaRecorder marker',async()=>ok((await (await fetch(APP+'?a=104')).text()).includes('MediaRecorder'),'recorder')],
 ['geolocation marker',async()=>ok((await (await fetch(APP+'?a=105')).text()).includes('navigator.geolocation'),'geo')],
 ['generate-image marker',async()=>ok((await (await fetch(APP+'?a=106')).text()).includes('/generate-image'),'image')],
@@ -40,7 +40,7 @@ for(let i=0;i<4;i++)await check('photo '+(i+1),async()=>{const x=await req('/pho
 for(let i=0;i<4;i++)await check('sequential Peter '+(i+1),async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Кто такой Пётр Первый?'}]},'POST',25000);ok(x.ok&&textOf(x).length>20,'Peter')});
 const concurrent=await Promise.allSettled(Array.from({length:4},(_,i)=>req('/chat',{messages:[{role:'user',content:'Кратко: что такое HTTP? Запрос '+i}]})));
 for(let i=0;i<4;i++)await check('concurrent '+(i+1),async()=>{const x=concurrent[i];if(x.status!=='fulfilled')throw Error('concurrent rejected: '+String(x.reason?.message||x.reason));if(!x.value?.ok)throw Error('concurrent bad response: '+JSON.stringify(x.value).slice(0,800));ok(textOf(x.value).length>5,'concurrent response too short')});
-for(let i=0;i<4;i++)await check('wake prerequisites '+(i+1),async()=>{const h=await req('/health',undefined,'GET');ok(h.ok,'backend');const html=await (await fetch(APP+'?wake='+i)).text();ok(html.includes('EY_WAKE_WORD_V1')&&html.includes('commandBuffer'),'wake')});
+for(let i=0;i<4;i++)await check('wake prerequisites '+(i+1),async()=>{const h=await req('/health',undefined,'GET');ok(h.ok,'backend');const html=await (await fetch(APP+'?wake='+i)).text();ok(html.includes('EY_WAKE_WORD_V1')&&html.includes('wakeQueue')&&html.includes('function pump()'),'wake queue')});
 for(let i=0;i<4;i++)await check('Moscow exact consistency '+(i+1),async()=>{const x=await req('/chat',{messages:[{role:'user',content:'Сколько времени в Москве?'}]});ok(/^Сейчас в Москве \d{2}:\d{2}:\d{2}\.$/.test(textOf(x)),'format')});
 
 console.log('TOTAL',n,'FAILED',failed);

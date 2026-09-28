@@ -1,14 +1,16 @@
 name: My AI Unified — hands-free E2E
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   handsfree:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8 # wake-gate-v2
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - name: Install Playwright
