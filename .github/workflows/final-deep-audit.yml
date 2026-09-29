@@ -72,7 +72,7 @@ jobs:
               assert x.get('url','').startswith(('http://','https://')),x
               if x.get('price') is not None: assert isinstance(x['price'],(int,float)) and x['price']>0,x
               assert not re.search(r'чехол|кейс|стекл|плёнк|кабель|заряд|ремеш|креплен|держател|сумк|футляр|насадк|фильтр|запчаст|аксессуар|совместим',x.get('title',''),re.I),x
-          print('SEARCH_OK',len(s['sources']))
+          print('SEARCH_OK',len(s.get('sources') or []),s.get('route'))
           print('SHOPPING_OK',len(json.load(open('/tmp/shop.json'))['results']))
           print('TANK_OK',len(json.load(open('/tmp/tank.json'))['results']))
           PY
