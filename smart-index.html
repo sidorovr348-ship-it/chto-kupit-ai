@@ -9,6 +9,7 @@
       add(t,'user');input.value='';
       const r='Сейчас в Москве '+now+'.';
       add(r,'ai');messages.push({role:'user',content:t},{role:'assistant',content:r});
+      window.__wakeResponseReady?.();
       await say(r);
       return;
     }finally{if(!wakeOwned)window.__resumeWake?.()}
@@ -89,6 +90,7 @@ const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
 function extract(t){t=String(t||'').trim();const m=t.match(wake);return m?{wake:true,cmd:t.slice(m[0].length).trim()}:{wake:false,cmd:t}}
 function pump(){clearTimeout(pumpTimer);pumpTimer=setTimeout(async()=>{if(paused)return;if(processing||busy){pump();return}const q=String(wakeQueue.shift()||'').trim();if(!q){if(!processing&&!busy&&!paused&&!r)setTimeout(()=>start(true),120);return}processing=true;status('🟢 Выполняю…');try{try{r?.stop?.()}catch{};r=null;await new Promise(ok=>setTimeout(ok,80));if(!paused){document.getElementById('input').value=q;window.__wakeCommandActive=true;try{await Promise.resolve(window.send?.())}finally{window.__wakeCommandActive=false}}}finally{processing=false;if(!paused){if(wakeQueue.length)pump();else{status('🟢 Слушаю «Эй»');setTimeout(()=>{if(!paused&&!processing&&!busy&&!r)start(true)},120)}}}},120)}
 function enqueue(q){q=String(q||'').trim();if(!q)return;wakeQueue.push(q);pump()}
+function responseReady(){if(!paused&&!busy&&!wakeQueue.length){processing=false;status('🟢 Слушаю «Эй»');setTimeout(()=>{if(!paused&&!busy&&!processing&&!r)start(true)},60)}}
 function make(){const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
 x.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status(processing?'🟡 Обрабатываю…':'🟢 Слушаю «Эй»')};
 x.onresult=e=>{if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;const p=extract(text);if(p.wake){if(p.cmd){armedText='';armedUntil=0;enqueue(p.cmd)}else{armedText='';armedUntil=Date.now()+12000;status('🟢 Слушаю…')}}else if(Date.now()<armedUntil){const q=(armedText+' '+p.cmd).trim();armedText=q;armedUntil=Date.now()+12000;enqueue(q);armedText='';armedUntil=0}};
@@ -99,7 +101,7 @@ function start(forceNew=false){if(!SR||!enabled||paused||processing||busy||start
 function kick(){if(!SR){status('🎙️ В этом браузере режим «Эй» недоступен');return}if(!paused&&!startedOnce)start(true)}
 window.__pauseWake=()=>{paused=true;processing=false;armedUntil=0;armedText='';wakeQueue=[];clearTimeout(pumpTimer);try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}r=null;starting=false;restarting=false;status('')};
 window.__resumeWake=()=>{if(!enabled)return;paused=false;processing=false;armedUntil=0;armedText='';setTimeout(()=>{if(!enabled||paused)return;start(true)},300)};
-window.__wakeStart=()=>{paused=false;start(true)};
+window.__wakeStart=()=>{paused=false;start(true)};window.__wakeResponseReady=responseReady;
 if(SR){window.addEventListener('load',()=>setTimeout(kick,700));document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(!paused&&!processing&&!busy&&!r)start(false)},{passive:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!busy&&!r)setTimeout(()=>start(true),300)});}
 window.addEventListener('beforeunload',()=>{enabled=false;try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}});
 })();</script></script></main></html>
