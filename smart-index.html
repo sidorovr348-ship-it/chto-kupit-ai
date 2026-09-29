@@ -10,7 +10,7 @@
       const r='Сейчас в Москве '+now+'.';
       add(r,'ai');messages.push({role:'user',content:t},{role:'assistant',content:r});
       window.__wakeResponseReady?.();
-      await say(r);
+      if(wakeOwned)void say(r);else await say(r);
       return;
     }finally{if(!wakeOwned)window.__resumeWake?.()}
   }
@@ -29,15 +29,16 @@
     if(j.routeUrl){
       let d=add(j.result||'Маршрут построен.');
       let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);
-      await say(j.result||'Маршрут построен.');
+      window.__wakeResponseReady?.();if(window.__wakeCommandActive)void say(j.result||'Маршрут построен.');else await say(j.result||'Маршрут построен.');
     }else if(j.results&&j.results.length){
       for(let x of j.results.slice(0,12)){
         let d=add((x.store||x.merchant||'Магазин')+'\n'+(x.title||'Товар')+'\n'+(x.price!=null?x.price+' '+(x.currency||'RUB'):'Цена не указана'));
         if(x.url){let a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener';a.textContent='Открыть';d.append(a)}
       }
+      window.__wakeResponseReady?.();
     }else{
       let r=String(j.result||'');
-      messages.push({role:'assistant',content:r});links(r);await say(r);
+      messages.push({role:'assistant',content:r});links(r);window.__wakeResponseReady?.();if(window.__wakeCommandActive)void say(r);else await say(r);
     }
   }catch(e){w.remove();add('🔴 '+e.message)}
   finally{busy=false}
@@ -90,7 +91,7 @@ const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
 function extract(t){t=String(t||'').trim();const m=t.match(wake);return m?{wake:true,cmd:t.slice(m[0].length).trim()}:{wake:false,cmd:t}}
 function pump(){clearTimeout(pumpTimer);pumpTimer=setTimeout(async()=>{if(paused)return;if(processing||busy){pump();return}const q=String(wakeQueue.shift()||'').trim();if(!q){if(!processing&&!busy&&!paused&&!r)setTimeout(()=>start(true),120);return}processing=true;status('🟢 Выполняю…');try{try{r?.stop?.()}catch{};r=null;await new Promise(ok=>setTimeout(ok,80));if(!paused){document.getElementById('input').value=q;window.__wakeCommandActive=true;try{await Promise.resolve(window.send?.())}finally{window.__wakeCommandActive=false}}}finally{processing=false;if(!paused){if(wakeQueue.length)pump();else{status('🟢 Слушаю «Эй»');setTimeout(()=>{if(!paused&&!processing&&!busy&&!r)start(true)},120)}}}},120)}
 function enqueue(q){q=String(q||'').trim();if(!q)return;wakeQueue.push(q);pump()}
-function responseReady(){if(!paused&&!busy&&!wakeQueue.length){processing=false;status('🟢 Слушаю «Эй»');setTimeout(()=>{if(!paused&&!busy&&!processing&&!r)start(true)},60)}}
+function responseReady(){if(paused||wakeQueue.length)return;processing=false;const retry=()=>{if(paused||processing||wakeQueue.length)return;if(!busy){status('🟢 Слушаю «Эй»');if(!r)start(true)}else setTimeout(retry,80)};retry()}
 function make(){const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
 x.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status(processing?'🟡 Обрабатываю…':'🟢 Слушаю «Эй»')};
 x.onresult=e=>{if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;const p=extract(text);if(p.wake){if(p.cmd){armedText='';armedUntil=0;enqueue(p.cmd)}else{armedText='';armedUntil=Date.now()+12000;status('🟢 Слушаю…')}}else if(Date.now()<armedUntil){const q=(armedText+' '+p.cmd).trim();armedText=q;armedUntil=Date.now()+12000;enqueue(q);armedText='';armedUntil=0}};
