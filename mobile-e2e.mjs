@@ -12,7 +12,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
       const h=await r.json();
       const p=await fetch(APP+'?mobile-e2e='+Date.now(),{cache:'no-store'});
       const t=await p.text();
-      if(r.ok&&h.ok&&t.includes('MediaRecorder')&&t.includes('EY_WAKE_WORD_V1')&&t.includes('commandBuffer')) break;
+      if(r.ok&&h.ok&&t.includes('MediaRecorder')&&t.includes('EY_WAKE_WORD_V1')&&t.includes('wakeQueue')&&t.includes('function pump()')) break;
     }catch{}
     if(i===59) throw Error('Current production build was not exposed within 10 minutes');
     await new Promise(r=>setTimeout(r,10000));
@@ -101,7 +101,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
 
     const src=await page.content();
-    for(const marker of ['interimResults=false','commandBuffer','/chat','navigator.geolocation','EY_WAKE_WORD_V1']) {
+    for(const marker of ['interimResults=false','wakeQueue','function pump()','/chat','navigator.geolocation','EY_WAKE_WORD_V1']) {
       if(!src.includes(marker)) throw Error('missing live source marker: '+marker);
     }
 
