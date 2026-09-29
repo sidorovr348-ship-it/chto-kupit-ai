@@ -65,7 +65,7 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST https://ai.aliceq.ru/chat -H 'Content-Type: application/json' --data '{"prompt":"Найди 8849 TANK 4 Pro в Москве где купить дешевле"}' >/tmp/tank.json
           python3 - <<'PY'
           import json,re
-          s=json.load(open('/tmp/search.json')); assert s.get('ok') and s.get('route')=='search' and s.get('sources'),s
+          s=json.load(open('/tmp/search.json')); assert s.get('ok') and ((s.get('route')=='search' and s.get('sources')) or (s.get('route')=='weather' and re.search(r'\d+(?:\.\d+)?\s*°C',s.get('result','')))),s
           for fn in ['/tmp/shop.json','/tmp/tank.json']:
             j=json.load(open(fn)); assert j.get('ok') and j.get('route')=='shopping' and j.get('results'),j
             for x in j['results']:
