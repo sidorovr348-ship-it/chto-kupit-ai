@@ -40,7 +40,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
   page.on('requestfailed',r=>{const u=r.url();if(!/ai\.aliceq\.ru\/(photo|chat|tts|voice|transcribe|generate-image)/i.test(u))errors.push('requestfailed: '+u+' '+(r.failure()?.errorText||''))});
 
   try{
-    await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
+    await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
     if(await page.title()!=='Эй') throw Error('wrong title');
     for(const id of ['send','voice','photo','camera','file','video','imagegen','sound','stop','clear']){
       if(await page.locator('#'+id).count()!==1) throw Error('missing control: '+id);
