@@ -1,3 +1,4 @@
+const crypto=require('crypto');
 const dotenv=require('dotenv');
 for(const f of [process.env.ENV_FILE,'/root/my-ai-unified/.local-ai.env','/root/chto-kupit-ai.env'])if(f)dotenv.config({path:f,override:false});
 const {callOllama}=require('./src/local-ai');const express=require('express');const fs=require('fs/promises');const os=require('os');const path=require('path');const {execFile}=require('child_process');const {promisify}=require('util');const execFileP=promisify(execFile);const {memoryMiddleware,memoryRoutes}=require('./memory-map');
