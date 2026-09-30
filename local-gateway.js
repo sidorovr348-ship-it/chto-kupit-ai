@@ -1,7 +1,7 @@
 const dotenv=require('dotenv');
 for(const f of [process.env.ENV_FILE,'/root/my-ai-unified/.local-ai.env','/root/chto-kupit-ai.env'])if(f)dotenv.config({path:f,override:false});
 const {callOllama}=require('./src/local-ai');const express=require('express');const fs=require('fs/promises');const os=require('os');const path=require('path');const {execFile}=require('child_process');const {promisify}=require('util');const execFileP=promisify(execFile);const {memoryMiddleware,memoryRoutes}=require('./memory-map');
-const app=express(),PORT=Number(process.env.PORT||3020),TTS_VOICE=process.env.TTS_VOICE||'ru-RU-SvetlanaNeural';
+const app=express(),PORT=Number(process.env.PORT||3020),TTS_VOICE=process.env.TTS_VOICE||'ru-RU-DmitryNeural';
 app.use((req,res,next)=>{res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');res.setHeader('Access-Control-Max-Age','86400');res.setHeader('Cache-Control','no-store');if(req.method==='OPTIONS')return res.status(204).end();next()});
 let autonomyRuntime=null,autonomyInit=null;
 async function initAutonomy(){if(process.env.AUTONOMY_ENABLED==='0')return null;if(autonomyInit)return autonomyInit;autonomyInit=import('./autonomy-lab/runtime.mjs').then(m=>{autonomyRuntime=m.createAutonomyRuntime({tools:{
