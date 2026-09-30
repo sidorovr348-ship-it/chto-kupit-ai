@@ -10,11 +10,19 @@ fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 const stateFile = path.join(root, 'state.json');
 const load = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return { schemaVersion: 1, runs: {} }; } };
 const save = (state) => { const tmp = stateFile + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 }); fs.renameSync(tmp, stateFile); };
-const stateStore = { load, save };
+const pruneState = (state) => {
+  const runs = Object.entries(state?.runs || {}).sort((a,b) => String(b[1]?.updatedAt || b[1]?.createdAt || '').localeCompare(String(a[1]?.updatedAt || a[1]?.createdAt || '')));
+  const kept = runs.slice(0, 200);
+  state.runs = Object.fromEntries(kept);
+  return state;
+};
+const boundedLoad = () => pruneState(load());
+const boundedSave = (state) => save(pruneState(state));
+const stateStore = { load: boundedLoad, save: boundedSave };
 const resources = { acquire: () => ({ ok: true, resource: 'bounded-runtime' }), release: () => {} };
 const killSwitch = { check: () => ({ allowed: process.env.AUTONOMY_KILL_SWITCH !== '1', reason: 'AUTONOMY_KILL_SWITCH' }) };
 const policy = { authorize(action) { const forbidden = /production|deploy|release|secret|credential|dns|vps|systemctl|self.?modify|write.?main/i.test(String(action)); return forbidden ? { decision: 'REQUIRE_APPROVAL', action } : { decision: 'ALLOW', action }; } };
-const audit = { record: (event) => { try { fs.appendFileSync(path.join(root, 'audit.log'), JSON.stringify(event) + '\n', { mode: 0o600 }); } catch {} } };
+const audit = { record: (event) => { try { const file=path.join(root,'audit.log'); try { if(fs.statSync(file).size>5*1024*1024){ const old=file+'.1'; try{fs.rmSync(old,{force:true})}catch{} fs.renameSync(file,old); } } catch{} fs.appendFileSync(file, JSON.stringify(event)+'\n',{mode:0o600}); } catch {} } };
 
 export function createAutonomyRuntime({ tools = {} } = {}) {
   const orchestrator = new AutonomyOrchestrator({ stateStore, resources, killSwitch, policy, audit });
