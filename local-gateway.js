@@ -48,7 +48,19 @@ function releaseTextSlot(){const next=textWaiters.shift();if(next){next()}else{t
 async function askInternal(messages,vision=false){
  if(vision)return askInternalCore(messages,vision);
  await acquireTextSlot();
- try{return await askInternalCore(messages,false)}finally{releaseTextSlot()}
+ try{
+   const hardDeadline=Date.now()+18500;
+   const task=askInternalCore(messages,false);
+   return await Promise.race([
+     task,
+     new Promise(resolve=>setTimeout(()=>resolve({
+       text:'Я Эй — My AI Unified. Сейчас основной AI-канал отвечает слишком долго; запрос не потерян. Повтори его через несколько секунд.',
+       provider:'bounded-timeout-fallback',
+       model:'deterministic',
+       warning:'AI provider deadline exceeded'
+     }),Math.max(1000,hardDeadline-Date.now())))
+   ]);
+ }finally{releaseTextSlot()}
 }
 
 async function ask(messages,vision=false){return askInternal(messages,vision)}
