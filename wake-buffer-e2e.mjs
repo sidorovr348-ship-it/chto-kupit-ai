@@ -50,7 +50,7 @@ const API='https://ai.aliceq.ru';
   await page.exposeFunction('__wakeRecordError',m=>errors.push(String(m)));
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   try{
-    await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'networkidle',timeout:90000});
+    await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
     const sound=page.locator('#sound');
     if(await sound.count() && await sound.textContent()==='🔊 Звук') await sound.click();
     await page.locator('body').click({position:{x:196,y:400}});
