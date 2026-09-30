@@ -43,22 +43,37 @@ if(!vision){const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(mk)try{const mode
 if(vision){const mk=keyOf('MISTRAL_API_KEY','MISTRAL_KEY');if(mk&&Date.now()>=mistralBlockedUntil){const model=process.env.MISTRAL_VISION_MODEL||'mistral-small-latest';const mistralMessages=(Array.isArray(messages)?messages:[]).map(m=>({...m,content:Array.isArray(m?.content)?m.content.map(x=>x?.type==='image_url'?{...x,image_url:{url:typeof x.image_url==='string'?x.image_url:String(x.image_url?.url||'')}}:x):m?.content}));for(let attempt=1;attempt<=2;attempt++)try{return{text:await provider('https://api.mistral.ai/v1/chat/completions',mk,model,mistralMessages,60000,true),provider:'mistral',model}}catch(e){errors.push(`Mistral vision: ${e.message}`);if(e.status===429){const wait=retryAfterMs(e);mistralBlockedUntil=Date.now()+wait;if(attempt<2){await new Promise(r=>setTimeout(r,wait));continue}}console.error('MISTRAL_VISION_ERROR',e.message);break}}}
 if(!vision){const q=textOf(messages);if(/^(ответь одним словом|ответь кратко|кто ты|ты кто|как тебя зовут|представься)/iu.test(q))return{text:/^(кто ты|ты кто|как тебя зовут|представься)/iu.test(q)?'Я Эй — My AI Unified, универсальный AI-помощник.':'ОК',provider:'local-fallback',model:'deterministic'};try{const local=await callOllama(messages,{numPredict:300,timeoutMs:Math.min(7000,remaining())});if(local)return{text:local,provider:'ollama-local',model:process.env.OLLAMA_MODEL||'qwen3:0.6b',warning:'external providers unavailable'}}catch(e){errors.push('Ollama: '+e.message)}return{text:'Я Эй — My AI Unified. Основные AI-провайдеры сейчас временно недоступны; локальный резерв тоже недоступен. Запрос не потерян.',provider:'local-fallback',model:'deterministic',warning:'AI providers unavailable'}}const e=Error(errors.join(' | ')||'AI provider is not configured');e.status=502;throw e}
 const MAX_TEXT_CONCURRENCY=2;let textActive=0,textWaiters=[];
-async function acquireTextSlot(){if(textActive<MAX_TEXT_CONCURRENCY){textActive++;return}await new Promise(resolve=>textWaiters.push(resolve))}
-function releaseTextSlot(){const next=textWaiters.shift();if(next){next()}else{textActive=Math.max(0,textActive-1)}}
+function timeoutFallback(){return{text:'Я Эй — My AI Unified. Сейчас основной AI-канал отвечает слишком долго; запрос не потерян. Повтори его через несколько секунд.',provider:'bounded-timeout-fallback',model:'deterministic',warning:'AI provider deadline exceeded'}}
+async function acquireTextSlot(deadline){
+ if(textActive<MAX_TEXT_CONCURRENCY){textActive++;return true}
+ return await new Promise(resolve=>{
+   const waiter={resolve,timer:setTimeout(()=>{
+     const i=textWaiters.indexOf(waiter);
+     if(i>=0)textWaiters.splice(i,1);
+     resolve(false)
+   },Math.max(0,deadline-Date.now()))};
+   textWaiters.push(waiter)
+ })
+}
+function releaseTextSlot(){
+ while(textWaiters.length){
+   const next=textWaiters.shift();
+   clearTimeout(next.timer);
+   next.resolve(true);
+   return
+ }
+ textActive=Math.max(0,textActive-1)
+}
 async function askInternal(messages,vision=false){
  if(vision)return askInternalCore(messages,vision);
- await acquireTextSlot();
+ const hardDeadline=Date.now()+18500;
+ const acquired=await acquireTextSlot(hardDeadline);
+ if(!acquired)return timeoutFallback();
  try{
-   const hardDeadline=Date.now()+18500;
    const task=askInternalCore(messages,false);
    return await Promise.race([
      task,
-     new Promise(resolve=>setTimeout(()=>resolve({
-       text:'Я Эй — My AI Unified. Сейчас основной AI-канал отвечает слишком долго; запрос не потерян. Повтори его через несколько секунд.',
-       provider:'bounded-timeout-fallback',
-       model:'deterministic',
-       warning:'AI provider deadline exceeded'
-     }),Math.max(1000,hardDeadline-Date.now())))
+     new Promise(resolve=>setTimeout(()=>resolve(timeoutFallback()),Math.max(1000,hardDeadline-Date.now())))
    ]);
  }finally{releaseTextSlot()}
 }
