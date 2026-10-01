@@ -92,6 +92,12 @@ jobs:
           NGINX
             sudo ln -sf /etc/nginx/sites-available/ai-aliceq.conf /etc/nginx/sites-enabled/ai-aliceq.conf
             sudo nginx -t
+            echo "=== PORT OWNERS BEFORE NGINX ==="
+            sudo ss -ltnp | grep -E ':(80|443)\\b' || true
+            sudo systemctl stop nginx 2>/dev/null || true
+            sudo systemctl disable nginx 2>/dev/null || true
+            echo "=== PORT OWNERS AFTER NGINX STOP ==="
+            sudo ss -ltnp | grep -E ':(80|443)\\b' || true
             sudo systemctl enable --now nginx
             sudo systemctl reload nginx
             sudo certbot certonly --webroot -w /var/www/certbot -d ai.aliceq.ru --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
