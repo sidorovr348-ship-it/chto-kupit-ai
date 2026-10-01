@@ -71,6 +71,55 @@ jobs:
           test "$healthy" = 1
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-health.json"
           rm -f /tmp/vps_key
+      - name: Repair and verify public HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" 'set -e
+            sudo apt-get update -y
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot
+            sudo mkdir -p /var/www/certbot
+            sudo rm -f /etc/nginx/sites-enabled/ai-aliceq.conf /etc/nginx/sites-available/ai-aliceq.conf
+            sudo tee /etc/nginx/sites-available/ai-aliceq.conf >/dev/null <<"NGINX"
+          server {
+            listen 80;
+            server_name ai.aliceq.ru;
+            location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+            location / { proxy_pass http://127.0.0.1:3020; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; proxy_read_timeout 180s; proxy_send_timeout 180s; }
+          }
+          NGINX
+            sudo ln -sf /etc/nginx/sites-available/ai-aliceq.conf /etc/nginx/sites-enabled/ai-aliceq.conf
+            sudo nginx -t
+            sudo systemctl enable --now nginx
+            sudo systemctl reload nginx
+            sudo certbot certonly --webroot -w /var/www/certbot -d ai.aliceq.ru --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
+            sudo tee /etc/nginx/sites-available/ai-aliceq.conf >/dev/null <<"NGINX"
+          server {
+            listen 80;
+            server_name ai.aliceq.ru;
+            location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+            location / { return 301 https://$host$request_uri; }
+          }
+          server {
+            listen 443 ssl http2;
+            server_name ai.aliceq.ru;
+            ssl_certificate /etc/letsencrypt/live/ai.aliceq.ru/fullchain.pem;
+            ssl_certificate_key /etc/letsencrypt/live/ai.aliceq.ru/privkey.pem;
+            location / { proxy_pass http://127.0.0.1:3020; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_read_timeout 180s; proxy_send_timeout 180s; }
+          }
+          NGINX
+            sudo nginx -t
+            sudo systemctl reload nginx
+            curl -fsS --max-time 20 --resolve ai.aliceq.ru:443:127.0.0.1 https://ai.aliceq.ru/health >/tmp/https-health.json
+            grep -q '"ok":true' /tmp/https-health.json
+            echo HTTPS_ORIGIN_OK
+          '
+          rm -f /tmp/vps_key
+          curl -fsS --max-time 30 https://ai.aliceq.ru/health >/tmp/public-https-health.json
+          grep -q '"ok":true' /tmp/public-https-health.json
+          echo PUBLIC_HTTPS_OK
       - name: Verify complete public production
         shell: bash
         run: |
