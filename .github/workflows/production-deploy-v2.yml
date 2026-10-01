@@ -71,7 +71,7 @@ jobs:
           test "$healthy" = 1
           ssh -i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-health.json"
           rm -f /tmp/vps_key
-      - name: Repair and verify public HTTPS
+      - name: Diagnose HTTPS ingress without changing Xray
         shell: bash
         run: |
           set -euo pipefail
@@ -79,61 +79,28 @@ jobs:
           chmod 600 /tmp/vps_key
           ssh -i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" "bash -s" <<'REMOTE'
           set -euo pipefail
-          sudo apt-get update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx certbot
-          sudo mkdir -p /var/www/certbot
-          sudo rm -f /etc/nginx/sites-enabled/ai-aliceq.conf /etc/nginx/sites-available/ai-aliceq.conf
-          sudo tee /etc/nginx/sites-available/ai-aliceq.conf >/dev/null <<'NGINX'
-          server {
-            listen 80;
-            server_name ai.aliceq.ru;
-            location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
-            location / { proxy_pass http://127.0.0.1:3020; proxy_http_version 1.1; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; proxy_read_timeout 180s; proxy_send_timeout 180s; }
-          }
-          NGINX
-          sudo ln -sf /etc/nginx/sites-available/ai-aliceq.conf /etc/nginx/sites-enabled/ai-aliceq.conf
-          sudo nginx -t
-          echo "=== PORT OWNERS BEFORE NGINX ==="
-          sudo ss -ltnp | grep -E ':(80|443)\b' || true
-          sudo systemctl stop nginx 2>/dev/null || true
-          sudo systemctl disable nginx 2>/dev/null || true
-          echo "=== PORT OWNERS AFTER NGINX STOP ==="
-          sudo ss -ltnp | grep -E ':(80|443)\b' || true
-          if ! sudo systemctl enable --now nginx; then
-            echo "=== NGINX START FAILED: DIAGNOSTICS ==="
-            sudo ss -ltnp || true
-            sudo systemctl --no-pager --full status nginx || true
-            sudo journalctl -u nginx -n 120 --no-pager || true
-            sudo nginx -T 2>&1 | tail -n 180 || true
-            exit 1
-          fi
-          sudo systemctl reload nginx
-          sudo certbot certonly --webroot -w /var/www/certbot -d ai.aliceq.ru --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring
-          sudo tee /etc/nginx/sites-available/ai-aliceq.conf >/dev/null <<'NGINX'
-          server {
-            listen 80;
-            server_name ai.aliceq.ru;
-            location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
-            location / { return 301 https://\$host\$request_uri; }
-          }
-          server {
-            listen 443 ssl http2;
-            server_name ai.aliceq.ru;
-            ssl_certificate /etc/letsencrypt/live/ai.aliceq.ru/fullchain.pem;
-            ssl_certificate_key /etc/letsencrypt/live/ai.aliceq.ru/privkey.pem;
-            location / { proxy_pass http://127.0.0.1:3020; proxy_http_version 1.1; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; proxy_read_timeout 180s; proxy_send_timeout 180s; }
-          }
-          NGINX
-          sudo nginx -t
-          sudo systemctl reload nginx
-          curl -fsS --max-time 20 --resolve ai.aliceq.ru:443:127.0.0.1 https://ai.aliceq.ru/health >/tmp/https-health.json
-          grep -q '"ok":true' /tmp/https-health.json
-          echo HTTPS_ORIGIN_OK
+          echo "=== 443 OWNER ==="
+          sudo ss -ltnp | grep -E ':443\b' || true
+          echo "=== XRAY SERVICE ==="
+          sudo systemctl --no-pager --full status xray 2>/dev/null | head -n 35 || true
+          echo "=== XRAY CONFIG LOCATIONS ==="
+          sudo find /etc /usr/local/etc -maxdepth 3 -type f \( -name 'config.json' -o -name '*.json' \) 2>/dev/null | grep -i xray | head -n 30 || true
+          for f in /usr/local/etc/xray/config.json /etc/xray/config.json; do
+            if [ -f "$f" ]; then
+              echo "=== XRAY SAFE CONFIG: $f ==="
+              sudo jq 'del(.. | .privateKey?, .password?, .id?, .keys?) | {inbounds:(.inbounds//[]|map({port,protocol,streamSettings,settings})),outbounds:(.outbounds//[]|map({protocol,settings}))}' "$f" 2>/dev/null | head -n 260 || sudo sed -n '1,260p' "$f" | sed -E 's/(privateKey|password|id|email|secret)\s*[:=]\s*"[^"]*"/\1:"REDACTED"/g'
+            fi
+          done
+          echo "=== CLOUDFLARED SERVICES ==="
+          sudo systemctl list-units --type=service --all --no-legend | grep -i cloudflared || true
+          for f in /etc/cloudflared/config.yml /etc/cloudflared/config.yaml; do
+            if [ -f "$f" ]; then
+              echo "=== CLOUDFLARED CONFIG: $f ==="
+              sudo sed -E 's/(token:|tunnel:|credentials-file:).*/\1 REDACTED/' "$f" | head -n 180
+            fi
+          done
           REMOTE
           rm -f /tmp/vps_key
-          curl -fsS --max-time 30 https://ai.aliceq.ru/health >/tmp/public-https-health.json
-          grep -q '"ok":true' /tmp/public-https-health.json
-          echo PUBLIC_HTTPS_OK
       - name: Verify complete public production
         shell: bash
         run: |
