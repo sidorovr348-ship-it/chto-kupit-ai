@@ -106,6 +106,19 @@ jobs:
           done
           REMOTE
           rm -f /tmp/vps_key
+      - name: Verify public DNS and TLS path
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== PUBLIC DNS ==="
+          getent ahostsv4 ai.aliceq.ru || true
+          getent ahosts ai.aliceq.ru || true
+          echo "=== TLS CERTIFICATE ==="
+          echo | openssl s_client -connect ai.aliceq.ru:443 -servername ai.aliceq.ru -verify_return_error 2>/tmp/tls.err | openssl x509 -noout -subject -issuer -dates -ext subjectAltName
+          echo "=== TLS ERRORS ==="
+          cat /tmp/tls.err || true
+          echo "=== HTTPS HEADERS ==="
+          curl -Iv --max-time 20 https://ai.aliceq.ru/ 2>&1 | tail -n 30
       - name: Verify complete public production
         shell: bash
         run: |
