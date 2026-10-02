@@ -140,6 +140,22 @@ jobs:
           cat /tmp/tls.err || true
           echo "=== HTTPS HEADERS ==="
           curl -Iv --max-time 20 https://ai.aliceq.ru/ 2>&1 | tail -n 30
+      - name: Diagnose public A and AAAA records
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== GOOGLE DNS A ==="
+          curl -fsS --max-time 15 'https://dns.google/resolve?name=ai.aliceq.ru&type=A' | head -c 4000; echo
+          echo "=== GOOGLE DNS AAAA ==="
+          curl -fsS --max-time 15 'https://dns.google/resolve?name=ai.aliceq.ru&type=AAAA' | head -c 4000; echo
+          echo "=== CLOUDFLARE DNS A ==="
+          curl -fsS --max-time 15 -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=ai.aliceq.ru&type=A' | head -c 4000; echo
+          echo "=== CLOUDFLARE DNS AAAA ==="
+          curl -fsS --max-time 15 -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=ai.aliceq.ru&type=AAAA' | head -c 4000; echo
+          echo "=== IPV6 ROUTE ==="
+          curl -6 -Iv --max-time 15 https://ai.aliceq.ru/ 2>&1 | tail -n 35 || true
+          echo "=== CERTIFICATE CHAIN ==="
+          echo | openssl s_client -connect ai.aliceq.ru:443 -servername ai.aliceq.ru -verify_return_error -showcerts 2>&1 | tail -n 45
       - name: Verify complete public production
         shell: bash
         run: |
