@@ -251,3 +251,5 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+# HTTPS diagnostic trigger: verify VPS DNS/Xray path without changing VPN
