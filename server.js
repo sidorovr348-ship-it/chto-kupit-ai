@@ -1,4 +1,26 @@
 const app = require('./legacy-server');
+const path = require('path');
+
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'smart-index.html')));
+app.get('/smart-index.html', (req, res) => res.sendFile(path.join(__dirname, 'smart-index.html')));
+
+app.use('/api', async (req, res, next) => {
+  try {
+    const targetPath = req.originalUrl.replace(/^\/api/, '') || '/';
+    const target = new URL(targetPath, 'https://ai.aliceq.ru');
+    const headers = { 'Content-Type': req.get('content-type') || 'application/json' };
+    const init = { method: req.method, headers };
+    if (!['GET','HEAD'].includes(req.method)) init.body = JSON.stringify(req.body ?? {});
+    const upstream = await fetch(target, init);
+    res.status(upstream.status);
+    const contentType = upstream.headers.get('content-type');
+    if (contentType) res.set('content-type', contentType);
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    return res.send(buffer);
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: 'Не удалось связаться с production backend.' });
+  }
+});
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 60000) => {
   const controller = new AbortController();
