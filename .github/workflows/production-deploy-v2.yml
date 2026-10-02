@@ -106,6 +106,27 @@ jobs:
           done
           REMOTE
           rm -f /tmp/vps_key
+      - name: Diagnose VPS DNS versus Cloudflare path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key
+          chmod 600 /tmp/vps_key
+          ssh -i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          echo "=== VPS DNS FOR APP ==="
+          getent ahosts ai.aliceq.ru || true
+          echo "=== VPS DNS CONFIG ==="
+          resolvectl status 2>/dev/null | head -n 80 || cat /etc/resolv.conf
+          echo "=== XRAY DNS/ROUTING ==="
+          jq '{dns:(.dns//{}),routing:(.routing//{}),inbounds:(.inbounds//[]|map({port,protocol,streamSettings,settings})),outbounds:(.outbounds//[]|map({protocol,tag,settings}))}' /etc/xray/config.json 2>/dev/null | head -n 500 || true
+          echo "=== VPS HTTPS BY CLOUDFLARE IP ==="
+          for ip in 172.67.208.169 104.21.93.102; do
+            echo "IP=$ip"
+            curl -skS --connect-timeout 5 --max-time 15 --resolve ai.aliceq.ru:443:$ip -D - -o /dev/null https://ai.aliceq.ru/ | head -n 20 || true
+          done
+          REMOTE
+          rm -f /tmp/vps_key
       - name: Verify public DNS and TLS path
         shell: bash
         run: |
