@@ -15,7 +15,7 @@
     const AC=window.AudioContext||window.webkitAudioContext;
     if(!AC)throw Error('Web Audio unavailable');
     voiceCtx=voiceCtx||new AC();
-    if(voiceCtx.state==='suspended')await voiceCtx.resume();
+    if(voiceCtx.state==='suspended')await Promise.race([voiceCtx.resume(),new Promise((_,no)=>setTimeout(()=>no(Error('AudioContext resume timeout')),3000))]);
     const decoded=await voiceCtx.decodeAudioData(bytes.slice(0));
     if(generation!==speechGeneration)return;
     const source=voiceCtx.createBufferSource();source.buffer=decoded;source.connect(voiceCtx.destination);ttsSource=source;
@@ -29,6 +29,7 @@
  window.__ttsPromise=task;
  return task;
 }
+window.__primeTtsAudio=()=>{try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;voiceCtx=voiceCtx||new AC();if(voiceCtx.state==='suspended')void voiceCtx.resume().catch(()=>{})}catch{}};
 function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{};try{ttsSource?.stop(0)}catch{};ttsSource=null;try{audio.pause();audio.currentTime=0}catch{};try{speechSynthesis?.cancel?.()}catch{}}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function send(queuedText=null){
   let t=queuedText===null?input.value.trim():String(queuedText).trim();
@@ -132,7 +133,7 @@ const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
 function extract(t){t=String(t||'').trim();const m=t.match(wake);return m?{wake:true,cmd:t.slice(m[0].length).trim()}:{wake:false,cmd:t}}
 function pump(){clearTimeout(pumpTimer);pumpTimer=setTimeout(async()=>{if(paused)return;if(processing||busy){pump();return}const q=String(wakeQueue.shift()||'').trim();if(!q){if(!processing&&!busy&&!paused&&!r)setTimeout(()=>start(true),120);return}processing=true;status('🟢 Выполняю…');try{try{r?.stop?.()}catch{};r=null;window.__interruptSpeech?.();await new Promise(ok=>setTimeout(ok,80));if(!paused){document.getElementById('input').value=q;window.__wakeCommandActive=true;try{await Promise.resolve(window.send?.())}finally{window.__wakeCommandActive=false}}}finally{processing=false;if(!paused){if(wakeQueue.length)pump();else window.__wakeResponseReady?.()}}},120)}
 function enqueue(q){q=String(q||'').trim();if(!q)return;if(busy)window.__cancelActiveChat?.();wakeQueue.push(q);pump()}
-let readyGeneration=0;function responseReady(){if(paused||wakeQueue.length)return;const gen=++readyGeneration;const retry=async()=>{if(paused||wakeQueue.length||gen!==readyGeneration)return;if(processing||busy){setTimeout(retry,100);return}try{await Promise.resolve(window.__ttsPromise)}catch{};await new Promise(ok=>setTimeout(ok,1000));if(paused||wakeQueue.length||gen!==readyGeneration||processing||busy)return;status('🟢 Слушаю «Эй»');start(true)};retry()}
+let readyGeneration=0;function responseReady(){if(paused||wakeQueue.length)return;const gen=++readyGeneration;const retry=async()=>{if(paused||wakeQueue.length||gen!==readyGeneration)return;if(processing||busy){setTimeout(retry,100);return}let finished=false;try{await Promise.race([Promise.resolve(window.__ttsPromise).then(()=>{finished=true}).catch(()=>{finished=true}),new Promise(ok=>setTimeout(ok,23000))])}catch{};if(!finished)window.__interruptSpeech?.();await new Promise(ok=>setTimeout(ok,500));if(paused||wakeQueue.length||gen!==readyGeneration||processing||busy)return;status('🟢 Слушаю «Эй»');start(true)};retry()}
 function make(){const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
 x.onstart=()=>{starting=false;restarting=false;startedOnce=true;if(!paused)status(processing?'🟡 Обрабатываю…':'🟢 Слушаю «Эй»')};
 x.onresult=e=>{if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;const p=extract(text);if(p.wake){if(p.cmd){armedText='';armedUntil=0;enqueue(p.cmd)}else{armedText='';armedUntil=Date.now()+12000;status('🟢 Слушаю…')}}else if(Date.now()<armedUntil){const q=(armedText+' '+p.cmd).trim();armedText=q;armedUntil=Date.now()+12000;enqueue(q);armedText='';armedUntil=0}};
@@ -144,7 +145,7 @@ function kick(){if(!SR){status('⚠️ Автоматическое слово �
 window.__interruptSpeech=interruptSpeech;window.__pauseWake=()=>{paused=true;processing=false;armedUntil=0;armedText='';wakeQueue=[];clearTimeout(pumpTimer);try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}r=null;starting=false;restarting=false;status('🎙️ Голосовой ввод: режим «Эй» временно приостановлен')};
 window.__resumeWake=()=>{if(!enabled)return;paused=false;processing=false;armedUntil=0;armedText='';if(!SR){status('⚠️ Автоматическое слово «Эй» недоступно в этом браузере. Для вопроса нажми «🎙️ Голос».');return}status('🟡 Возобновляю слушание…');setTimeout(()=>{if(!enabled||paused)return;start(true)},300)};
 window.__wakeStart=()=>{paused=false;if(!SR){status('⚠️ Автоматическое слово «Эй» недоступно в этом браузере. Для вопроса нажми «🎙️ Голос».');return}status('🟡 Запускаю слушание…');start(true)};window.__wakeResponseReady=responseReady;
-window.addEventListener('load',()=>setTimeout(kick,700));document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));if(SR){['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(!paused&&!processing&&!busy&&!r)start(false)},{passive:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!busy&&!r)setTimeout(()=>start(true),300)});}
+window.addEventListener('load',()=>setTimeout(kick,700));document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));if(SR){['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{window.__primeTtsAudio?.();if(!paused&&!processing&&!busy&&!r)start(false)},{passive:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!busy&&!r)setTimeout(()=>start(true),300)});}
 window.addEventListener('beforeunload',()=>{enabled=false;try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}});
 })();</script></main></html>
 <!-- MOBILE_WAKE_CORS_HARDENED_V1 -->
