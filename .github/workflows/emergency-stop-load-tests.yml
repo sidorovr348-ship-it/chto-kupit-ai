@@ -19,6 +19,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38543275491/cancel
-          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38542575927/cancel
+          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38543275491/cancel || true
+          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38542575927/cancel || true
           echo STALE_LOAD_TESTS_CANCEL_REQUESTED
