@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const APP='https://ai.aliceq.ru/';
+const APP='https://sidorovr348-ship-it.github.io/chto-kupit-ai/smart-index.html';
 const API='https://ai.aliceq.ru';
 
 (async()=>{
