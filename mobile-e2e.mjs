@@ -98,8 +98,13 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     const cam=page.locator('#camera');
     await cam.tap();
     await page.waitForFunction(()=>{const v=document.querySelector('#cam');return v?.srcObject?.getVideoTracks?.()[0]?.readyState==='live'},null,{timeout:15000});
-    await page.locator('#camOff').tap();
-    await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');const tracks=v?.srcObject?.getVideoTracks?.()||[];return tracks.every(t=>t.readyState==='ended') && getComputedStyle(b).display==='none'},null,{timeout:10000});
+    await page.locator('#camOff').click();
+    try {
+      await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');return !v?.srcObject && getComputedStyle(b).display==='none'},null,{timeout:10000});
+    } catch (err) {
+      const d=await page.evaluate(()=>({cameraBoxDisplay:getComputedStyle(document.querySelector('#cameraBox')).display,videoHasStream:!!document.querySelector('#cam')?.srcObject,cameraButtonText:document.querySelector('#camera')?.textContent||'',cameraOffExists:!!document.querySelector('#camOff')}));
+      throw Error('camera did not close: '+JSON.stringify(d)+' | '+err.message);
+    }
 
     n=await before();
     const fcPromise=page.waitForEvent('filechooser');
