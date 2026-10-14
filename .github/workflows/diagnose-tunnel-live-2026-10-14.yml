@@ -1,0 +1,32 @@
+name: Temporary live tunnel diagnosis
+on:
+  push:
+    branches: [diagnose-tunnel-live-2026-10-14]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+    steps:
+      - name: Inspect live backend and tunnel
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key
+          chmod 600 /tmp/vps_key
+          ssh -i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" 'set +e
+            echo "=== UTC TIME ==="; date -u
+            echo "=== LOCAL HEALTH ==="; curl -sS -m 8 -i http://127.0.0.1:3020/health | head -c 1800; echo
+            echo "=== SERVICE UNITS ==="; systemctl list-units --type=service --all --no-pager | grep -Ei "cloudflared|tunnel|alice|my-ai-unified" || true
+            echo "=== UNIT FILES ==="; systemctl list-unit-files --type=service --no-pager | grep -Ei "cloudflared|tunnel|alice|my-ai-unified" || true
+            echo "=== CLOUDFLARED PROCESSES ==="; pgrep -af cloudflared || true
+            echo "=== CLOUD TUNNEL JOURNAL ==="; journalctl --since "30 minutes ago" --no-pager -n 100 -u cloudflared -u cloudflared-alice-ai -u alice-ai -u my-ai-unified-quick-tunnel.service 2>&1 | tail -n 100
+            echo "=== BACKEND JOURNAL ==="; journalctl -u my-ai-unified --since "15 minutes ago" --no-pager -n 80
+            echo "=== SUPERVISOR JOURNAL ==="; journalctl -u my-ai-unified-supervisor --since "15 minutes ago" --no-pager -n 80
+            echo "=== MEMORY ==="; free -h; df -h /; '
+          rm -f /tmp/vps_key
