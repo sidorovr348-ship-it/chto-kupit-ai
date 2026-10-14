@@ -63,7 +63,21 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     n=await before();
     await input.fill('Сколько сейчас времени в Москве?');
     await send.click();
-    await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:30000});
+    try {
+      await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Сейчас в Москве/.test(x.textContent||'')),n,{timeout:30000});
+    } catch (err) {
+      const d = await page.evaluate(() => ({
+        url: location.href,
+        title: document.title,
+        input: document.querySelector('#input')?.value || '',
+        busy: window.__myAiBusy?.(),
+        wakeStatus: document.querySelector('#wakeStatus')?.textContent || '',
+        chat: [...document.querySelectorAll('#chat .msg')].slice(-10).map(x => ({ className: x.className, text: (x.textContent || '').slice(0, 300) })),
+        sendCount: document.querySelectorAll('#send').length,
+        sendDisabled: document.querySelector('#send')?.disabled
+      }));
+      throw Error('Moscow time UI timeout: ' + JSON.stringify({ ...d, errors: errors.slice(-10) }) + ' | ' + err.message);
+    }
     await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:30000});
 
     n=await before();
