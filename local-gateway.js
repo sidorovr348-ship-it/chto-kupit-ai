@@ -69,13 +69,17 @@ async function askInternal(messages,vision=false){
  const hardDeadline=Date.now()+18500;
  const acquired=await acquireTextSlot(hardDeadline);
  if(!acquired)return timeoutFallback();
+ const task=askInternalCore(messages,false);
+ // Keep the concurrency slot until the real provider work settles. Releasing it
+ // when only the caller's timeout fires lets abandoned provider calls pile up.
+ task.then(()=>releaseTextSlot(),()=>releaseTextSlot());
+ let timer;
  try{
-   const task=askInternalCore(messages,false);
    return await Promise.race([
      task,
-     new Promise(resolve=>setTimeout(()=>resolve(timeoutFallback()),Math.max(1000,hardDeadline-Date.now())))
+     new Promise(resolve=>{timer=setTimeout(()=>resolve(timeoutFallback()),Math.max(1000,hardDeadline-Date.now()))})
    ]);
- }finally{releaseTextSlot()}
+ }finally{clearTimeout(timer)}
 }
 
 async function ask(messages,vision=false){return askInternal(messages,vision)}
