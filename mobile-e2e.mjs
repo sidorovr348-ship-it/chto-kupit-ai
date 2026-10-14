@@ -98,8 +98,13 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     const cam=page.locator('#camera');
     await cam.tap();
     await page.waitForFunction(()=>{const v=document.querySelector('#cam');return v?.srcObject?.getVideoTracks?.()[0]?.readyState==='live'},null,{timeout:15000});
-    await page.locator('#camOff').tap();
-    await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');const tracks=v?.srcObject?.getVideoTracks?.()||[];return tracks.every(t=>t.readyState==='ended') && getComputedStyle(b).display==='none'},null,{timeout:10000});
+    await page.locator('#camOff').click();
+    try {
+      await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');const tracks=v?.srcObject?.getVideoTracks?.()||[];return (!v?.srcObject || tracks.every(t=>t.readyState==='ended')) && getComputedStyle(b).display==='none'},null,{timeout:10000});
+    } catch (err) {
+      const d=await page.evaluate(()=>({boxDisplay:getComputedStyle(document.querySelector('#cameraBox')).display,inlineDisplay:document.querySelector('#cameraBox').style.display,srcObject:!!document.querySelector('#cam').srcObject,tracks:document.querySelector('#cam').srcObject?.getVideoTracks?.().map(t=>t.readyState)||[],camOffExists:!!document.querySelector('#camOff')}));
+      throw Error('camera shutdown failed: '+JSON.stringify(d)+' | '+err.message);
+    }
 
     n=await before();
     const fcPromise=page.waitForEvent('filechooser');
