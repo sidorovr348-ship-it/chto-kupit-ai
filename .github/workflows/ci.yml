@@ -15,4 +15,5 @@ jobs:
           node-version: 22
       - run: npm install
       - run: node --check server.js
+      - run: node validate-inline-scripts.cjs
       - run: node --test
