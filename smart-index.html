@@ -9,8 +9,8 @@
       add(t,'user');input.value='';
       const r='Сейчас в Москве '+now+'.';
       add(r,'ai');messages.push({role:'user',content:t},{role:'assistant',content:r});
+      if(wakeOwned)await say(r);else await say(r);
       window.__wakeResponseReady?.();
-      if(wakeOwned)void say(r);else await say(r);
       return;
     }finally{if(!wakeOwned)window.__resumeWake?.()}
   }
@@ -29,7 +29,7 @@
     if(j.routeUrl){
       let d=add(j.result||'Маршрут построен.');
       let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);
-      window.__wakeResponseReady?.();if(window.__wakeCommandActive)void say(j.result||'Маршрут построен.');else await say(j.result||'Маршрут построен.');
+      if(window.__wakeCommandActive)await say(j.result||'Маршрут построен.');else await say(j.result||'Маршрут построен.');window.__wakeResponseReady?.();
     }else if(j.results&&j.results.length){
       for(let x of j.results.slice(0,12)){
         let d=add((x.store||x.merchant||'Магазин')+'\n'+(x.title||'Товар')+'\n'+(x.price!=null?x.price+' '+(x.currency||'RUB'):'Цена не указана'));
@@ -38,7 +38,7 @@
       window.__wakeResponseReady?.();
     }else{
       let r=String(j.result||'');
-      messages.push({role:'assistant',content:r});links(r);window.__wakeResponseReady?.();if(window.__wakeCommandActive)void say(r);else await say(r);
+      messages.push({role:'assistant',content:r});links(r);if(window.__wakeCommandActive)await say(r);else await say(r);window.__wakeResponseReady?.();
     }
   }catch(e){w.remove();add('🔴 '+e.message)}
   finally{busy=false}
