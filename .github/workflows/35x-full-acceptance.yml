@@ -2,13 +2,17 @@ name: My AI Unified — 35x full acceptance
 
 on:
   workflow_run:
-    workflows: ["My AI Unified — production deploy"]
+    workflows: ["My AI Unified — final deep audit"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: my-ai-unified-acceptance-suite
+  cancel-in-progress: false
 
 jobs:
   acceptance:

@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: my-ai-unified-production
-  cancel-in-progress: true
+  group: my-ai-unified-acceptance-suite
+  cancel-in-progress: false
 
 permissions:
   contents: read
