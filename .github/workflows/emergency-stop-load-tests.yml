@@ -1,0 +1,24 @@
+name: Emergency stop stale acceptance load
+
+on:
+  push:
+    branches:
+      - emergency-stop-load-tests-2026-10-14
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  stop-stale-load:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel overlapping production stress runs
+        env:
+          GH_TOKEN: \${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38543275491/cancel
+          gh api --method POST repos/sidorovr348-ship-it/chto-kupit-ai/actions/runs/38542575927/cancel
+          echo STALE_LOAD_TESTS_CANCEL_REQUESTED
