@@ -270,12 +270,12 @@ window.__pauseWake=()=>{
  status('🎙️ Голосовой режим временно приостановлен');
 };
 window.__resumeWake=()=>{
- paused=false;permissionBlocked=false;armedUntil=0;
+ paused=false;permissionBlocked=false;errorStreak=0;armedUntil=0;
  if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
  status('🟡 Запускаю микрофон…');scheduleStart(250);
 };
 window.__wakeStart=()=>{
- paused=false;enabled=true;permissionBlocked=false;attempts=0;
+ paused=false;enabled=true;permissionBlocked=false;attempts=0;errorStreak=0;
  if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
  status('🟡 Запускаю микрофон…');scheduleStart(50);
 };
@@ -284,7 +284,7 @@ window.addEventListener('load',()=>scheduleStart(800));
 document.addEventListener('DOMContentLoaded',()=>scheduleStart(400));
 ['pointerdown','touchstart','click','keydown'].forEach(type=>document.addEventListener(type,()=>{
  try{window.__primeTtsAudio?.()}catch{}
- if(permissionBlocked){permissionBlocked=false;attempts=0;scheduleStart(100)}
+ if(permissionBlocked){permissionBlocked=false;attempts=0;errorStreak=0;scheduleStart(100)}
  else if(!paused&&!processing&&!rec&&!starting&&!isBusy())scheduleStart(100);
 },{passive:true}));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!rec&&!isBusy())scheduleStart(250)});
