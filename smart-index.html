@@ -23,9 +23,10 @@
    }finally{clearTimeout(tm)}
   }catch{
    if(generation!==speechGeneration)return;
-   const iosWebKit=/iPhone|iPad|iPod/i.test(navigator.userAgent)&&/AppleWebKit/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
-   if(iosWebKit){window.dispatchEvent(new Event('ey-tts-unavailable'));return}
-   try{await new Promise((ok,no)=>{let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(w);ok()};const w=setTimeout(finish,12000);const u=new SpeechSynthesisUtterance(String(t).slice(0,2500));u.lang='ru-RU';u.onend=finish;u.onerror=()=>{clearTimeout(w);no(Error())};if(generation!==speechGeneration){finish();return}speechSynthesis.cancel();speechSynthesis.speak(u)})}catch{}
+   try{
+    if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')throw Error('Браузер не поддерживает резервное озвучивание');
+    await new Promise((ok,no)=>{let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(w);ok()};const w=setTimeout(()=>{finish()},12000);const u=new SpeechSynthesisUtterance(String(t).slice(0,2500));u.lang='ru-RU';u.onend=finish;u.onerror=()=>{clearTimeout(w);no(Error('Встроенное озвучивание завершилось с ошибкой'))};if(generation!==speechGeneration){finish();return}speechSynthesis.cancel();speechSynthesis.speak(u)});
+   }catch(e){if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ. Проверь громкость и режим беззвучного звука iPhone. '+String(e?.message||''))}
   }
  })();
  window.__ttsPromise=task;
