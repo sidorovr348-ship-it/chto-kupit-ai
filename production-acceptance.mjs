@@ -18,6 +18,21 @@ const sttBody={audio:'data:audio/mpeg;base64,'+audio.toString('base64'),mime:'au
 const sttUi=await req('/transcribe',sttBody,{timeout:90000});assert(sttUi?.ok&&typeof sttUi.text==='string'&&sttUi.text.trim(),'stt /transcribe');
 const sttChat=await req('/chat',sttBody,{timeout:90000});assert(sttChat?.ok&&typeof sttChat.text==='string'&&sttChat.text.trim(),'stt /chat');
 console.log('STAGE chat');const chat=await req('/chat',{prompt:'Кто ты?'});assert(chat?.ok&&chat.result,'chat');
+console.log('STAGE sequential-chat');
+const sequential=[];
+for(const [label,prompt,validate] of [
+ ['identity','Кто ты?',j=>/Я Эй/.test(String(j.result||''))],
+ ['local-time','Сколько сейчас времени в Москве?',j=>j.route==='local-time'&&/в Москве\s+\d{2}:\d{2}:\d{2}/.test(String(j.result||''))],
+ ['general-ai','Кто такой Пётр Первый? Ответь кратко двумя предложениями.',j=>/п[её]тр|император|росси/i.test(String(j.result||''))&&!j.warning&&j.provider!=='bounded-timeout-fallback']
+]){
+ const started=Date.now();
+ const result=await req('/chat',{prompt}, {timeout:35000,retries:0});
+ const elapsedMs=Date.now()-started;
+ console.log('SEQUENTIAL_CHAT_RESULT',JSON.stringify({label,elapsedMs,route:result?.route,provider:result?.provider,warning:result?.warning||null,ok:!!result?.ok}));
+ assert(result?.ok&&validate(result),`sequential chat ${label} failed: ${String(result?.result||result?.error||'empty').slice(0,180)}`);
+ sequential.push({label,elapsedMs,route:result.route,provider:result.provider});
+}
+console.log('SEQUENTIAL_CHAT_OK',JSON.stringify(sequential));
 console.log('STAGE image');const image=await req('/generate-image',{prompt:'Простой красный круг на белом фоне'},{timeout:240000});assert(image?.ok&&(image.dataUrl||image.url),'image generation');
 console.log('STAGE memory');const mid='audit-'+Date.now();await req('/chat',{prompt:'Запомни правило: отвечай по-русски',memoryId:mid});const mem=await req('/chat',{prompt:'Что ты запомнил?',memoryId:mid});assert(mem?.ok&&String(mem.result||'').toLowerCase().includes('отвечай по-русски'),'memory');
 console.log('STAGE alice');const alice=await req('/alice',{request:{command:'Кто ты?'}});assert(alice?.version==='1.0'&&alice.response?.text,'alice');
