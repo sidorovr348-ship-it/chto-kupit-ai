@@ -150,6 +150,12 @@ jobs:
           npx playwright install --with-deps chromium
           node wake-buffer-e2e.mjs
 
+      - name: Run mobile UI E2E against canonical production
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          node mobile-e2e.mjs
+
       - name: Verify production app root
         run: |
           set -euo pipefail
