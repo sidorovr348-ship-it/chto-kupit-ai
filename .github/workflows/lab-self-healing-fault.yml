@@ -1,7 +1,9 @@
 name: My AI Unified — lab self-healing fault injection
 
 on:
-  push:
+  workflow_run:
+    workflows: ["My AI Unified — production deploy"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -20,6 +22,7 @@ env:
 
 jobs:
   fault-injection:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
