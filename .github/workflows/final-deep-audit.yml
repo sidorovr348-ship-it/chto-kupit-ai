@@ -22,23 +22,23 @@ jobs:
           node --check image-generation-fallback.js
           node --test test-local-gateway.js
           test -s smart-index.html
-          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/chat' '/document' '/generate-image' '/tts' 'memoryId' 'EY_WAKE_WORD_V1' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
+          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/chat' '/document' '/generate-image' '/tts' 'memoryId' 'window.__wakeStart' 'window.__wakeResponseReady' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
           echo STATIC_AUDIT_OK
       - name: Verify live Pages
         run: |
           set -euo pipefail
           sleep 20
-          PAGE_URL='https://sidorovr348-ship-it.github.io/chto-kupit-ai/'
+          PAGE_URL='https://sidorovr348-ship-it.github.io/chto-kupit-ai/smart-index.html'
           ok=0
           for i in $(seq 1 20); do
             rm -f /tmp/live.html
             if curl -LfsS --max-time 20 --retry 2 --retry-all-errors "$PAGE_URL?audit=$i" -o /tmp/live.html 2>/tmp/page.err; then
-              if grep -q 'MediaRecorder' /tmp/live.html && grep -q 'ai.aliceq.ru' /tmp/live.html && grep -q 'EY_WAKE_WORD_V1' /tmp/live.html; then ok=1; break; fi
+              if grep -q 'MediaRecorder' /tmp/live.html && grep -q 'ai.aliceq.ru' /tmp/live.html && grep -q 'window.__wakeStart' /tmp/live.html; then ok=1; break; fi
             fi
             sleep 3
           done
           if [ "$ok" != 1 ]; then echo 'LIVE_PAGES_FETCH_FAILED'; cat /tmp/page.err 2>/dev/null || true; exit 1; fi
-          for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'EY_WAKE_WORD_V1' '/generate-image'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
+          for s in 'MediaRecorder' 'navigator.geolocation' 'memoryId' 'window.__wakeStart' '/generate-image'; do grep -q "$s" /tmp/live.html || { echo "MISSING_LIVE_MARKER:$s"; exit 1; }; done
           echo PAGES_AUDIT_OK
       - name: API health and chat latency
         run: |
