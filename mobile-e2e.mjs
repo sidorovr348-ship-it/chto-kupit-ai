@@ -33,6 +33,28 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/18.7 Mobile/15E148 Safari/604.1'
   });
   const page=await context.newPage();
+  // Simulate Safari's SpeechRecognition lifecycle deterministically; this tests the app's
+  // wake controller and repeated handoffs without pretending Chromium has real iOS speech.
+  await page.addInitScript(() => {
+    const instances=[];
+    class FakeRecognition {
+      constructor(){this.started=false;this.lang='';this.continuous=false;this.interimResults=false;this.maxAlternatives=1;instances.push(this)}
+      start(){if(this.started)throw new Error('recognizer already started');this.started=true;setTimeout(()=>this.onstart?.(),0)}
+      stop(){this.started=false;setTimeout(()=>this.onend?.(),0)}
+      abort(){this.started=false;setTimeout(()=>this.onend?.(),0)}
+    }
+    Object.defineProperty(window,'SpeechRecognition',{configurable:true,value:FakeRecognition});
+    Object.defineProperty(window,'webkitSpeechRecognition',{configurable:true,value:FakeRecognition});
+    window.__fakeRecognitionInstances=instances;
+    window.__fakeSpeak=(text)=>{
+      const x=[...instances].reverse().find(v=>v.started);
+      if(!x)throw new Error('no active simulated recognizer');
+      const result={isFinal:true,0:{transcript:String(text)}};
+      x.onresult?.({resultIndex:0,results:[result]});
+      x.started=false;
+      setTimeout(()=>x.onend?.(),0);
+    };
+  });
   const errors=[];
   page.on('pageerror',e=>errors.push('pageerror: '+e.message));
   // 5xx may be transient provider retries; UI operations below must still succeed.
@@ -118,6 +140,23 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
     await voice.tap();
     await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
+
+    // Critical regression test: three consecutive wake questions, with the listener
+    // required to return to a real started state after every answer.
+    const wakeCases=[
+      {spoken:'Эй, сколько времени в Москве?',answer:/Сейчас в Москве/},
+      {spoken:'Эй, кто ты?',answer:/Я Эй — My AI Unified/},
+      {spoken:'Эй, сколько времени в Москве?',answer:/Сейчас в Москве/}
+    ];
+    for(let i=0;i<wakeCases.length;i++){
+      const item=wakeCases[i];
+      await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+      const nAi=await page.locator('#chat .msg.ai').count();
+      await page.evaluate(text=>window.__fakeSpeak(text),item.spoken);
+      await page.waitForFunction(({n,pattern})=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>pattern.test(x.textContent||'')),{n:nAi,pattern:item.answer.source},{timeout:45000});
+      await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
+      await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
+    }
 
     const src=await page.content();
     for(const marker of ['interimResults=false','let rec=null','function processQueue()','/chat','navigator.geolocation','EY_WAKE_WORD_V2_STATE_MACHINE']) {
