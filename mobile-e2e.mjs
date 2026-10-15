@@ -153,7 +153,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
       await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
       const nAi=await page.locator('#chat .msg.ai').count();
       await page.evaluate(text=>window.__fakeSpeak(text),item.spoken);
-      await page.waitForFunction(({n,pattern})=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>pattern.test(x.textContent||'')),{n:nAi,pattern:item.answer.source},{timeout:45000});
+      await page.waitForFunction(({n,pattern})=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>new RegExp(pattern).test(x.textContent||'')),{n:nAi,pattern:item.answer.source},{timeout:45000});
       await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
       await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
     }
