@@ -6,4 +6,7 @@ for(const route of ['/chat','/photo','/search','/shopping','/document','/generat
 assert.ok(src.includes("app.get('/health'"));
 for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionResponses','mistralMessages','groqBlockedUntil','reverseGeocode','wantsMoscowTime','Europe/Moscow','paraloncloud.com/v1/chat/completions','whisper-large-v3-turbo','Access-Control-Allow-Origin','wantsShopping','wantsSearch','.zip','initAutonomy','createAutonomyRuntime({tools:','AUTONOMY_TASK_KIND_NOT_ALLOWED'])assert.ok(src.includes(marker),`missing ${marker}`);
 for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.ok(src.includes(route),`missing ${route}`);
+// Regression guard: the final local fallback must not turn a spent deadline into Ollama's 60-second default.
+assert.ok(src.includes("if(canStart(6500)){try{const local=await callOllama(messages,{numPredict:300,timeoutMs:Math.min(6000,remaining())})"),'final Ollama fallback must be guarded by remaining deadline');
+assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(7000,remaining())"),'unbounded final Ollama fallback must stay removed');
 console.log('SOURCE_SMOKE_OK');
