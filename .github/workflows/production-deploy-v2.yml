@@ -131,12 +131,14 @@ jobs:
           set +e
           printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
+          echo '=== DIAGNOSTIC TIMESTAMP ==='
+          date -Is
           echo '=== SERVICE STATUS ==='
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl --no-pager --full status my-ai-unified || true"
           echo '=== SERVICE JOURNAL ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified --since '2026-09-27 14:59:00' --until '2026-09-27 15:02:00' --no-pager || true"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified --since '30 minutes ago' -n 250 --no-pager || true"
           echo '=== WATCHDOG JOURNAL ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified-supervisor --since '2026-09-27 14:59:00' --until '2026-09-27 15:02:00' --no-pager || true"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified-supervisor --since '30 minutes ago' -n 150 --no-pager || true"
           echo '=== WATCHDOG LOG ==='
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "tail -n 120 /root/my-ai-unified/data/supervisor/daemon.log 2>/dev/null || true"
           echo '=== OOM ==='
