@@ -1,10 +1,7 @@
 name: My AI Unified — lab self-healing fault injection
 
 on:
-  workflow_run:
-    workflows: ["My AI Unified — production deploy"]
-    types: [completed]
-    branches: [main]
+  # Fault injection stops the production service; keep it manual to avoid racing acceptance tests.
   workflow_dispatch:
 
 # Never stop the production backend while the acceptance suite is exercising it.
@@ -22,7 +19,7 @@ env:
 
 jobs:
   fault-injection:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
