@@ -126,31 +126,168 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
     $('#voice').classList.remove('recording');$('#voice').textContent='🎙️ Голос';
     window.__resumeWake?.();add('🔴 Микрофон: '+e.message)
   }
-}async function image(){let p=prompt('Что нарисовать?');if(!p)return;try{let j=await api('/generate-image',{prompt:p},240000);if(j.dataUrl||j.url){let d=add(''),i=document.createElement('img');i.src=j.dataUrl||j.url;d.append(i)}else throw Error('Генерация изображения не настроена')}catch(e){add('🔴 '+e.message)}}$('#send').onclick=()=>send();$('#voice').onclick=voice;$('#photo').onclick=()=>$('#photoInput').click();let lastPhotoKey='';const handlePhotoInput=e=>{const fs=e.target?.files;if(!fs?.length)return;const key=[...fs].map(f=>`${f.name}:${f.size}:${f.lastModified}`).join('|');if(key===lastPhotoKey)return;lastPhotoKey=key;photo(fs);e.target.value='';setTimeout(()=>{if(lastPhotoKey===key)lastPhotoKey=''},1000)};$('#photoInput').addEventListener('change',handlePhotoInput);$('#photoInput').addEventListener('input',handlePhotoInput);$('#video').onclick=()=>$('#videoInput').click();$('#videoInput').onchange=e=>{if(e.target.files[0])video(e.target.files[0]);e.target.value=''};$('#file').onclick=()=>$('#fileInput').click();$('#fileInput').onchange=e=>{if(e.target.files[0])doc(e.target.files[0]);e.target.value=''};$('#camera').onclick=()=>cameraStream?cameraOff():cameraOn();$('#camOff').onclick=cameraOff;$('#camAnalyze').onclick=cameraAnalyze;$('#camShot').onclick=cameraAnalyze;$('#imagegen').onclick=image;$('#sound').onclick=()=>{sound=!sound;if(!sound){try{audio.pause();audio.currentTime=0}catch{}try{speechSynthesis?.cancel?.()}catch{}}$('#sound').textContent=sound?'🔊 Звук':'🔇 Без звука'};$('#stop').onclick=stop;$('#clear').onclick=()=>{chat.innerHTML='<div class="msg ai">Готов. Я Эй.</div>';messages=[];stop()};input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});</script><!-- EY_WAKE_WORD_V1 -->
+}async function image(){let p=prompt('Что нарисовать?');if(!p)return;try{let j=await api('/generate-image',{prompt:p},240000);if(j.dataUrl||j.url){let d=add(''),i=document.createElement('img');i.src=j.dataUrl||j.url;d.append(i)}else throw Error('Генерация изображения не настроена')}catch(e){add('🔴 '+e.message)}}$('#send').onclick=()=>send();$('#voice').onclick=voice;$('#photo').onclick=()=>$('#photoInput').click();let lastPhotoKey='';const handlePhotoInput=e=>{const fs=e.target?.files;if(!fs?.length)return;const key=[...fs].map(f=>`${f.name}:${f.size}:${f.lastModified}`).join('|');if(key===lastPhotoKey)return;lastPhotoKey=key;photo(fs);e.target.value='';setTimeout(()=>{if(lastPhotoKey===key)lastPhotoKey=''},1000)};$('#photoInput').addEventListener('change',handlePhotoInput);$('#photoInput').addEventListener('input',handlePhotoInput);$('#video').onclick=()=>$('#videoInput').click();$('#videoInput').onchange=e=>{if(e.target.files[0])video(e.target.files[0]);e.target.value=''};$('#file').onclick=()=>$('#fileInput').click();$('#fileInput').onchange=e=>{if(e.target.files[0])doc(e.target.files[0]);e.target.value=''};$('#camera').onclick=()=>cameraStream?cameraOff():cameraOn();$('#camOff').onclick=cameraOff;$('#camAnalyze').onclick=cameraAnalyze;$('#camShot').onclick=cameraAnalyze;$('#imagegen').onclick=image;$('#sound').onclick=()=>{sound=!sound;if(!sound){try{audio.pause();audio.currentTime=0}catch{}try{speechSynthesis?.cancel?.()}catch{}}$('#sound').textContent=sound?'🔊 Звук':'🔇 Без звука'};$('#stop').onclick=stop;$('#clear').onclick=()=>{chat.innerHTML='<div class="msg ai">Готов. Я Эй.</div>';messages=[];stop()};input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});</script><!-- EY_WAKE_WORD_V2_STATE_MACHINE -->
 <script>(function(){'use strict';
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const iosWebKit=/iPhone|iPad|iPod/i.test(navigator.userAgent)&&/AppleWebKit/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
-let r=null,starting=false,enabled=true,paused=false,processing=false,restarting=false,startedOnce=false,startFailures=0,armedUntil=0,armedText='',wakeQueue=[],pumpTimer=null,silenceTimer=null,restartAttempt=0;
-window.addEventListener('ey-tts-unavailable',()=>status('⚠️ Не удалось получить голосовой файл. Ответ оставлен текстом; восстанавливаю микрофон.'));
-function status(t){let e=document.getElementById('wakeStatus');if(!e){e=document.createElement('div');e.id='wakeStatus';e.setAttribute('role','status');e.setAttribute('aria-live','polite');e.style.cssText='position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:99;padding:10px 12px;border-radius:14px;background:rgba(20,20,24,.96);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,.35)';document.body.appendChild(e)}e.textContent=t;e.style.opacity=t?'1':'0';e.style.pointerEvents='none'}
-const wake=/^\s*эй(?:[\s,;:!?.-]+|$)/iu;
-function extract(t){t=String(t||'').trim();const m=t.match(wake);return m?{wake:true,cmd:t.slice(m[0].length).trim()}:{wake:false,cmd:t}}
-function pump(){clearTimeout(pumpTimer);pumpTimer=setTimeout(async()=>{if(paused)return;if(processing||busy){pump();return}const q=String(wakeQueue.shift()||'').trim();if(!q){if(!processing&&!busy&&!paused&&!r)setTimeout(()=>start(true),120);return}processing=true;status('🟢 Выполняю…');try{try{r?.stop?.()}catch{};r=null;window.__interruptSpeech?.();await new Promise(ok=>setTimeout(ok,80));if(!paused){document.getElementById('input').value=q;window.__wakeCommandActive=true;try{await Promise.resolve(window.send?.())}finally{window.__wakeCommandActive=false}}}finally{processing=false;if(!paused){if(wakeQueue.length)pump();else window.__wakeResponseReady?.()}}},120)}
-function enqueue(q){q=String(q||'').trim();if(!q)return;if(busy)window.__cancelActiveChat?.();wakeQueue.push(q);pump()}
-let readyGeneration=0;function responseReady(){if(paused||wakeQueue.length)return;const gen=++readyGeneration;const retry=async()=>{if(paused||wakeQueue.length||gen!==readyGeneration)return;if(processing||busy){setTimeout(retry,100);return}let finished=false;try{await Promise.race([Promise.resolve(window.__ttsPromise).then(()=>{finished=true}).catch(()=>{finished=true}),new Promise(ok=>setTimeout(ok,23000))])}catch{};if(!finished)window.__interruptSpeech?.();await new Promise(ok=>setTimeout(ok,iosWebKit?2200:500));if(paused||wakeQueue.length||gen!==readyGeneration||processing||busy)return;status('🟡 Возобновляю слушание…');start(true)};retry()}
-function make(){const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
-x.onstart=()=>{starting=false;restarting=false;startedOnce=true;startFailures=0;restartAttempt=0;clearTimeout(silenceTimer);if(!paused)status(processing?'🟡 Обрабатываю…':'🟢 Слушаю «Эй»');armSilenceWatchdog(x)};
-x.onresult=e=>{clearTimeout(silenceTimer);if(paused)return;let text='';for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)text+=(text?' ':'')+e.results[i][0].transcript.trim()}text=text.trim();if(!text)return;const p=extract(text);if(p.wake){if(p.cmd){armedText='';armedUntil=0;enqueue(p.cmd)}else{armedText='';armedUntil=Date.now()+12000;status('🟢 Слушаю…')}}else if(Date.now()<armedUntil){const q=(armedText+' '+p.cmd).trim();armedText=q;armedUntil=Date.now()+12000;enqueue(q);armedText='';armedUntil=0}};
-x.onerror=e=>{starting=false;restarting=false;const code=e?.error||'unknown';if(code==='not-allowed'||code==='service-not-allowed'){status('🎙️ Разреши микрофон для Safari');return}if(enabled&&!paused&&!processing&&code!=='aborted')status('🟡 Возобновляю слушание…')};
-x.onend=()=>{clearTimeout(silenceTimer);starting=false;if(r!==x)return;r=null;if(!enabled||paused||processing||restarting)return;restarting=true;status('🟡 Возобновляю слушание…');const delay=iosWebKit?Math.min(3500,700*(restartAttempt+1)):350;setTimeout(()=>{restarting=false;if(enabled&&!paused&&!processing&&!busy)start(true)},delay)};
-return x}
-function armSilenceWatchdog(x){clearTimeout(silenceTimer);silenceTimer=setTimeout(()=>{if(r!==x||!enabled||paused||processing||busy)return;status('⚠️ Распознавание зависло без ответа. Перезапускаю микрофон…');r=null;try{x.abort()}catch{}const delay=[1000,2000,3500,5000][Math.min(restartAttempt++,3)];setTimeout(()=>{if(enabled&&!paused&&!processing&&!busy&&!r)start(true)},delay)},16000)}
-function start(forceNew=false){if(!SR||!enabled||paused||processing||busy||starting)return;if(forceNew){try{r?.abort?.()}catch{};r=null}if(!r){r=make()}try{starting=true;r.start()}catch(e){starting=false;r=null;startFailures++;if(startFailures>=3){status('⚠️ Safari не перезапустил микрофон. Коснись экрана, чтобы повторить, или нажми 🎙️ Голос.');return}status('🟡 Возобновляю слушание…');setTimeout(()=>{if(enabled&&!paused&&!processing&&!busy)start(true)},500)}}
-function kick(){if(!SR){status('⚠️ Автоматическое слово «Эй» недоступно в этом браузере. Используй кнопку «🎙️ Голос».');return}if(!paused&&!startedOnce)start(true)}
-window.__interruptSpeech=interruptSpeech;window.__pauseWake=()=>{paused=true;processing=false;armedUntil=0;armedText='';wakeQueue=[];clearTimeout(pumpTimer);try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}r=null;starting=false;restarting=false;status('🎙️ Голосовой ввод: режим «Эй» временно приостановлен')};
-window.__resumeWake=()=>{if(!enabled)return;paused=false;processing=false;armedUntil=0;armedText='';if(!SR){status('⚠️ Автоматическое слово «Эй» недоступно в этом браузере. Для вопроса нажми «🎙️ Голос».');return}status('🟡 Возобновляю слушание…');setTimeout(()=>{if(!enabled||paused)return;start(true)},300)};
-window.__wakeStart=()=>{paused=false;if(!SR){status('⚠️ Автоматическое слово «Эй» недоступно в этом браузере. Для вопроса нажми «🎙️ Голос».');return}status('🟡 Запускаю слушание…');start(true)};window.__wakeResponseReady=responseReady;
-window.addEventListener('load',()=>setTimeout(kick,700));document.addEventListener('DOMContentLoaded',()=>setTimeout(kick,300));if(SR){['touchstart','pointerdown','click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{window.__primeTtsAudio?.();if(!paused&&!processing&&!busy&&!r){startFailures=0;start(false)}},{passive:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!busy&&!r)setTimeout(()=>start(true),300)});}
-window.addEventListener('beforeunload',()=>{enabled=false;try{r?.abort?.()}catch{}try{r?.stop?.()}catch{}});
+const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)&&/AppleWebKit/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
+let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false, errorStreak=0;
+let restartTimer=null, silenceTimer=null, resumeToken=0, armedUntil=0, queue=[], attempts=0;
+function status(message, listening=false){
+ let el=document.getElementById('wakeStatus');
+ if(!el){el=document.createElement('div');el.id='wakeStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:99;padding:10px 12px;border-radius:14px;background:rgba(20,20,24,.96);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,.35)';document.body.appendChild(el)}
+ el.textContent=message;el.style.opacity=message?'1':'0';el.dataset.listening=listening?'true':'false';
+}
+function isBusy(){return processing||!!window.__myAiBusy?.()||!!window.__myAiBusyState}
+function clearTimers(){clearTimeout(restartTimer);clearTimeout(silenceTimer);restartTimer=null;silenceTimer=null}
+function extract(raw){
+ const t=String(raw||'').trim();
+ const m=t.match(/^\s*эй(?:[\s,;:!?.-]+|$)/iu);
+ return m?{wake:true,command:t.slice(m[0].length).trim()}:{wake:false,command:t};
+}
+function scheduleStart(delay=350){
+ clearTimeout(restartTimer);
+ if(!enabled||paused||permissionBlocked)return;
+ restartTimer=setTimeout(()=>{
+  restartTimer=null;
+  if(!enabled||paused||permissionBlocked)return;
+  if(isBusy()||starting){scheduleStart(350);return}
+  start();
+ },delay);
+}
+async function resumeAfterAnswer(){
+ const token=++resumeToken;
+ for(let i=0;i<180;i++){
+  if(token!==resumeToken||paused||!enabled)return;
+  if(!isBusy())break;
+  await new Promise(ok=>setTimeout(ok,250));
+ }
+ if(token!==resumeToken||paused||!enabled)return;
+ const tts=window.__ttsPromise;
+ if(tts&&typeof tts.then==='function'){
+  await Promise.race([Promise.resolve(tts).catch(()=>{}),new Promise(ok=>setTimeout(ok,45000))]);
+ }
+ if(token!==resumeToken||paused||!enabled)return;
+ await new Promise(ok=>setTimeout(ok,ios?900:350));
+ if(token!==resumeToken||paused||!enabled)return;
+ if(isBusy()){void resumeAfterAnswer();return}
+ if(queue.length){processQueue();return}
+ if(!permissionBlocked){status('🟡 Возобновляю слушание…');scheduleStart(150)}
+}
+function stopCurrent(abort=true){
+ clearTimeout(silenceTimer);silenceTimer=null;
+ const old=rec;rec=null;starting=false;
+ if(old){try{abort?old.abort():old.stop()}catch{}}
+}
+function enqueue(command){
+ const q=String(command||'').trim();
+ if(!q)return;
+ queue.push(q);
+ stopCurrent(true);
+ processQueue();
+}
+async function processQueue(){
+ if(processing||paused||!enabled)return;
+ processing=true;clearTimers();stopCurrent(true);
+ try{
+  while(queue.length&&!paused&&enabled){
+   const q=queue.shift();
+   status('🟡 Выполняю вопрос…');
+   const input=document.getElementById('input');
+   if(!input||typeof window.send!=='function'){status('🔴 Не найдено поле вопроса или обработчик отправки.');break}
+   input.value=q;window.__wakeCommandActive=true;
+   try{await Promise.resolve(window.send(q))}
+   catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
+   finally{window.__wakeCommandActive=false}
+  }
+ }finally{
+  processing=false;
+  if(!paused&&enabled){if(queue.length)processQueue();else void resumeAfterAnswer()}
+ }
+}
+function createRecognition(){
+ const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
+ x.onstart=()=>{
+  if(rec!==x)return;
+  starting=false;attempts=0;
+  status('🟢 Эй слушает — скажи «Эй» и вопрос',true);
+  clearTimeout(silenceTimer);
+  silenceTimer=setTimeout(()=>{
+   if(rec!==x||paused||processing)return;
+   status('🟡 Перезапускаю распознавание после тишины…');
+   stopCurrent(true);scheduleStart(Math.min(3500,700*(++attempts)));
+  },18000);
+ };
+ x.onresult=e=>{
+  if(rec!==x||paused)return;
+  clearTimeout(silenceTimer);
+  let spoken='';
+  for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)spoken+=' '+String(e.results[i][0]?.transcript||'');
+  spoken=spoken.trim();if(!spoken)return;
+  errorStreak=0;
+  const parsed=extract(spoken);
+  if(parsed.wake){
+   if(parsed.command){armedUntil=0;enqueue(parsed.command)}
+   else{armedUntil=Date.now()+12000;status('🟢 Слушаю. Теперь задай вопрос…',true);stopCurrent(false);scheduleStart(250)}
+   return;
+  }
+  if(Date.now()<armedUntil){armedUntil=0;enqueue(spoken)}
+ };
+ x.onerror=e=>{
+  if(rec!==x)return;
+  starting=false;clearTimeout(silenceTimer);
+  const code=String(e?.error||'unknown');
+  if(code==='not-allowed'||code==='service-not-allowed'){
+   permissionBlocked=true;status('🎙️ Safari не дал доступ к микрофону. Разреши микрофон и нажми экран, чтобы повторить.');stopCurrent(true);return;
+  }
+  if(code==='audio-capture'){
+   permissionBlocked=true;status('🎙️ Микрофон недоступен. Проверь разрешение Safari и нажми экран для повтора.');stopCurrent(true);return;
+  }
+  if(code!=='aborted'){
+   errorStreak++;
+   if(errorStreak>=4){permissionBlocked=true;status('⚠️ Safari несколько раз прервал распознавание. Коснись экрана или нажми «🎙️ Голос», чтобы восстановить микрофон.');stopCurrent(true);return}
+   status('🟡 Распознавание прервано ('+code+'). Восстанавливаю…');
+   stopCurrent(true);scheduleStart([500,1200,2500][Math.min(errorStreak-1,2)]);
+  }
+ };
+ x.onend=()=>{
+  clearTimeout(silenceTimer);
+  if(rec!==x)return;
+  rec=null;starting=false;
+  if(!enabled||paused||processing||permissionBlocked)return;
+  scheduleStart(Math.min(3000,ios?650+attempts*450:300));
+ };
+ return x;
+}
+function start(){
+ if(!SR){status('⚠️ В этом браузере нет распознавания речи. Используй кнопку «🎙️ Голос».');return}
+ if(!enabled||paused||starting||rec||isBusy()||permissionBlocked)return;
+ try{rec=createRecognition();starting=true;rec.start()}
+ catch(e){rec=null;starting=false;attempts++;status('🟡 Safari не запустил микрофон. Повтор '+attempts+'/4…');if(attempts<4)scheduleStart(Math.min(4000,500*attempts));else status('🎙️ Safari остановил автоматический микрофон. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
+}
+window.__interruptSpeech=window.__interruptSpeech||(()=>{});
+window.__pauseWake=()=>{
+ paused=true;resumeToken++;clearTimers();armedUntil=0;queue=[];stopCurrent(true);
+ status('🎙️ Голосовой режим временно приостановлен');
+};
+window.__resumeWake=()=>{
+ paused=false;permissionBlocked=false;errorStreak=0;armedUntil=0;
+ if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
+ status('🟡 Запускаю микрофон…');scheduleStart(250);
+};
+window.__wakeStart=()=>{
+ paused=false;enabled=true;permissionBlocked=false;attempts=0;errorStreak=0;
+ if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
+ status('🟡 Запускаю микрофон…');scheduleStart(50);
+};
+window.__wakeResponseReady=()=>{void resumeAfterAnswer()};
+window.addEventListener('load',()=>scheduleStart(800));
+document.addEventListener('DOMContentLoaded',()=>scheduleStart(400));
+['pointerdown','touchstart','click','keydown'].forEach(type=>document.addEventListener(type,()=>{
+ try{window.__primeTtsAudio?.()}catch{}
+ if(permissionBlocked){permissionBlocked=false;attempts=0;errorStreak=0;scheduleStart(100)}
+ else if(!paused&&!processing&&!rec&&!starting&&!isBusy())scheduleStart(100);
+},{passive:true}));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!rec&&!isBusy())scheduleStart(250)});
+window.addEventListener('beforeunload',()=>{enabled=false;clearTimers();stopCurrent(true)});
 })();</script></main></html>
 <!-- MOBILE_WAKE_CORS_HARDENED_V1 -->

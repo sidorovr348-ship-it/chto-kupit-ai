@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const APP='https://sidorovr348-ship-it.github.io/chto-kupit-ai/';
+const APP='https://ai.aliceq.ru/';
 const API='https://ai.aliceq.ru';
 
 (async()=>{
@@ -62,7 +62,7 @@ const API='https://ai.aliceq.ru';
         title: document.title,
         wakeStart: typeof window.__wakeStart,
         interrupt: typeof window.__interruptSpeech,
-        wakeMarker: document.documentElement.innerHTML.includes('EY_WAKE_WORD_V1'),
+        wakeMarker: document.documentElement.innerHTML.includes('EY_WAKE_WORD_V2_STATE_MACHINE'),
         scriptCount: document.scripts.length,
         inlineScriptLengths: [...document.scripts].map(s => (s.textContent || '').length),
         status: document.getElementById('wakeStatus')?.textContent || ''
@@ -70,7 +70,7 @@ const API='https://ai.aliceq.ru';
       throw Error('wake bootstrap timeout: ' + JSON.stringify({ ...d, errors: errors.slice(-10) }) + ' | ' + err.message);
     }
     await page.evaluate(()=>window.__wakeStart());
-    try{await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000})}catch(err){const d=await page.evaluate(()=>({runs:window.__wakeFake?.runs,hasSR:!!window.SpeechRecognition,hasWakeStart:typeof window.__wakeStart,html:document.documentElement.innerHTML.includes('EY_WAKE_WORD_V1'),status:document.getElementById('wakeStatus')?.textContent||'',errors:window.__wakeTestErrors||[]}));throw Error('wake startup timeout: '+err.message+' | WAKE_START_DEBUG '+JSON.stringify(d));}
+    try{await page.waitForFunction(()=>window.__wakeFake?.runs>=1,null,{timeout:10000})}catch(err){const d=await page.evaluate(()=>({runs:window.__wakeFake?.runs,hasSR:!!window.SpeechRecognition,hasWakeStart:typeof window.__wakeStart,html:document.documentElement.innerHTML.includes('EY_WAKE_WORD_V2_STATE_MACHINE'),status:document.getElementById('wakeStatus')?.textContent||'',errors:window.__wakeTestErrors||[]}));throw Error('wake startup timeout: '+err.message+' | WAKE_START_DEBUG '+JSON.stringify(d));}
     for(let n=1;n<=3;n++){
       try{
         await page.waitForFunction((count)=>[...document.querySelectorAll('#chat .msg.user')].filter(x=>x.textContent?.trim()==='кто такой Пётр Первый').length>=count,n,{timeout:90000});
