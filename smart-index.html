@@ -130,7 +130,7 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
 <script>(function(){'use strict';
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)&&/AppleWebKit/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
-let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false;
+let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false, errorStreak=0;
 let restartTimer=null, silenceTimer=null, resumeToken=0, armedUntil=0, queue=[], attempts=0;
 function status(message, listening=false){
  let el=document.getElementById('wakeStatus');
@@ -223,6 +223,7 @@ function createRecognition(){
   let spoken='';
   for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)spoken+=' '+String(e.results[i][0]?.transcript||'');
   spoken=spoken.trim();if(!spoken)return;
+  errorStreak=0;
   const parsed=extract(spoken);
   if(parsed.wake){
    if(parsed.command){armedUntil=0;enqueue(parsed.command)}
@@ -241,7 +242,12 @@ function createRecognition(){
   if(code==='audio-capture'){
    permissionBlocked=true;status('🎙️ Микрофон недоступен. Проверь разрешение Safari и нажми экран для повтора.');stopCurrent(true);return;
   }
-  if(code!=='aborted')status('🟡 Распознавание прервано ('+code+'). Восстанавливаю…');
+  if(code!=='aborted'){
+   errorStreak++;
+   if(errorStreak>=4){permissionBlocked=true;status('⚠️ Safari несколько раз прервал распознавание. Коснись экрана или нажми «🎙️ Голос», чтобы восстановить микрофон.');stopCurrent(true);return}
+   status('🟡 Распознавание прервано ('+code+'). Восстанавливаю…');
+   stopCurrent(true);scheduleStart([500,1200,2500][Math.min(errorStreak-1,2)]);
+  }
  };
  x.onend=()=>{
   clearTimeout(silenceTimer);
