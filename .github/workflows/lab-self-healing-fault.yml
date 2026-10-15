@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Never stop the production backend while the acceptance suite is exercising it.
+concurrency:
+  group: my-ai-unified-acceptance-suite
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
