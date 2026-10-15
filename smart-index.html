@@ -169,6 +169,7 @@ async function resumeAfterAnswer(){
  if(token!==resumeToken||paused||!enabled)return;
  await new Promise(ok=>setTimeout(ok,ios?900:350));
  if(token!==resumeToken||paused||!enabled)return;
+ if(isBusy()){void resumeAfterAnswer();return}
  if(queue.length){processQueue();return}
  if(!permissionBlocked){status('🟡 Возобновляю слушание…');scheduleStart(150)}
 }
