@@ -9,4 +9,8 @@ for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])
 // Regression guard: the final local fallback must not turn a spent deadline into Ollama's 60-second default.
 assert.ok(src.includes("if(canStart(6500)){try{const local=await callOllama(messages,{numPredict:300,timeoutMs:Math.min(6000,remaining())})"),'final Ollama fallback must be guarded by remaining deadline');
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(7000,remaining())"),'unbounded final Ollama fallback must stay removed');
+// Regression guard: chat admission must fail fast under load and share one absolute deadline.
+assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
+assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
+assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
 console.log('SOURCE_SMOKE_OK');
