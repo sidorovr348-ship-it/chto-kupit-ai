@@ -208,7 +208,7 @@ function createRecognition(){
  const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
  x.onstart=()=>{
   if(rec!==x)return;
-  starting=false;attempts=0;
+  starting=false;attempts=0;errorStreak=0;
   status('🟢 Эй слушает — скажи «Эй» и вопрос',true);
   clearTimeout(silenceTimer);
   silenceTimer=setTimeout(()=>{
