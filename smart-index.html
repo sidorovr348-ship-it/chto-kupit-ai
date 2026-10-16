@@ -58,6 +58,12 @@ function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return
     add(answer,'ai');if(window.__wakeCommandActive)void say(answer);else void say(answer);
     window.__wakeResponseReady?.();return;
   }
+  if(/^(?:эй[\s,;:!?.-]*)?(?:что ты умеешь|что умеешь|что ты можешь|твои возможности|чем ты можешь помочь)[?!.,\s]*$/iu.test(t)){
+    add(t,'user');input.value='';
+    const answer='Я могу отвечать на вопросы, искать актуальную информацию, сравнивать товары, помогать с текстами и документами, анализировать фото и файлы, а также отвечать голосом.';
+    messages.push({role:'user',content:t},{role:'assistant',content:answer});
+    add(answer,'ai');void say(answer);window.__wakeResponseReady?.();return;
+  }
   add(t,'user');input.value='';messages.push({role:'user',content:t});
   let w=add('⏳');busy=true;
   const requestController=new AbortController();activeChatController=requestController;
@@ -166,7 +172,7 @@ async function resumeAfterAnswer(){
  const tts=window.__ttsPromise;
  status('🟡 Ответ получен — завершаю озвучивание…');
  if(tts&&typeof tts.then==='function'){
-  await Promise.race([Promise.resolve(tts).catch(()=>{}),new Promise(ok=>setTimeout(ok,45000))]);
+  await Promise.race([Promise.resolve(tts).catch(()=>{}),new Promise(ok=>setTimeout(ok,10000))]);
  }
  if(token!==resumeToken||paused||!enabled)return;
  await new Promise(ok=>setTimeout(ok,ios?900:350));
