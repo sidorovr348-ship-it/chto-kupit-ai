@@ -132,11 +132,29 @@ const searchCache=new Map();
 async function searchWeb(query,num=10){const cacheKey=String(query||'').trim().toLowerCase();const cached=searchCache.get(cacheKey);if(cached&&Date.now()-cached.ts<60000)return cached.results.slice(0,num);const k=keyOf('SERPER_API_KEY','SERPER_KEY');if(k&&Date.now()>=searchBlockedUntil.serper){try{const r=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':k,'Content-Type':'application/json'},body:JSON.stringify({q:String(query).slice(0,500),gl:'ru',hl:'ru',num}),signal:AbortSignal.timeout(8000)});const raw=await r.text();let d={};try{d=JSON.parse(raw)}catch{}if(r.ok){const out=(d.organic||[]).slice(0,num).map(x=>({title:String(x.title||''),link:String(x.link||''),snippet:String(x.snippet||'')})).filter(x=>x.link.startsWith('http://')||x.link.startsWith('https://'));if(out.length){boundedCacheSet(searchCache,String(query||'').trim().toLowerCase(),{ts:Date.now(),results:out},100);return out}}console.error('SERPER_SEARCH_FAILED',r.status,String(d.message||d.error||raw).slice(0,300));if(r.status===400&&/credit|balance|limit/i.test(String(d.message||d.error||raw)))searchBlockedUntil.serper=Date.now()+600000}catch(e){console.error('SERPER_SEARCH_FAILED',e.message)}}const out=await searchWebFallback(query,num);boundedCacheSet(searchCache,cacheKey,{ts:Date.now(),results:out},100);return out}
 async function moscowWeather(){
   const u='https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6173&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m&timezone=Europe/Moscow';
-  const r=await fetch(u,{headers:{'Accept':'application/json','User-Agent':'MyAIUnified/1.0'},signal:AbortSignal.timeout(7000)});
-  if(!r.ok)throw Error('Weather API HTTP '+r.status);
-  const d=await r.json(),c=d.current||{},code=Number(c.weather_code);
-  const desc=code===0?'ясно':code<=3?'переменная облачность':code<=48?'туман':code<=57?'морось':code<=67?'дождь':code<=77?'снег':code<=82?'ливни':code<=86?'снегопад':'гроза';
-  return 'Сейчас в Москве: '+String(c.temperature_2m)+' °C, ощущается как '+String(c.apparent_temperature)+' °C; '+desc+'. Влажность '+String(c.relative_humidity_2m)+'%; ветер '+String(c.wind_speed_10m)+' км/ч, направление '+String(c.wind_direction_10m)+'°; облачность '+String(c.cloud_cover)+'%; осадки сейчас '+String(c.precipitation)+' мм.';
+  try{
+    const r=await fetch(u,{headers:{'Accept':'application/json','User-Agent':'MyAIUnified/1.0'},signal:AbortSignal.timeout(7000)});
+    if(!r.ok)throw Error('Weather API HTTP '+r.status);
+    const d=await r.json(),c=d.current||{},code=Number(c.weather_code);
+    if(!Number.isFinite(Number(c.temperature_2m)))throw Error('Weather API returned no current temperature');
+    const desc=code===0?'ясно':code<=3?'переменная облачность':code<=48?'туман':code<=57?'морось':code<=67?'дождь':code<=77?'снег':code<=82?'ливни':code<=86?'снегопад':'гроза';
+    return 'Сейчас в Москве: '+String(c.temperature_2m)+' °C, ощущается как '+String(c.apparent_temperature)+' °C; '+desc+'. Влажность '+String(c.relative_humidity_2m)+'%; ветер '+String(c.wind_speed_10m)+' км/ч, направление '+String(c.wind_direction_10m)+'°; облачность '+String(c.cloud_cover)+'%; осадки сейчас '+String(c.precipitation)+' мм.';
+  }catch(primaryError){
+    console.error('WEATHER_PRIMARY_FAILED',String(primaryError?.message||primaryError));
+    try{
+      const r=await fetch('https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=55.7558&lon=37.6173',{headers:{'Accept':'application/json','User-Agent':'MyAIUnified/1.0 (https://ai.aliceq.ru)'},signal:AbortSignal.timeout(6000)});
+      if(!r.ok)throw Error('MET_NO_HTTP_'+r.status);
+      const d=await r.json(),row=d.properties?.timeseries?.[0]?.data,cur=row?.instant?.details;
+      if(!cur||!Number.isFinite(Number(cur.air_temperature)))throw Error('MET_NO_NO_CURRENT_WEATHER');
+      const symbol=String(row.next_1_hours?.summary?.symbol_code||row.next_6_hours?.summary?.symbol_code||'');
+      const desc=/thunder/.test(symbol)?'гроза':/snow|sleet/.test(symbol)?'снег':/rain|shower/.test(symbol)?'дождь':/fog/.test(symbol)?'туман':/clearsky/.test(symbol)?'ясно':/partlycloudy|cloudy/.test(symbol)?'облачно':'переменная облачность';
+      const n=(v)=>Number.isFinite(Number(v))?Number(v):0;
+      return 'Сейчас в Москве: '+n(cur.air_temperature)+' °C; '+desc+'. Влажность '+n(cur.relative_humidity)+'%; ветер '+n(cur.wind_speed)+' м/с, направление '+n(cur.wind_from_direction)+'°; облачность '+n(cur.cloud_area_fraction)+'%; осадки за ближайший час '+n(row.next_1_hours?.details?.precipitation_amount)+' мм.';
+    }catch(fallbackError){
+      console.error('WEATHER_FALLBACK_FAILED',String(fallbackError?.message||fallbackError));
+      throw primaryError;
+    }
+  }
 }
 const wantsMoscowWeather=q=>/москв/iu.test(String(q||''))&&/(погод|температур|дожд|снег|ветер|облач)/iu.test(String(q||''));
 const wantsSearch=q=>/(найди|найти|поищи|поиск|кто сейчас|что сейчас|сегодня|сейчас|последн|новост|источник|ссылк|актуальн|обновл|на данный момент|прямо сейчас|сколько стоит|какая цена|время в|курс|погода|температур|прогноз|расписани|результат|событи|выпуск|версия|проверь|узнай|сравни|исследуй)/iu.test(q);
