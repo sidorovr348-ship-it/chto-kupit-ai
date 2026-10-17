@@ -19,5 +19,5 @@ assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
-for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
+for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode", "localStorage.getItem('ey-companion-mode')", "localStorage.setItem('ey-companion-mode'"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
 console.log('SOURCE_SMOKE_OK');
