@@ -19,6 +19,7 @@ assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
+assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fallback.model,warning:fallback.warning"),'whole-route timeout response must use the frontend-compatible result field');
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
