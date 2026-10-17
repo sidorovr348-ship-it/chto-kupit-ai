@@ -51,8 +51,13 @@ const API='https://ai.aliceq.ru';
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   try{
     await page.goto(APP+'?wake-e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
+    // Tool buttons live inside a hidden modal. Open the tools sheet before clicking
+    // the sound toggle; clicking a hidden element makes Playwright fail before
+    // the wake-word state machine is exercised.
+    await page.locator('#toolsToggle').click();
     const sound=page.locator('#sound');
     if(await sound.count() && await sound.textContent()==='🔊 Звук') await sound.click();
+    await page.locator('#toolsClose').click();
     await page.locator('body').click({position:{x:196,y:400}});
     try {
       await page.waitForFunction(()=>typeof window.__wakeStart==='function',null,{timeout:10000});
