@@ -22,5 +22,7 @@ const ui=fs.readFileSync('smart-index.html','utf8');
 for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode", "localStorage.getItem('ey-companion-mode')", "localStorage.setItem('ey-companion-mode'"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
 // Secondary actions should stay out of the reading area until the user opens the tools dialog.
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
+assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
+assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
 console.log('SOURCE_SMOKE_OK');
