@@ -16,7 +16,7 @@ const API='https://ai.aliceq.ru';
   await context.addInitScript(()=>{
     class FakeSpeechRecognition{
       static runs=0;
-      static commands=[['Эй','кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый']];
+      static commands=[['Эй','кто такой','Пётр Первый'],['кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый']];
       constructor(){
         this.continuous=true;
         this.ended=false;
