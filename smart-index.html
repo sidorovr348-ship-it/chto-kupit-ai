@@ -144,7 +144,7 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)&&/AppleWebKit/i.test(navigator.userAgent)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(navigator.userAgent);
 let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false, errorStreak=0;
-let restartTimer=null, silenceTimer=null, resumeToken=0, armedUntil=0, queue=[], attempts=0;
+let restartTimer=null, silenceTimer=null, resumeToken=0, armedUntil=0, followupUntil=0, queue=[], attempts=0;
 function status(message, listening=false){
  let el=document.getElementById('wakeStatus');
  if(!el){el=document.createElement('div');el.id='wakeStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:99;padding:10px 12px;border-radius:14px;background:rgba(20,20,24,.96);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;pointer-events:none;backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,.35)';document.body.appendChild(el)}
@@ -185,7 +185,7 @@ async function resumeAfterAnswer(){
  if(token!==resumeToken||paused||!enabled)return;
  if(isBusy()){void resumeAfterAnswer();return}
  if(queue.length){processQueue();return}
- if(!permissionBlocked){status('🟡 Возобновляю слушание…');scheduleStart(150)}
+ if(!permissionBlocked){followupUntil=Date.now()+12000;status('🟢 Можно сразу задать следующий вопрос',true);scheduleStart(150)}
 }
 function stopCurrent(abort=true){
  clearTimeout(silenceTimer);silenceTimer=null;
@@ -195,7 +195,7 @@ function stopCurrent(abort=true){
 function enqueue(command){
  const q=String(command||'').trim();
  if(!q)return;
- queue.push(q);
+ followupUntil=0;queue.push(q);
  stopCurrent(true);
  processQueue();
 }
@@ -244,7 +244,7 @@ function createRecognition(){
    else{armedUntil=Date.now()+12000;status('🟢 Слушаю. Теперь задай вопрос…',true);/* SpeechRecognition with continuous=false ends itself after this final result. Let onend schedule the next instance; stopping and restarting here races Safari's native recognizer and can leave a false green listening state. */}
    return;
   }
-  if(Date.now()<armedUntil){armedUntil=0;enqueue(spoken)}
+  if(Date.now()<armedUntil||Date.now()<followupUntil){armedUntil=0;followupUntil=0;enqueue(spoken)}
  };
  x.onerror=e=>{
   if(rec!==x)return;
