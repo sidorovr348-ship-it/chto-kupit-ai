@@ -57,7 +57,8 @@ const API='https://ai.aliceq.ru';
     await page.locator('#toolsToggle').click();
     const sound=page.locator('#sound');
     if(await sound.count() && await sound.textContent()==='🔊 Звук') await sound.click();
-    await page.locator('#toolsClose').click();
+    // Selecting a tool automatically closes the modal through its delegated
+    // click handler, so do not click the now-hidden close button.
     await page.locator('body').click({position:{x:196,y:400}});
     try {
       await page.waitForFunction(()=>typeof window.__wakeStart==='function',null,{timeout:10000});
