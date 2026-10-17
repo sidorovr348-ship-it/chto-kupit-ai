@@ -25,5 +25,7 @@ for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-mo
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})])'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
+assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
 console.log('SOURCE_SMOKE_OK');
