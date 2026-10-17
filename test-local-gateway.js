@@ -27,5 +27,8 @@ assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech
 assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})])'),'wake recovery must not wait forever for a stalled TTS task');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
 assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
+assert.ok(ui.includes('followupUntil=Date.now()+12000'),'wake listener must accept a direct follow-up question for 12 seconds after an answer');
+assert.ok(ui.includes('Date.now()<armedUntil||Date.now()<followupUntil'),'follow-up speech must be queued even when the wake word is omitted');
+assert.ok(s.includes('followupUntil=0;queue.push(q);'),'consuming a follow-up must clear the follow-up window');
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
 console.log('SOURCE_SMOKE_OK');
