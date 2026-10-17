@@ -172,7 +172,7 @@ async function resumeAfterAnswer(){
  const tts=window.__ttsPromise;
  status('🟡 Ответ получен — завершаю озвучивание…');
  if(tts&&typeof tts.then==='function'){
-  await Promise.race([Promise.resolve(tts).catch(()=>{}),new Promise(ok=>setTimeout(ok,10000))]);
+  await Promise.resolve(tts).catch(()=>{});
  }
  if(token!==resumeToken||paused||!enabled)return;
  await new Promise(ok=>setTimeout(ok,ios?900:350));
