@@ -33,4 +33,6 @@ assert.ok(ui.includes('followupUntil=0;queue.push(q);'),'consuming a follow-up m
 assert.ok(ui.includes("status('🟡 Возобновляю слушание…');scheduleStart(150)"),'UI must not show a green listening state before Safari actually starts recognition');
 assert.ok(ui.includes("status('🟢 Эй слушает — скажи «Эй» и вопрос',true)"),'green listening state must be set by the recognizer onstart event');
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
+const wakeE2E=fs.readFileSync('wake-buffer-e2e.mjs','utf8');
+assert.ok(wakeE2E.includes("static commands=[['Эй','кто такой','Пётр Первый'],['кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый']];"),'hands-free E2E must cover a follow-up question without repeating the wake word');
 console.log('SOURCE_SMOKE_OK');
