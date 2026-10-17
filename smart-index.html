@@ -116,8 +116,13 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
       try{
         add('⏳ Распознаю весь вопрос…');
         const ext=b.type.includes('mp4')?'m4a':b.type.includes('ogg')?'ogg':'webm';
-        const tr=await fetch(API+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store'});
-        const raw=await tr.text();let j={};try{j=JSON.parse(raw)}catch{}
+        const sttController=new AbortController();const sttTimer=setTimeout(()=>sttController.abort(),25000);
+        let tr,raw,j={};
+        try{
+          tr=await fetch(API+'/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36))},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store',signal:sttController.signal});
+          raw=await tr.text();try{j=JSON.parse(raw)}catch{}
+        }catch(e){if(e.name==='AbortError')throw Error('Сервер распознавания не ответил за 25 секунд. Повтори голосовой запрос.');throw Error('Не удалось связаться с сервером распознавания. Проверь соединение.')}
+        finally{clearTimeout(sttTimer)}
         if(!tr.ok)throw Error(j.error||'Ошибка распознавания');
         const text=String(j.text||'').trim();if(!text)throw Error('Речь не распознана');
         input.value=text;
