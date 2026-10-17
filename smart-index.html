@@ -48,7 +48,7 @@ function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return
       const r='Сейчас в Москве '+now+'.';
       add(r,'ai');messages.push({role:'user',content:t},{role:'assistant',content:r});
       if(wakeOwned)void say(r);else void say(r);
-      window.__wakeResponseReady?.();
+      if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
       return;
     }finally{if(!wakeOwned)window.__resumeWake?.()}
   }
@@ -57,13 +57,13 @@ function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return
     const answer='Я Эй — My AI Unified, универсальный AI-помощник.';
     messages.push({role:'user',content:t},{role:'assistant',content:answer});
     add(answer,'ai');if(window.__wakeCommandActive)void say(answer);else void say(answer);
-    window.__wakeResponseReady?.();return;
+    if(!window.__wakeCommandActive)window.__wakeResponseReady?.();return;
   }
   if(/^(?:эй[\s,;:!?.-]*)?(?:что ты умеешь|что умеешь|что ты можешь|твои возможности|чем ты можешь помочь)[?!.,\s]*$/iu.test(t)){
     add(t,'user');input.value='';
     const answer='Я могу отвечать на вопросы, искать актуальную информацию, сравнивать товары, помогать с текстами и документами, анализировать фото и файлы, а также отвечать голосом.';
     messages.push({role:'user',content:t},{role:'assistant',content:answer});
-    add(answer,'ai');void say(answer);window.__wakeResponseReady?.();return;
+    add(answer,'ai');void say(answer);if(!window.__wakeCommandActive)window.__wakeResponseReady?.();return;
   }
   add(t,'user');input.value='';messages.push({role:'user',content:t});
   let w=add('⏳');busy=true;
@@ -81,19 +81,19 @@ function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return
     if(j.routeUrl){
       let d=add(j.result||'Маршрут построен.');
       let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);
-      if(window.__wakeCommandActive)void say(j.result||'Маршрут построен.');else void say(j.result||'Маршрут построен.');window.__wakeResponseReady?.();
+      if(window.__wakeCommandActive)void say(j.result||'Маршрут построен.');else void say(j.result||'Маршрут построен.');if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
     }else if(j.results&&j.results.length){
       for(let x of j.results.slice(0,12)){
         let d=add((x.store||x.merchant||'Магазин')+'\n'+(x.title||'Товар')+'\n'+(x.price!=null?x.price+' '+(x.currency||'RUB'):'Цена не указана'));
         if(x.url){let a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener';a.textContent='Открыть';d.append(a)}
       }
-      window.__wakeResponseReady?.();
+      if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
     }else{
       let r=String(j.result||'');
-      messages.push({role:'assistant',content:r});links(r);if(window.__wakeCommandActive)void say(r);else void say(r);window.__wakeResponseReady?.();
+      messages.push({role:'assistant',content:r});links(r);if(window.__wakeCommandActive)void say(r);else void say(r);if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
     }
   }catch(e){w.remove();if(!requestController.signal.aborted)add('🔴 '+e.message)}
-  finally{if(activeChatController===requestController)activeChatController=null;busy=false;if(pendingManual.length){const next=pendingManual.shift();setTimeout(()=>{interruptSpeech();send(next)},0)}else if(window.__wakeCommandActive)setTimeout(()=>window.__wakeResponseReady?.(),0)}
+  finally{if(activeChatController===requestController)activeChatController=null;busy=false;if(pendingManual.length){const next=pendingManual.shift();setTimeout(()=>{interruptSpeech();send(next)},0)}}
 }
 window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{activeChatController?.abort()}catch{}};async function blobData(f){return await new Promise((ok,no)=>{const r=new FileReader;r.onload=()=>ok(String(r.result||''));r.onerror=()=>no(r.error||Error('Не удалось прочитать аудио'));r.readAsDataURL(f)})}async function data(f){if(/^image\\//i.test(String(f.type||''))){try{const u=URL.createObjectURL(f),im=await new Promise((ok,no)=>{const x=new Image;x.onload=()=>ok(x);x.onerror=no;x.src=u}),max=1600,w=Math.min(max,im.naturalWidth||im.width),h=Math.max(1,Math.round(w*(im.naturalHeight||im.height)/(im.naturalWidth||im.width))),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);URL.revokeObjectURL(u);const b=await new Promise((ok,no)=>c.toBlob(x=>x?ok(x):no(Error('Не удалось подготовить изображение')),'image/jpeg',.86));return blobData(b)}catch{}}try{return await blobData(f)}catch{return new Promise((ok,no)=>{let r=new FileReader;r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(f)})}}async function photo(fs){let a=[...fs].slice(0,5);if(!a.length)return;let w=add('⏳ Анализирую фото…');try{let j=await api('/photo',{images:await Promise.all(a.map(data)),prompt:'Подробно проанализируй изображение по-русски. Определи предмет, товар, бренд, модель и характеристики, если видимы. Не выдумывай неизвестное.'},180000);w.remove();links(j.result);say(j.result)}catch(e){w.remove();add('🔴 '+e.message)}}function frame(v){let c=document.createElement('canvas'),w=Math.min(1280,v.videoWidth||1280),h=Math.round(w*(v.videoHeight||720)/(v.videoWidth||1280));c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);return new Promise(ok=>c.toBlob(ok,'image/jpeg',.8))}async function video(f){let u=URL.createObjectURL(f),v=document.createElement('video');v.src=u;v.muted=true;v.preload='metadata';let w=add('⏳ Анализирую видео…');try{await new Promise((ok,no)=>{v.onloadedmetadata=ok;v.onerror=no});let ts=[4,7,10].filter(x=>x<v.duration-.1);if(!ts.length)ts=[Math.max(.1,v.duration/2)];let im=[];for(let t of ts){v.currentTime=t;await new Promise(ok=>v.onseeked=ok);im.push(await data(new File([await frame(v)],'frame.jpg',{type:'image/jpeg'})))}let j=await api('/photo',{images:im,prompt:`Проанализируй последовательные кадры видео в моменты ${ts.join(', ')} секунд. Опиши, что происходит и что меняется.`},180000);w.remove();links(j.result);say(j.result)}catch(e){w.remove();add('🔴 '+e.message)}finally{URL.revokeObjectURL(u)}}async function doc(f){let w=add('⏳ Читаю '+f.name+'…');try{let j=await api('/document',{name:f.name,mime:f.type,file:await data(f)},240000);w.remove();links(j.result);say(j.result)}catch(e){w.remove();add('🔴 '+e.message)}}async function cameraOn(){try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});$('#cam').srcObject=cameraStream;$('#cameraBox').style.display='block'}catch(e){add('🔴 Камера: '+e.message)}}function cameraOff(){cameraStream?.getTracks().forEach(t=>t.stop());cameraStream=null;const v=$('#cam');if(v)v.srcObject=null;$('#cameraBox').style.display='none'}async function cameraAnalyze(){if(!cameraStream)return cameraOn();let b=await frame($('#cam'));await photo([new File([b],'camera.jpg',{type:'image/jpeg'})])}async function voice(){
   if(recorder){try{recorder.stop()}catch{}return}
