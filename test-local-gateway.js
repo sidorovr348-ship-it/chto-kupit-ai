@@ -30,5 +30,7 @@ assert.ok(ui.includes('Сервер распознавания не ответи
 assert.ok(ui.includes('followupUntil=Date.now()+12000'),'wake listener must accept a direct follow-up question for 12 seconds after an answer');
 assert.ok(ui.includes('Date.now()<armedUntil||Date.now()<followupUntil'),'follow-up speech must be queued even when the wake word is omitted');
 assert.ok(ui.includes('followupUntil=0;queue.push(q);'),'consuming a follow-up must clear the follow-up window');
+assert.ok(ui.includes("status('🟡 Возобновляю слушание…');scheduleStart(150)"),'UI must not show a green listening state before Safari actually starts recognition');
+assert.ok(ui.includes("status('🟢 Эй слушает — скажи «Эй» и вопрос',true)"),'green listening state must be set by the recognizer onstart event');
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
 console.log('SOURCE_SMOKE_OK');
