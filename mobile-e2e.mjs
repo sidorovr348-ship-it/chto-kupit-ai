@@ -33,6 +33,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/18.7 Mobile/15E148 Safari/604.1'
   });
   const page=await context.newPage();
+  const tapTool=async id=>{await page.locator('#toolsToggle').tap();await page.locator('#'+id).tap();};
   // Simulate Safari's SpeechRecognition lifecycle deterministically; this tests the app's
   // wake controller and repeated handoffs without pretending Chromium has real iOS speech.
   await page.addInitScript(() => {
@@ -118,9 +119,9 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     if(!locationPayload?.location||!Number.isFinite(Number(locationPayload.location.lat))||!Number.isFinite(Number(locationPayload.location.lon))) throw Error('mobile geolocation coordinates were not sent to backend');
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>/Ваше текущее местоположение|координаты|Точный адрес определить не удалось/.test(x.textContent||'')),n,{timeout:30000});
     const cam=page.locator('#camera');
-    await cam.tap();
+    await tapTool('camera');
     await page.waitForFunction(()=>{const v=document.querySelector('#cam');return v?.srcObject?.getVideoTracks?.()[0]?.readyState==='live'},null,{timeout:15000});
-    await page.locator('#camOff').click();
+    await tapTool('camOff');
     try {
       await page.waitForFunction(()=>{const v=document.querySelector('#cam');const b=document.querySelector('#cameraBox');return !v?.srcObject && getComputedStyle(b).display==='none'},null,{timeout:10000});
     } catch (err) {
@@ -130,15 +131,15 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
 
     n=await before();
     const fcPromise=page.waitForEvent('filechooser');
-    await page.locator('#photo').tap();
+    await tapTool('photo');
     const fc=await fcPromise;
     await fc.setFiles({name:'mobile.png',mimeType:'image/png',buffer:png});
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:120000});
 
     const voice=page.locator('#voice');
-    await voice.tap();
+    await tapTool('voice');
     await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
-    await voice.tap();
+    await tapTool('voice');
     await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
 
     // Critical regression test: three consecutive wake questions, with the listener
@@ -165,7 +166,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
 
     let dialog=false;
     page.once('dialog',async d=>{dialog=true;await d.dismiss()});
-    await page.locator('#imagegen').tap();
+    await tapTool('imagegen');
     await page.waitForTimeout(300);
     if(!dialog) throw Error('image prompt did not open');
     if(errors.length) throw Error(errors.join('\n'));
