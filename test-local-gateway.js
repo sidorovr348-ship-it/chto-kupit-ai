@@ -17,7 +17,7 @@ assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must s
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
-assert.ok(src.includes('if(b.companionMode)m.unshift({role:\'system\',content:\'Режим собеседника включён по выбору пользователя.'),'companion mode must add the behavior instructions only when explicitly enabled');
+assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
 for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
 console.log('SOURCE_SMOKE_OK');
