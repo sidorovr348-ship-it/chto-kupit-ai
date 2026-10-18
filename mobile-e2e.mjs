@@ -147,6 +147,8 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     const wakeCases=[
       {spoken:'Эй, сколько времени в Москве?',answer:/Сейчас в Москве/},
       {spoken:'Эй, кто ты?',answer:/Я Эй — My AI Unified/},
+      {spoken:'Эй, кто такой Пётр Первый?',answer:/П[её]тр|император|царь/i},
+      {spoken:'Эй, объясни фотосинтез простыми словами',answer:/фотосинтез/i},
       {spoken:'Эй, сколько времени в Москве?',answer:/Сейчас в Москве/}
     ];
     for(let i=0;i<wakeCases.length;i++){
