@@ -39,8 +39,8 @@ function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function runSelfDiagnostic(){
  const card=add('🔎 Самодиагностика Эй: проверяю сервер…');
  const lines=['Версия интерфейса: 2026-10-18-diagnostic-1'];
- async function probe(label,path,method='GET'){
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000);
+ async function probe(label,path,method='GET',timeoutMs=9000){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
    const options={method,cache:'no-store',signal:controller.signal,headers:{}};
    if(method==='POST'){options.headers['Content-Type']='application/json';options.body='{}'}
@@ -53,12 +53,12 @@ function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return
     else if(path==='/autonomy/self-check')lines.push('Результат самопроверки: '+JSON.stringify(body).slice(0,3500));
     else if(body.error)lines.push('Ошибка: '+String(body.error).slice(0,500));
    }else if(raw)lines.push('Ответ сервера (начало): '+raw.slice(0,300));
-  }catch(e){lines.push('🔴 '+label+': '+(e?.name==='AbortError'?'тайм-аут 9 секунд':String(e?.message||e)))}
+  }catch(e){lines.push('🔴 '+label+': '+(e?.name==='AbortError'?'тайм-аут '+Math.round(timeoutMs/1000)+' секунд':String(e?.message||e)))}
   finally{clearTimeout(timer)}
  }
  await probe('AI-сервер','/health');
  await probe('Статус лабораторного контура','/autonomy/status');
- await probe('Запуск самодиагностики','/autonomy/self-check','POST');
+ await probe('Запуск самодиагностики','/autonomy/self-check','POST',30000);
  card.textContent=lines.join('\n');
  chat.scrollTop=chat.scrollHeight;
 }
