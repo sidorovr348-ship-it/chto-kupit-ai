@@ -156,7 +156,19 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
       await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
       const nAi=await page.locator('#chat .msg.ai').count();
       await page.evaluate(text=>window.__fakeSpeak(text),item.spoken);
-      await page.waitForFunction(({n,pattern})=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>new RegExp(pattern).test(x.textContent||'')),{n:nAi,pattern:item.answer.source},{timeout:45000});
+      try {
+        await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!((x.textContent||'').includes('⏳'))),nAi,{timeout:48000});
+      } catch(err) {
+        const state=await page.evaluate(n=>({
+          newMessages:[...document.querySelectorAll('#chat .msg.ai')].slice(n).map(x=>(x.textContent||'').trim()).filter(Boolean),
+          busy:window.__myAiBusy?.(),
+          wakeStatus:document.querySelector('#wakeStatus')?.dataset.listening||null,
+          recognizers:window.__fakeRecognitionInstances?.map(x=>({started:x.started,lang:x.lang}))||[]
+        }),nAi);
+        throw Error('wake question '+(i+1)+' produced no AI reply in 48s; state='+JSON.stringify(state)+'; '+err.message);
+      }
+      const actualReply=await page.locator('#chat .msg.ai').evaluateAll((els,n)=>els.slice(n).map(x=>(x.textContent||'').trim()).filter(Boolean).at(-1)||'',nAi);
+      if(!new RegExp(item.answer.source).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
       await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
       await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
     }
