@@ -23,7 +23,8 @@ const sequential=[];
 for(const [label,prompt,validate] of [
  ['identity','Кто ты?',j=>/Я Эй/.test(String(j.result||''))],
  ['local-time','Сколько сейчас времени в Москве?',j=>j.route==='local-time'&&/в Москве\s+\d{2}:\d{2}:\d{2}/.test(String(j.result||''))],
- ['general-ai','Кто такой Пётр Первый? Ответь кратко двумя предложениями.',j=>/п[её]тр|император|росси/i.test(String(j.result||''))&&!j.warning&&j.provider!=='bounded-timeout-fallback']
+ ['general-ai','Кто такой Пётр Первый? Ответь кратко двумя предложениями.',j=>/п[её]тр|император|росси/i.test(String(j.result||''))&&!j.warning&&j.provider!=='bounded-timeout-fallback'],
+ ['general-chat','Как дела? Ответь одной короткой фразой.',j=>String(j.result||'').trim().length>0&&!j.warning&&j.provider!=='bounded-timeout-fallback']
 ]){
  const started=Date.now();
  const result=await req('/chat',{prompt}, {timeout:35000,retries:0});
