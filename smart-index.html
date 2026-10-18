@@ -104,7 +104,7 @@ async function send(queuedText=null){
         body.location={lat:p.coords.latitude,lon:p.coords.longitude,address:'Текущее местоположение'};
       }catch{}
     }
-    let j=await api('/chat',body,22000,requestController.signal);
+    let j=await api('/chat',body,48000,requestController.signal);
     w.remove();
     if(j.routeUrl){
       let d=add(j.result||'Маршрут построен.');
