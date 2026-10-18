@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.autonomy-state
+my-ai-unified-data
