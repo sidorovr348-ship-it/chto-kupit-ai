@@ -172,13 +172,14 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(/Macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
 let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false, errorStreak=0;
-let restartTimer=null, silenceTimer=null, resumeToken=0, armedUntil=0, followupUntil=0, queue=[], attempts=0;
+let restartTimer=null, silenceTimer=null, startWatchdog=null, resumeToken=0, armedUntil=0, followupUntil=0, queue=[], attempts=0;
 function status(message, listening=false){
  let el=document.getElementById('wakeStatus');
  if(!el){el=document.createElement('div');el.id='wakeStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:99;padding:10px 12px;border-radius:14px;background:rgba(20,20,24,.96);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;pointer-events:none;backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,.35)';document.body.appendChild(el)}
  el.textContent=message;el.style.opacity=message?'1':'0';el.dataset.listening=listening?'true':'false';
 }
 function isBusy(){return processing||!!window.__myAiBusy?.()||!!window.__myAiBusyState}
+function clearStartWatchdog(){clearTimeout(startWatchdog);startWatchdog=null}
 function clearTimers(){clearTimeout(restartTimer);clearTimeout(silenceTimer);restartTimer=null;silenceTimer=null}
 function extract(raw){
  const t=String(raw||'').trim();
@@ -217,6 +218,7 @@ async function resumeAfterAnswer(){
 }
 function stopCurrent(abort=true){
  clearTimeout(silenceTimer);silenceTimer=null;
+ clearStartWatchdog();
  const old=rec;rec=null;starting=false;
  if(old){try{abort?old.abort():old.stop()}catch{}}
 }
@@ -250,7 +252,7 @@ function createRecognition(){
  const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
  x.onstart=()=>{
   if(rec!==x)return;
-  starting=false;attempts=0;errorStreak=0;
+  clearStartWatchdog();starting=false;attempts=0;errorStreak=0;
   status('🟢 Эй слушает — скажи «Эй» и вопрос',true);
   clearTimeout(silenceTimer);
   silenceTimer=setTimeout(()=>{
@@ -276,7 +278,7 @@ function createRecognition(){
  };
  x.onerror=e=>{
   if(rec!==x)return;
-  starting=false;clearTimeout(silenceTimer);
+  clearStartWatchdog();starting=false;clearTimeout(silenceTimer);
   const code=String(e?.error||'unknown');
   if(code==='not-allowed'||code==='service-not-allowed'){
    permissionBlocked=true;status('🎙️ Safari не дал доступ к микрофону. Разреши микрофон и нажми экран, чтобы повторить.');stopCurrent(true);return;
@@ -292,10 +294,11 @@ function createRecognition(){
   }
  };
  x.onend=()=>{
-  clearTimeout(silenceTimer);
   if(rec!==x)return;
+  clearTimeout(silenceTimer);clearStartWatchdog();
   rec=null;starting=false;
   if(!enabled||paused||processing||permissionBlocked)return;
+  status('🟡 Распознавание завершено — перезапускаю микрофон…');
   scheduleStart(Math.min(3000,ios?650+attempts*450:300));
  };
  return x;
@@ -303,8 +306,18 @@ function createRecognition(){
 function start(){
  if(!SR){status('⚠️ В этом браузере нет распознавания речи. Используй кнопку «🎙️ Голос».');return}
  if(!enabled||paused||starting||rec||isBusy()||permissionBlocked)return;
- try{rec=createRecognition();starting=true;rec.start()}
- catch(e){rec=null;starting=false;attempts++;status('🟡 Safari не запустил микрофон. Повтор '+attempts+'/4…');if(attempts<4)scheduleStart(Math.min(4000,500*attempts));else status('🎙️ Safari остановил автоматический микрофон. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
+ try{
+  const current=createRecognition();rec=current;starting=true;clearStartWatchdog();
+  startWatchdog=setTimeout(()=>{
+   if(rec!==current||!starting)return;
+   starting=false;rec=null;attempts++;
+   try{current.abort()}catch{}
+   if(attempts<4){status('🟡 Safari не подтвердил запуск микрофона. Повтор '+attempts+'/4…');scheduleStart(Math.min(4000,500*attempts))}
+   else{permissionBlocked=true;status('🎙️ Safari не подтвердил запуск микрофона. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
+  },4000);
+  current.start();
+ }
+ catch(e){clearStartWatchdog();rec=null;starting=false;attempts++;status('🟡 Safari не запустил микрофон. Повтор '+attempts+'/4…');if(attempts<4)scheduleStart(Math.min(4000,500*attempts));else status('🎙️ Safari остановил автоматический микрофон. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
 }
 window.__interruptSpeech=window.__interruptSpeech||(()=>{});
 window.__pauseWake=()=>{
