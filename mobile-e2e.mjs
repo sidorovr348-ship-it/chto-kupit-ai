@@ -57,6 +57,13 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     };
   });
   const errors=[];
+  const ttsResponses=[];
+  page.on('response',r=>{
+    try{
+      const u=new URL(r.url());
+      if(u.hostname==='ai.aliceq.ru'&&u.pathname==='/tts')ttsResponses.push({status:r.status()});
+    }catch{}
+  });
   page.on('pageerror',e=>errors.push('pageerror: '+e.message));
   // 5xx may be transient provider retries; UI operations below must still succeed.
   page.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource: the server responded with a status of 5\d\d/i.test(m.text()))errors.push('console: '+m.text())});
@@ -151,6 +158,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
       {spoken:'Эй, объясни фотосинтез простыми словами',answer:/фотосинтез|солнечная фабрика|делает себе еду/iu},
       {spoken:'Эй, сколько времени в Москве?',answer:/Сейчас в Москве/}
     ];
+    const ttsBeforeWake=ttsResponses.length;
     for(let i=0;i<wakeCases.length;i++){
       const item=wakeCases[i];
       await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
@@ -168,10 +176,15 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
         throw Error('wake question '+(i+1)+' produced no AI reply in 48s; state='+JSON.stringify(state)+'; '+err.message);
       }
       const actualReply=await page.locator('#chat .msg.ai').evaluateAll((els,n)=>els.slice(n).map(x=>(x.textContent||'').trim()).filter(Boolean).at(-1)||'',nAi);
-      if(!new RegExp(item.answer.source).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
+      if(!new RegExp(item.answer.source,item.answer.flags).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
       await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
       await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
     }
+
+    const wakeTts=ttsResponses.slice(ttsBeforeWake);
+    const ttsOk=wakeTts.filter(x=>x.status===200).length;
+    if(ttsOk<wakeCases.length) throw Error('wake playback TTS incomplete: '+ttsOk+'/'+wakeCases.length+' successful /tts responses');
+    console.log('WAKE_TTS_OK '+ttsOk+'/'+wakeCases.length);
 
     const src=await page.content();
     for(const marker of ['interimResults=false','let rec=null','function processQueue()','/chat','navigator.geolocation','EY_WAKE_WORD_V2_STATE_MACHINE']) {
