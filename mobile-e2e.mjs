@@ -168,7 +168,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
         throw Error('wake question '+(i+1)+' produced no AI reply in 48s; state='+JSON.stringify(state)+'; '+err.message);
       }
       const actualReply=await page.locator('#chat .msg.ai').evaluateAll((els,n)=>els.slice(n).map(x=>(x.textContent||'').trim()).filter(Boolean).at(-1)||'',nAi);
-      if(!new RegExp(item.answer.source).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
+      if(!new RegExp(item.answer.source,item.answer.flags).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
       await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
       await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
     }
