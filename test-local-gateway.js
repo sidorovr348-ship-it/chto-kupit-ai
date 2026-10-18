@@ -16,6 +16,7 @@ assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
+assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'provider chain must return within the bounded 18-second chat budget so a stalled provider cannot block hands-free follow-ups for 42 seconds');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
