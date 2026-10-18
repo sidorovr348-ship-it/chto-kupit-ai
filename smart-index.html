@@ -294,8 +294,8 @@ function createRecognition(){
   }
  };
  x.onend=()=>{
-  clearTimeout(silenceTimer);clearStartWatchdog();
   if(rec!==x)return;
+  clearTimeout(silenceTimer);clearStartWatchdog();
   rec=null;starting=false;
   if(!enabled||paused||processing||permissionBlocked)return;
   status('🟡 Распознавание завершено — перезапускаю микрофон…');
