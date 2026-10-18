@@ -67,7 +67,7 @@ function releaseTextSlot(){
 }
 async function askInternal(messages,vision=false){
  if(vision)return askInternalCore(messages,vision);
- const hardDeadline=Date.now()+18000;
+ const hardDeadline=Date.now()+12000;
  const acquired=await acquireTextSlot(hardDeadline);
  if(!acquired)return timeoutFallback();
  const task=askInternalCore(messages,false,hardDeadline);
