@@ -27,7 +27,7 @@ const API='https://ai.aliceq.ru';
       stop(){if(this.ended)return;this.ended=true;setTimeout(()=>this.onend?.(),10)}
       abort(){if(this.ended)return;this.ended=true;setTimeout(()=>this.onend?.(),10)}
       start(){
-        if(FakeSpeechRecognition.runs>=FakeSpeechRecognition.commands.length)return;
+        if(FakeSpeechRecognition.runs>=FakeSpeechRecognition.commands.length){setTimeout(()=>this.onstart?.(),50);return;}
         const run=FakeSpeechRecognition.runs++;
         setTimeout(()=>this.onstart?.(),50);
         const emit=(transcript)=>{
@@ -96,7 +96,8 @@ const API='https://ai.aliceq.ru';
     const users=[...await page.locator('#chat .msg.user').allTextContents()];
     const wakeCommands=users.filter(x=>x.trim()==='кто такой Пётр Первый');
     if(wakeCommands.length<3) throw Error(`only ${wakeCommands.length} hands-free commands were assembled; fake recognition runs=${await page.evaluate(()=>window.__wakeFake?.runs)}`);
-    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.ai')].filter(x=>x.textContent?.trim()).length>=4,null,{timeout:60000});
+    await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.ai')].filter(x=>{const t=(x.textContent||'').trim();return t&&!t.includes('⏳')&&!t.startsWith('🔴')}).length>=4,null,{timeout:60000});
+    await page.waitForFunction(()=>document.getElementById('wakeStatus')?.dataset.listening==='true',null,{timeout:30000});
     if(errors.length) throw Error(errors.join('\n'));
     const apiCheck=await page.evaluate(async api=>(await (await fetch(api+'/health')).json()),API);
     if(!apiCheck.ok) throw Error('API health failed');
