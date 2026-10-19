@@ -4,6 +4,9 @@ const src=fs.readFileSync('local-gateway.js','utf8');
 assert.doesNotMatch(src,/OPENAI_API_KEY\s*[:=]\s*["'][^"']+/i);
 for(const route of ['/chat','/photo','/search','/shopping','/document','/generate-image','/tts','/transcribe','/alice'])assert.ok(src.includes("app.post('"+route+"'"),`missing ${route}`);
 assert.ok(src.includes("app.get('/health'"));
+assert.ok(src.includes("app.get('/health',(q,r)=>{return r.json({ok:true,service:'my-ai-unified',dispatcher:true,autonomy:{enabled:process.env.AUTONOMY_ENABLED!=='0',initialized:!!autonomyRuntime,initState:autonomyInitState}"),'health probe must not wait for laboratory initialization');
+assert.ok(src.includes("app.get('/autonomy/status',(q,r)=>{if(process.env.AUTONOMY_ENABLED==='0')"),'lab status must return immediately and initialize asynchronously');
+assert.ok(src.includes("autonomyInitState='initializing'")&&src.includes("autonomyInitState='ready'")&&src.includes("autonomyInitState='failed'"),'lab initialization state must be observable');
 // Public internet access: direct URLs, public-host validation, redirect revalidation, and broader page extraction.
 for(const marker of ['async function publicWebUrl','async function fetchPublicWebUrl','async function readWebPage','route:\'webpage\'','items.slice(0,5)','t.slice(0,10000)','dns.lookup(host,{all:true,verbatim:true})','redirect:\'manual\''])assert.ok(src.includes(marker),`missing public web access guard/capability: ${marker}`);
 for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionResponses','mistralMessages','groqBlockedUntil','reverseGeocode','wantsMoscowTime','Europe/Moscow','WEATHER_PRIMARY_FAILED','WEATHER_FALLBACK_FAILED','api.met.no/weatherapi/locationforecast/2.0/compact','paraloncloud.com/v1/chat/completions','whisper-large-v3-turbo','Access-Control-Allow-Origin','wantsShopping','wantsSearch','.zip','initAutonomy','createAutonomyRuntime({tools:','AUTONOMY_TASK_KIND_NOT_ALLOWED'])assert.ok(src.includes(marker),`missing ${marker}`);
@@ -16,7 +19,9 @@ assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
-assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'provider chain must return within the bounded 18-second chat budget so a stalled provider cannot block hands-free follow-ups for 42 seconds');
+assert.ok(src.includes('const hardDeadline=Date.now()+12000;'),'text provider chain must respect the 12-second absolute deadline');
+assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
+assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
@@ -29,7 +34,9 @@ for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#co
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
-assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})])'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})])'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)"),'wake queue must abort a stalled chat request after a bounded deadline');
+assert.ok(ui.includes('finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}'),'wake queue must always clear its watchdog and release wake-owned state');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
 assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
 assert.ok(ui.includes('followupUntil=Date.now()+12000'),'wake listener must accept a direct follow-up question for 12 seconds after an answer');

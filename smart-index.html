@@ -30,7 +30,7 @@
    }catch(e){if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ. Проверь громкость и режим беззвучного звука iPhone. '+String(e?.message||''))}
   }
  })();
- let wakeWaitTimer;const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})]).finally(()=>clearTimeout(wakeWaitTimer));
+ let wakeWaitTimer;const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})]).finally(()=>clearTimeout(wakeWaitTimer));
  window.__ttsPromise=wakeSafeTask;
  return task;
 }
@@ -239,9 +239,14 @@ async function processQueue(){
    const input=document.getElementById('input');
    if(!input||typeof window.send!=='function'){status('🔴 Не найдено поле вопроса или обработчик отправки.');break}
    input.value=q;window.__wakeCommandActive=true;
-   try{await Promise.resolve(window.send(q))}
-   catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
-   finally{window.__wakeCommandActive=false}
+   let requestTimer;
+   try{
+    await Promise.race([
+     Promise.resolve(window.send(q)),
+     new Promise((_,reject)=>{requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)})
+    ]);
+   }catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
+   finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}
   }
  }finally{
   processing=false;
