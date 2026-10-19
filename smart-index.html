@@ -30,7 +30,7 @@
    }catch(e){if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ. Проверь громкость и режим беззвучного звука iPhone. '+String(e?.message||''))}
   }
  })();
- let wakeWaitTimer;const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})]).finally(()=>clearTimeout(wakeWaitTimer));
+ let wakeWaitTimer;const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})]).finally(()=>clearTimeout(wakeWaitTimer));
  window.__ttsPromise=wakeSafeTask;
  return task;
 }
