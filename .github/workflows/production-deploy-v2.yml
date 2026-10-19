@@ -91,9 +91,19 @@ jobs:
             rm -f /tmp/vps_key
             exit 1
           fi
-          status=$(curl -fsS --max-time 20 https://ai.aliceq.ru/autonomy/status)
-          echo "$status"
-          echo "$status" | grep -q 'FULL_BOUNDED'
+          status=""
+          autonomy_ready=0
+          for attempt in $(seq 1 30); do
+            status=$(curl -fsS --max-time 10 https://ai.aliceq.ru/autonomy/status || true)
+            echo "AUTONOMY_STATUS_ATTEMPT=$attempt $status"
+            if echo "$status" | grep -q 'FULL_BOUNDED'; then autonomy_ready=1; break; fi
+            if echo "$status" | grep -q '"initState":"failed"'; then
+              echo "AUTONOMY_INITIALIZATION_FAILED"
+              exit 1
+            fi
+            sleep 2
+          done
+          test "$autonomy_ready" = 1
           self=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{}' https://ai.aliceq.ru/autonomy/self-check)
           echo "$self"
           echo "$self" | grep -q '"ok":true'
