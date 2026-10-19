@@ -239,9 +239,14 @@ async function processQueue(){
    const input=document.getElementById('input');
    if(!input||typeof window.send!=='function'){status('🔴 Не найдено поле вопроса или обработчик отправки.');break}
    input.value=q;window.__wakeCommandActive=true;
-   try{await Promise.resolve(window.send(q))}
-   catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
-   finally{window.__wakeCommandActive=false}
+   let requestTimer;
+   try{
+    await Promise.race([
+     Promise.resolve(window.send(q)),
+     new Promise((_,reject)=>{requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)})
+    ]);
+   }catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
+   finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}
   }
  }finally{
   processing=false;
