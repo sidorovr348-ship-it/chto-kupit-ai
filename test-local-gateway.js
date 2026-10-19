@@ -53,4 +53,5 @@ const groqStart=src.indexOf("const groq=keyOf('GROQ_API_KEY')");
 const groqEnd=src.indexOf("if(!vision&&errors.some",groqStart);
 const groqFallbackBlock=src.slice(groqStart,groqEnd>groqStart?groqEnd:undefined);
 assert.ok(groqFallbackBlock.indexOf("if(e.status===429)")>=0&&groqFallbackBlock.indexOf("if(e.status===429)")<groqFallbackBlock.indexOf("const earlyLocal=await tryEarlyLocal()"),'Groq rate limits must fall through to alternate providers before spending the remaining deadline on local fallback');
+assert.ok(src.includes("&&!errors.some(e=>/\\b429\\b/.test(e))&&canStart(3000)"),'a rate-limited provider must not trigger a second slow local retry before alternate external providers are tried');
 console.log('SOURCE_SMOKE_OK');
