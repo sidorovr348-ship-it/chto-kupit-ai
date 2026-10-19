@@ -31,7 +31,7 @@ for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#co
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
-assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},35000)})])'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})])'),'wake recovery must not wait forever for a stalled TTS task');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
 assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
 assert.ok(ui.includes('followupUntil=Date.now()+12000'),'wake listener must accept a direct follow-up question for 12 seconds after an answer');
