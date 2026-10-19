@@ -49,4 +49,8 @@ assert.ok(ui.includes("status('🟢 Эй слушает — скажи «Эй» 
 assert.ok(!ui.includes('<div class="actions"><button id="camAnalyze"'),'camera action buttons must live in the popup, not permanently below the preview');
 const wakeE2E=fs.readFileSync('wake-buffer-e2e.mjs','utf8');
 assert.ok(wakeE2E.includes("static commands=[['Эй','кто такой','Пётр Первый'],['кто такой','Пётр Первый'],['Эй','кто такой','Пётр Первый']];"),'hands-free E2E must cover a follow-up question without repeating the wake word');
+const groqStart=src.indexOf("const groq=keyOf('GROQ_API_KEY')");
+const groqEnd=src.indexOf("if(!vision&&errors.some",groqStart);
+const groqFallbackBlock=src.slice(groqStart,groqEnd>groqStart?groqEnd:undefined);
+assert.ok(groqFallbackBlock.indexOf("if(e.status===429)")>=0&&groqFallbackBlock.indexOf("if(e.status===429)")<groqFallbackBlock.indexOf("const earlyLocal=await tryEarlyLocal()"),'Groq rate limits must fall through to alternate providers before spending the remaining deadline on local fallback');
 console.log('SOURCE_SMOKE_OK');
