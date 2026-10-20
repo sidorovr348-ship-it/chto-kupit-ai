@@ -58,7 +58,7 @@ const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);
 const groqRateLimitBlock=src.slice(groqRateLimitStart,groqRateLimitEnd>groqRateLimitStart?groqRateLimitEnd:undefined);
 assert.ok(groqRateLimitBlock.includes("Promise.any(alternate)"),'on Groq HTTP 429, configured alternate text providers must race concurrently within the remaining request deadline');
-assert.ok(groqRateLimitBlock.includes("numPredict:96,timeoutMs:Math.min(10000,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 10-second deadline and smaller output');
+assert.ok(groqRateLimitBlock.includes("numPredict:48,timeoutMs:Math.min(14500,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 14.5-second deadline and shorter output');
 assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.includes("deepseek-flash"),'DeepSeek must join the concurrent fallback race when Groq rate-limits');
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
