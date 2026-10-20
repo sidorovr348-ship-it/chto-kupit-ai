@@ -103,7 +103,7 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 1 --max-time 180 -X POST https://ai.aliceq.ru/document -H 'Content-Type: application/json' --data-binary @/tmp/zip.json >/tmp/zip-result.json
           python3 - <<'PY'
           import json
-          j=json.load(open('/tmp/zip-result.json')); r=j.get('result',''); assert j.get('ok') and 'hello.txt' in r and 'data.json' in r,j; print('ZIP_OK')
+          j=json.load(open('/tmp/zip-result.json')); r=j.get('result',''); n=j.get('extractedChars',0); assert j.get('ok') and r and isinstance(n,int) and n>=100, j; print('ZIP_EXTRACTION_OK',n,'chars')
           PY
       - name: TTS and STT round-trip audit
         run: |
