@@ -12,7 +12,9 @@ for(const marker of ['async function publicWebUrl','async function fetchPublicWe
 for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionResponses','mistralMessages','groqBlockedUntil','reverseGeocode','wantsMoscowTime','Europe/Moscow','WEATHER_PRIMARY_FAILED','WEATHER_FALLBACK_FAILED','api.met.no/weatherapi/locationforecast/2.0/compact','paraloncloud.com/v1/chat/completions','whisper-large-v3-turbo','Access-Control-Allow-Origin','wantsShopping','wantsSearch','.zip','initAutonomy','createAutonomyRuntime({tools:','AUTONOMY_TASK_KIND_NOT_ALLOWED'])assert.ok(src.includes(marker),`missing ${marker}`);
 for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.ok(src.includes(route),`missing ${route}`);
 // Regression guard: allow the local model enough time to answer when external provider quotas are exhausted, without exceeding the global chat deadline.
-assert.ok(src.includes("if(canStart(7000)){try{const local=await callOllama(messages,{numPredict:300,timeoutMs:Math.min(6500,remaining())})"),'final Ollama fallback must have a bounded 6.5-second window and remaining-deadline guard');
+assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllama(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
+assert.ok(src.includes("if(vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllama(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'early Ollama fallback must also use a short answer and the remaining bounded deadline');
+assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllama(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'degraded-provider local fallback must use the bounded short-answer configuration');
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
@@ -53,7 +55,7 @@ const groqStart=src.indexOf("const groq=keyOf('GROQ_API_KEY')");
 const groqEnd=src.indexOf("if(!vision&&errors.some",groqStart);
 const groqFallbackBlock=src.slice(groqStart,groqEnd>groqStart?groqEnd:undefined);
 assert.ok(groqFallbackBlock.indexOf("if(e.status===429)")>=0&&groqFallbackBlock.indexOf("if(e.status===429)")<groqFallbackBlock.indexOf("const earlyLocal=await tryEarlyLocal()"),'Groq rate limits must fall through to alternate providers before spending the remaining deadline on local fallback');
-assert.ok(src.includes("&&!errors.some(e=>/\\b429\\b/.test(e))&&canStart(3000)"),'a rate-limited provider must not trigger a second slow local retry before alternate external providers are tried');
+assert.ok(src.includes("&&!errors.some(e=>/\\b429\\b/.test(e))&&canStart(1500)"),'a rate-limited provider must not trigger a second slow local retry before alternate external providers are tried');
 const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);
 const groqRateLimitBlock=src.slice(groqRateLimitStart,groqRateLimitEnd>groqRateLimitStart?groqRateLimitEnd:undefined);
