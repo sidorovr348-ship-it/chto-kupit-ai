@@ -5,6 +5,8 @@ let n=0,failed=0;const fail=[];
 async function check(name,fn){n++;try{await fn();console.log('PASS',String(n).padStart(3,'0'),name)}catch(e){failed++;fail.push({n,name,error:String(e.message||e)});console.error('FAIL',String(n).padStart(3,'0'),name,e.message||e)}}
 async function req(path,body,method='POST',timeout=TIMEOUT){const r=await fetch(API+path,{method,headers:body!==undefined?{'Content-Type':'application/json'}:undefined,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(timeout)});const t=await r.text();let j={};try{j=JSON.parse(t)}catch{}if(!r.ok)throw Error(path+' HTTP '+r.status+' '+t.slice(0,300));return j}
 const ok=(x,m)=>{if(!x)throw Error(m)},textOf=x=>String(x?.result??x?.text??'').trim();
+// Diagnostic only: report local Ollama health without changing the 100-case acceptance count.
+try{const r=await fetch(API+'/local-ai/health',{cache:'no-store',signal:AbortSignal.timeout(5000)});const raw=await r.text();let data;try{data=JSON.parse(raw)}catch{data={raw:raw.slice(0,500)}}console.log('LOCAL_AI_HEALTH_DIAGNOSTIC',JSON.stringify({httpStatus:r.status,...data}));}catch(e){console.log('LOCAL_AI_HEALTH_DIAGNOSTIC_ERROR',String(e?.message||e));}
 
 const staticChecks=[
 ['frontend reachable',async()=>ok((await fetch(APP+'?a=100')).ok,'frontend')],
