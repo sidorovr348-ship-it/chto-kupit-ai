@@ -18,6 +18,7 @@ assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllama(messa
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
+assert.ok(src.includes('body.max_completion_tokens=vision?1024:128;body.temperature=.55;'),'Groq Qwen text requests must reserve at most 128 output tokens to reduce OTPM exhaustion; vision keeps its separate budget');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
