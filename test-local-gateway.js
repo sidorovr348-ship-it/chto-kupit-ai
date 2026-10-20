@@ -19,7 +19,7 @@ assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
-assert.ok(src.includes('const hardDeadline=Date.now()+12000;'),'text provider chain must respect the 12-second absolute deadline');
+assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider chain must respect the 18-second absolute deadline');
 assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
 assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
@@ -58,7 +58,7 @@ const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);
 const groqRateLimitBlock=src.slice(groqRateLimitStart,groqRateLimitEnd>groqRateLimitStart?groqRateLimitEnd:undefined);
 assert.ok(groqRateLimitBlock.includes("Promise.any(alternate)"),'on Groq HTTP 429, configured alternate text providers must race concurrently within the remaining request deadline');
-assert.ok(groqRateLimitBlock.includes("numPredict:160,timeoutMs:Math.min(7000,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 7-second deadline');
+assert.ok(groqRateLimitBlock.includes("numPredict:96,timeoutMs:Math.min(10000,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 10-second deadline and smaller output');
 assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.includes("deepseek-flash"),'DeepSeek must join the concurrent fallback race when Groq rate-limits');
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
