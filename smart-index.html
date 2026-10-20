@@ -76,7 +76,7 @@ async function send(queuedText=null){
   if(/самодиагност/iu.test(t)){add(t,'user');input.value='';messages.push({role:'user',content:t});void runSelfDiagnostic();return;}
   {
     const normalized=t.replace(/[−–]/g,'-').replace(/,/g,'.').trim();
-    const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu);
+    const match=normalized.match(/^(?:(?:эй[\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\s*)?(-?\d+(?:\.\d+)?)\s*([+\-×xX*÷/])\s*(-?\d+(?:\.\d+)?)\s*[?!.]*$/iu);
     if(match){
       const a=Number(match[1]),op=match[2],b=Number(match[3]);
       let value;
