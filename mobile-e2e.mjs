@@ -142,6 +142,14 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await tapTool('voice');
     await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
 
+    // A standalone wake word ends the current non-continuous recognizer. Do not claim
+    // that the microphone is listening until a new recognizer actually starts.
+    await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+    await page.evaluate(()=>window.__fakeSpeak('Эй'));
+    const wakeOnlyState=await page.evaluate(()=>({listening:document.querySelector('#wakeStatus')?.dataset.listening||null,message:document.querySelector('#wakeStatus')?.textContent||'',active:window.__fakeRecognitionInstances?.some(x=>x.started)||false}));
+    if(wakeOnlyState.listening==='true') throw Error('wake-only result falsely reports active listening before recognizer restart: '+JSON.stringify(wakeOnlyState));
+    await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+
     // Critical regression test: three consecutive wake questions, with the listener
     // required to return to a real started state after every answer.
     const wakeCases=[
