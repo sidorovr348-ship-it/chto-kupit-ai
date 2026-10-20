@@ -276,7 +276,7 @@ function createRecognition(){
   const parsed=extract(spoken);
   if(parsed.wake){
    if(parsed.command){armedUntil=0;enqueue(parsed.command)}
-   else{armedUntil=Date.now()+12000;status('🟢 Слушаю. Теперь задай вопрос…',true);/* SpeechRecognition with continuous=false ends itself after this final result. Let onend schedule the next instance; stopping and restarting here races Safari's native recognizer and can leave a false green listening state. */}
+   else{armedUntil=Date.now()+12000;status('🟡 Слово «Эй» услышано — запускаю распознавание вопроса…',false);/* SpeechRecognition with continuous=false ends itself after this final result. Let onend schedule the next instance; stopping and restarting here races Safari's native recognizer and can leave a false green listening state. */}
    return;
   }
   if(Date.now()<armedUntil||Date.now()<followupUntil){armedUntil=0;followupUntil=0;enqueue(spoken)}
