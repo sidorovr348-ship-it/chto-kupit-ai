@@ -13,6 +13,7 @@ for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionRespon
 for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.ok(src.includes(route),`missing ${route}`);
 assert.ok(src.includes("SELF_CHECK_TIMEOUT")&&src.includes("лимит 8 секунд")&&src.includes("finally{deadline.clear()}"),'laboratory self-check must fail clearly within an eight-second server-side deadline');
 assert.ok(src.includes("const {createDeadline}=require('./src/deadline');"),'self-check must use the shared deadline helper');
+assert.ok(src.includes("const {createSingleFlight}=require('./src/single-flight');")&&src.includes("runSelfCheck=createSingleFlight(async()=>{"),'timed-out self-check must remain single-flight to avoid overlapping diagnostics');
 const selfCheckRoute=src.slice(src.indexOf("app.post('/autonomy/self-check'"),src.indexOf("app.post('/autonomy/task'"));
 assert.ok(selfCheckRoute.indexOf("createDeadline(8000")<selfCheckRoute.indexOf("Promise.race([initAutonomy(),deadline.promise])")&&selfCheckRoute.indexOf("Promise.race([initAutonomy(),deadline.promise])")<selfCheckRoute.indexOf("Promise.race([a.selfCheck(),deadline.promise])"),'the same eight-second deadline must bound both autonomy initialization and the self-check itself');
 // Regression guard: allow the local model enough time to answer when external provider quotas are exhausted, without exceeding the global chat deadline.
