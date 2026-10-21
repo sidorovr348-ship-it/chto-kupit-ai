@@ -7,7 +7,6 @@ function createDeadline(timeoutMs, message, code) {
       const error = Object.assign(new Error(message), { status: 504, code });
       reject(error);
     }, timeoutMs);
-    timer.unref?.();
   });
   return {
     promise,
