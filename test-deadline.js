@@ -16,11 +16,14 @@ test('deadline rejects a never-settling initialization with a structured timeout
   }
 });
 
-test('deadline can bound either initialization or the diagnostic with one shared promise', async () => {
+test('one absolute deadline remains active after initialization and bounds the diagnostic', async () => {
   const deadline = createDeadline(20, 'timed out', 'SELF_CHECK_TIMEOUT');
   try {
-    const neverSettles = new Promise(() => {});
-    await assert.rejects(Promise.race([neverSettles, deadline.promise]), { code: 'SELF_CHECK_TIMEOUT' });
+    assert.equal(await Promise.race([Promise.resolve('initialized'), deadline.promise]), 'initialized');
+    await assert.rejects(
+      Promise.race([new Promise(() => {}), deadline.promise]),
+      { code: 'SELF_CHECK_TIMEOUT' }
+    );
   } finally {
     deadline.clear();
   }
