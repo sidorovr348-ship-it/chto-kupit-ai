@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node local-gateway.js",
     "start:legacy": "PORT=3021 node server.js",
-    "test": "node --test test-local-gateway.js test-deadline.js"
+    "test": "node --test test-local-gateway.js test-deadline.js test-single-flight.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
