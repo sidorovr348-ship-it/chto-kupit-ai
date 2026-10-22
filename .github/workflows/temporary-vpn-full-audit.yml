@@ -42,6 +42,26 @@ jobs:
             echo '=== X-RAY CLIENT ERROR COUNTS (10 min) ==='
             journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep -E -c 'unexpected EOF|failed to read client hello|handshake did not complete|failed to process outbound traffic|failed to read response' || true
 
+
+            echo '=== SANITIZED XRAY CONFIG STRUCTURE ==='
+            python3 - <<'PY'
+            import json
+            p='/etc/xray/config.json'
+            try:
+              d=json.load(open(p))
+              print('top_level_keys=',sorted(d.keys()))
+              print('log=',d.get('log',{}))
+              print('dns_configured=',bool(d.get('dns')))
+              print('routing=',json.dumps(d.get('routing',{}),sort_keys=True))
+              print('outbounds=',json.dumps([{k:v for k,v in x.items() if k not in ('settings','streamSettings')} | {'protocol':x.get('protocol'),'settings_keys':sorted(x.get('settings',{}).keys())} for x in d.get('outbounds',[])],sort_keys=True))
+              for i,x in enumerate(d.get('inbounds',[])):
+                ss=x.get('streamSettings',{})
+                st=ss.get('realitySettings',{})
+                print('inbound',i,json.dumps({'listen':x.get('listen'),'port':x.get('port'),'protocol':x.get('protocol'),'sniffing':x.get('sniffing'),'network':ss.get('network'),'security':ss.get('security'),'reality_dest':st.get('dest'),'reality_serverNames':st.get('serverNames'),'reality_shortId_count':len(st.get('shortIds',[])),'reality_privateKey_present':bool(st.get('privateKey')),'client_count':len(x.get('settings',{}).get('clients',[])),'client_flows':sorted(set(c.get('flow','') for c in x.get('settings',{}).get('clients',[])))},sort_keys=True))
+            except Exception as e: print('config_read_error=',type(e).__name__,str(e))
+            PY
+            echo '=== ESTABLISHED TCP RETRANSMISSION SNAPSHOT ==='
+            ss -tin state established '( sport = :443 )' 2>/dev/null | awk '/^[[:space:]]*\[/ {peer=$0} /bytes_retrans:/ {print $0}' | sed -E 's/([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+/<peer>/g; s/\[::ffff:[^]]+\]/<addr>/g' | head -30
             echo '=== LIVE TCP SESSIONS TO VPN (peer addresses redacted) ==='
             ss -tin state established '( sport = :443 )' 2>/dev/null | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]+/<peer>/g; s/([0-9a-fA-F:]{20,})%?[a-zA-Z0-9._-]*:[0-9]+/<ipv6-peer>/g' | head -100
             echo '=== TCP RETRANSMISSION COUNTERS ==='
