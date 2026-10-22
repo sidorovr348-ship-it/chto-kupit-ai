@@ -1,0 +1,45 @@
+name: Temporary VPN full audit
+on:
+  push:
+    branches:
+      - diagnostics/vpn-full-audit-2026-10-22
+    paths:
+      - .github/workflows/temporary-vpn-full-audit.yml
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Read-only VPS audit
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 90s
+          script: |
+            set +e
+            echo '=== SERVICE / LISTENER ==='
+            systemctl is-active xray
+            ss -lntup | grep -E '(:443|:53) ' | sed -E 's/users:\(\("[^"]+"/users:("[redacted]"/g' || true
+            echo '=== ROUTING / POLICY ==='
+            ip -4 route show
+            ip -6 route show
+            ip rule show
+            echo '=== INTERFACE COUNTERS ==='
+            ip -s link
+            echo '=== TCP / UDP KERNEL SETTINGS ==='
+            for k in net.ipv4.tcp_congestion_control net.ipv4.tcp_mtu_probing net.ipv4.tcp_syncookies net.ipv4.ip_forward net.ipv6.conf.all.disable_ipv6 net.ipv4.conf.all.rp_filter; do printf '%s=' "$k"; sysctl -n "$k" 2>/dev/null; done
+            echo '=== FIREWALL SUMMARY ==='
+            if command -v nft >/dev/null 2>&1; then nft list ruleset 2>/dev/null | grep -E 'table |chain |hook |policy |counter packets|drop|reject|dport (22|443)|udp dport' | head -100; fi
+            if command -v iptables >/dev/null 2>&1; then iptables -vnL INPUT 2>/dev/null | head -30; iptables -vnL OUTPUT 2>/dev/null | head -20; fi
+            echo '=== CONNTRACK ==='
+            if command -v conntrack >/dev/null 2>&1; then conntrack -S 2>/dev/null; fi
+            echo '=== HTTPS TIMING IPV4 (3 samples) ==='
+            for u in https://www.google.com https://www.youtube.com https://www.cloudflare.com; do for n in 1 2 3; do curl -4 -L -sS -o /dev/null --connect-timeout 4 --max-time 8 -w "$u code=%{http_code} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\n" "$u"; done; done
+            echo '=== DNS RESOLVER HEALTH ==='
+            resolvectl status 2>/dev/null | grep -E 'Link [0-9]|Current Scopes|Protocols:|Current DNS Server|DNS Servers|DNS Domain' | head -40
+            echo '=== X-RAY CLIENT ERROR COUNTS (10 min) ==='
+            journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep -E -c 'unexpected EOF|failed to read client hello|handshake did not complete|failed to process outbound traffic|failed to read response' || true
+            echo '=== X-RAY ACCEPTED DESTINATIONS (10 min; domains only) ==='
+            journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep 'accepted ' | sed -E 's/.*accepted (tcp|udp):([^ :]+).*/\1 \2/' | awk '{print $1, $2}' | sort | uniq -c | sort -nr | head -30
