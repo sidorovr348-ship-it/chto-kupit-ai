@@ -41,5 +41,12 @@ jobs:
             resolvectl status 2>/dev/null | grep -E 'Link [0-9]|Current Scopes|Protocols:|Current DNS Server|DNS Servers|DNS Domain' | head -40
             echo '=== X-RAY CLIENT ERROR COUNTS (10 min) ==='
             journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep -E -c 'unexpected EOF|failed to read client hello|handshake did not complete|failed to process outbound traffic|failed to read response' || true
+
+            echo '=== LIVE TCP SESSIONS TO VPN (peer addresses redacted) ==='
+            ss -tin state established '( sport = :443 )' 2>/dev/null | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]+/<peer>/g; s/([0-9a-fA-F:]{20,})%?[a-zA-Z0-9._-]*:[0-9]+/<ipv6-peer>/g' | head -100
+            echo '=== TCP RETRANSMISSION COUNTERS ==='
+            nstat -az 2>/dev/null | grep -E 'TcpRetransSegs|TcpExtTCPSynRetrans|TcpExtTCPTimeouts|TcpExtTCPAbortOnMemory|TcpExtTCPRcvQDrop' || true
+            echo '=== RECENT ACCEPTED DESTINATIONS (2 min) ==='
+            journalctl -u xray --since '-2 min' --no-pager 2>/dev/null | grep 'accepted ' | sed -E 's/.*accepted (tcp|udp):([^ :]+).*/\1 \2/' | awk '{print $1, $2}' | sort | uniq -c | sort -nr | head -25
             echo '=== X-RAY ACCEPTED DESTINATIONS (10 min; domains only) ==='
             journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep 'accepted ' | sed -E 's/.*accepted (tcp|udp):([^ :]+).*/\1 \2/' | awk '{print $1, $2}' | sort | uniq -c | sort -nr | head -30
