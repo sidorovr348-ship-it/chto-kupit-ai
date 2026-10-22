@@ -1,0 +1,36 @@
+name: Temporary read-only VPS network audit
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read-only VPS audit
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 60s
+          script: |
+            set +e
+            echo "=== SERVICE ==="
+            systemctl is-active xray
+            echo "=== KERNEL ==="
+            printf 'congestion='; sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null
+            printf 'mtu_probe='; sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null
+            ip -o link show | awk -F': ' '{print $2}' | while read i; do ip -o link show "$i" | sed -E 's/.* mtu ([0-9]+).*/interface_mtu=\1/'; done
+            echo "=== COUNTERS ==="
+            nstat -az 2>/dev/null | grep -E 'TcpRetransSegs|TcpExtTCPSynRetrans|IpOutDiscards' || true
+            echo "=== HTTPS TIMING IPV4 ==="
+            for u in https://www.google.com https://www.youtube.com https://youtubei.googleapis.com https://www.cloudflare.com; do curl -4 -L -sS -o /dev/null --connect-timeout 4 --max-time 8 -w '%{url_effective} code=%{http_code} dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\n' "$u"; done
+            echo "=== HTTPS TIMING IPV6 ==="
+            for u in https://www.google.com https://www.youtube.com; do curl -6 -L -sS -o /dev/null --connect-timeout 3 --max-time 5 -w '%{url_effective} code=%{http_code} total=%{time_total}\n' "$u"; done
+            echo "=== DNS ==="
+            cat /etc/resolv.conf | sed -E 's/^nameserver .*/nameserver [redacted]/'
+            echo "=== X-RAY RECENT ERROR COUNTS ==="
+            journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep -E -c 'unexpected EOF|failed to read client hello|handshake did not complete' || true
