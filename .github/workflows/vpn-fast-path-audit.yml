@@ -1,0 +1,38 @@
+name: VPN fast-path read-only audit
+on:
+  push:
+    branches:
+      - diagnostics/vpn-fast-path-audit-2026-10-22
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read-only VPS network audit
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 45s
+          script: |
+            set +e
+            echo "=== SERVICE ==="
+            systemctl is-active xray
+            echo "=== TCP CONGESTION / MTU ==="
+            sysctl net.ipv4.tcp_congestion_control net.ipv4.tcp_mtu_probing net.ipv4.ip_forward 2>/dev/null
+            ip -o link show | awk -F': ' '{print $2}' | while read i; do ip link show "$i" | grep -E '^[0-9]+:|mtu'; done
+            echo "=== SOCKET / RETRANSMIT COUNTERS ==="
+            ss -s
+            nstat -az 2>/dev/null | grep -E 'TcpRetransSegs|TcpOutSegs|TcpExtTCPTimeouts|IpInDiscards|IpOutDiscards' | tail -12
+            echo "=== DNS AND HTTPS TIMING ==="
+            for u in https://www.google.com https://www.youtube.com https://youtubei.googleapis.com https://www.cloudflare.com; do
+              echo "-- $u"
+              curl -4 -L -sS -o /dev/null --connect-timeout 3 --max-time 7 -w 'http=%{http_code} dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} firstbyte=%{time_starttransfer} total=%{time_total} remote=%{remote_ip}\n' "$u"
+            done
+            echo "=== RESOLVER ==="
+            cat /etc/resolv.conf
+            echo "=== RECENT XRAY ERRORS (REDACTED TO ERROR CLASS) ==="
+            journalctl -u xray --since '-10 min' --no-pager 2>/dev/null | grep -Ei 'dial tcp|i/o timeout|network is unreachable|connection reset|broken pipe|unexpected eof|handshake did not complete' | sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/[IP]/g' | tail -25
