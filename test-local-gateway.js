@@ -11,6 +11,12 @@ assert.ok(src.includes("autonomyInitState='initializing'")&&src.includes("autono
 for(const marker of ['async function publicWebUrl','async function fetchPublicWebUrl','async function readWebPage','route:\'webpage\'','items.slice(0,5)','t.slice(0,10000)','dns.lookup(host,{all:true,verbatim:true})','redirect:\'manual\''])assert.ok(src.includes(marker),`missing public web access guard/capability: ${marker}`);
 for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionResponses','mistralMessages','groqBlockedUntil','reverseGeocode','wantsMoscowTime','Europe/Moscow','WEATHER_PRIMARY_FAILED','WEATHER_FALLBACK_FAILED','api.met.no/weatherapi/locationforecast/2.0/compact','paraloncloud.com/v1/chat/completions','whisper-large-v3-turbo','Access-Control-Allow-Origin','wantsShopping','wantsSearch','.zip','initAutonomy','createAutonomyRuntime({tools:','AUTONOMY_TASK_KIND_NOT_ALLOWED'])assert.ok(src.includes(marker),`missing ${marker}`);
 for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.ok(src.includes(route),`missing ${route}`);
+assert.ok(src.includes("SELF_CHECK_TIMEOUT")&&src.includes("лимит 8 секунд")&&src.includes("finally{deadline.clear()}"),'laboratory self-check must fail clearly within an eight-second server-side deadline');
+assert.ok(src.includes("const {createDeadline}=require('./src/deadline');"),'self-check must use the shared deadline helper');
+assert.ok(src.includes("const {createSingleFlight}=require('./src/single-flight');")&&src.includes("runSelfCheck=createSingleFlight(async()=>{"),'timed-out self-check must remain single-flight to avoid overlapping diagnostics');
+const selfCheckRoute=src.slice(src.indexOf("app.post('/autonomy/self-check'"),src.indexOf("app.post('/autonomy/task'"));
+const selfCheckRunner=src.slice(src.indexOf("const runSelfCheck=createSingleFlight"),src.indexOf("app.post('/autonomy/self-check'"));
+assert.ok(selfCheckRoute.includes("createDeadline(8000")&&selfCheckRoute.includes("Promise.race([runSelfCheck(),deadline.promise])")&&selfCheckRunner.includes("await initAutonomy()")&&selfCheckRunner.includes("await a.selfCheck()"),'the same eight-second deadline must bound initialization and the diagnostic while single-flight prevents overlap');
 // Regression guard: allow the local model enough time to answer when external provider quotas are exhausted, without exceeding the global chat deadline.
 assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllama(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
 assert.ok(src.includes("if(vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllama(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'early Ollama fallback must also use a short answer and the remaining bounded deadline');
@@ -32,6 +38,8 @@ assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fa
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
+assert.ok(ui.includes("Версия интерфейса: 2026-10-20-diagnostic-2")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
+assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
 for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode", "localStorage.getItem('ey-companion-mode')", "localStorage.setItem('ey-companion-mode'"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
 // Secondary actions should stay out of the reading area until the user opens the tools dialog.
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
@@ -55,7 +63,11 @@ assert.ok(wakeE2E.includes("static commands=[['Эй','кто такой','Пёт
 const groqStart=src.indexOf("const groq=keyOf('GROQ_API_KEY')");
 const groqEnd=src.indexOf("if(!vision&&errors.some",groqStart);
 const groqFallbackBlock=src.slice(groqStart,groqEnd>groqStart?groqEnd:undefined);
-assert.ok(groqFallbackBlock.indexOf("if(e.status===429)")>=0&&groqFallbackBlock.indexOf("if(e.status===429)")<groqFallbackBlock.indexOf("const earlyLocal=await tryEarlyLocal()"),'Groq rate limits must fall through to alternate providers before spending the remaining deadline on local fallback');
+assert.ok(groqFallbackBlock.includes("GROQ_ERROR_CONTINUE_FALLBACK_CHAIN")&&!groqFallbackBlock.includes("const earlyLocal=await tryEarlyLocal();if(earlyLocal)return earlyLocal;"),'Groq failures must continue through the provider chain before waiting on the local model');
+const openaiStart=src.indexOf("const openai=keyOf('OPENAI_API_KEY')");
+const openaiEnd=src.indexOf("const dk=keyOf('DEEPSEEK_API_KEY')",openaiStart);
+const openaiFallbackBlock=src.slice(openaiStart,openaiEnd);
+assert.ok(openaiFallbackBlock.includes("OPENAI_ERROR_CONTINUE_FALLBACK_CHAIN")&&!openaiFallbackBlock.includes("tryEarlyLocal()"),'OpenAI failures must continue through other configured providers before waiting on the local model');
 assert.ok(src.includes("&&!errors.some(e=>/\\b429\\b/.test(e))&&canStart(1500)"),'a rate-limited provider must not trigger a second slow local retry before alternate external providers are tried');
 const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);

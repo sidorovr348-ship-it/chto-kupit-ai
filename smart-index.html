@@ -37,28 +37,35 @@
 window.__primeTtsAudio=()=>{try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;voiceCtx=voiceCtx||new AC();if(voiceCtx.state==='suspended')void voiceCtx.resume().catch(()=>{})}catch{}};
 function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{};try{ttsSource?.stop(0)}catch{};ttsSource=null;try{audio.pause();audio.currentTime=0}catch{};try{speechSynthesis?.cancel?.()}catch{};window.__ttsPromise=Promise.resolve()}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function runSelfDiagnostic(){
- const card=add('🔎 Самодиагностика Эй: проверяю сервер…');
- const lines=['Версия интерфейса: 2026-10-18-diagnostic-1'];
- async function probe(label,path,method='GET',timeoutMs=9000){
+ const card=add('🔎 Самодиагностика Эй: проверяю компоненты параллельно…');
+ const lines=['Версия интерфейса: 2026-10-20-diagnostic-2'];
+ async function probe(label,path,method='GET',timeoutMs=5000){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
    const options={method,cache:'no-store',signal:controller.signal,headers:{}};
    if(method==='POST'){options.headers['Content-Type']='application/json';options.body='{}'}
+   const started=performance.now();
    const response=await fetch(API+path,options);
    const raw=await response.text();let body=null;try{body=JSON.parse(raw)}catch{}
-   lines.push((response.ok?'🟢 ':'🔴 ')+label+': HTTP '+response.status+(body&&typeof body.ok==='boolean'?' · ok='+body.ok:''));
+   const elapsed=Math.round(performance.now()-started);
+   const ok=response.ok&&!(body&&body.ok===false);
+   const result=[(ok?'🟢 ':'🔴 ')+label+': HTTP '+response.status+' · '+elapsed+' мс'+(body&&typeof body.ok==='boolean'?' · ok='+body.ok:'')];
    if(body){
-    if(path==='/health'&&body.adapters)lines.push('Сервисы: '+Object.entries(body.adapters).map(([k,v])=>k+'='+(v?'да':'нет')).join(', '));
-    else if(path==='/autonomy/status')lines.push('Лабораторный контур: '+JSON.stringify(body.autonomy||body).slice(0,1800));
-    else if(path==='/autonomy/self-check')lines.push('Результат самопроверки: '+JSON.stringify(body).slice(0,3500));
-    else if(body.error)lines.push('Ошибка: '+String(body.error).slice(0,500));
-   }else if(raw)lines.push('Ответ сервера (начало): '+raw.slice(0,300));
-  }catch(e){lines.push('🔴 '+label+': '+(e?.name==='AbortError'?'тайм-аут '+Math.round(timeoutMs/1000)+' секунд':String(e?.message||e)))}
+    if(path==='/health'&&body.adapters)result.push('Сервисы: '+Object.entries(body.adapters).map(([k,v])=>k+'='+(v?'да':'нет')).join(', '));
+    else if(path==='/autonomy/status')result.push('Лабораторный контур: '+JSON.stringify(body.autonomy||body).slice(0,1300));
+    else if(path==='/autonomy/self-check')result.push('Результат самопроверки: '+JSON.stringify(body).slice(0,2200));
+    if(body.error)result.push('Ошибка: '+String(body.error).slice(0,350));
+   }else if(raw)result.push('Ответ сервера (начало): '+raw.slice(0,250));
+   return result;
+  }catch(e){return ['🔴 '+label+': '+(e?.name==='AbortError'?'тайм-аут '+Math.round(timeoutMs/1000)+' секунд':String(e?.message||e))]}
   finally{clearTimeout(timer)}
  }
- await probe('AI-сервер','/health');
- await probe('Статус лабораторного контура','/autonomy/status');
- await probe('Запуск самодиагностики','/autonomy/self-check','POST',30000);
+ const results=await Promise.all([
+  probe('AI-сервер','/health','GET',5000),
+  probe('Статус лабораторного контура','/autonomy/status','GET',5000),
+  probe('Самодиагностика лабораторного контура','/autonomy/self-check','POST',10000)
+ ]);
+ for(const result of results)lines.push(...result);
  card.textContent=lines.join('\n');
  chat.scrollTop=chat.scrollHeight;
 }
@@ -67,6 +74,21 @@ async function send(queuedText=null){
   if(!t)return;
   if(busy){pendingManual.push(t);input.value='';add('⏳ Вопрос добавлен в очередь. Отправлю его после завершения текущего запроса.');return;}
   if(/самодиагност/iu.test(t)){add(t,'user');input.value='';messages.push({role:'user',content:t});void runSelfDiagnostic();return;}
+  {
+    const normalized=t.replace(/[−–]/g,'-').replace(/,/g,'.').trim();
+    const match=normalized.match(/^(?:(?:эй[\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\s*)?(-?\d+(?:\.\d+)?)\s*([+\-×xX*÷/])\s*(-?\d+(?:\.\d+)?)\s*[?!.]*$/iu);
+    if(match){
+      const a=Number(match[1]),op=match[2],b=Number(match[3]);
+      let value;
+      if(op==='+')value=a+b;else if(op==='-'||op==='−')value=a-b;else if(op==='×'||op==='x'||op==='X'||op==='*')value=a*b;else if(op==='÷'||op==='/')value=b===0?null:a/b;
+      if(value!==undefined){
+        add(t,'user');input.value='';
+        const answer=value===null?'На ноль делить нельзя.':Number.isFinite(value)?'Ответ: '+String(Number(value.toPrecision(12))):'Результат слишком велик для точного вычисления.';
+        messages.push({role:'user',content:t},{role:'assistant',content:answer});add(answer,'ai');void say(answer);
+        if(!window.__wakeCommandActive)window.__wakeResponseReady?.();return;
+      }
+    }
+  }
   if(/(?:сколько\s+(?:сейчас\s+)?времени|котор(?:ый|ое)\s+час|время)\s+(?:в\s+)?москв(?:е|а)|москва[\s,]*(?:сейчас\s+)?время/iu.test(t)){
     const wakeOwned=!!window.__wakeCommandActive;
     if(!wakeOwned)window.__pauseWake?.();
