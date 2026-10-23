@@ -41,7 +41,9 @@ jobs:
           node --check autonomy-lab/merge-readiness-gate.mjs
           node --check autonomy-lab/release-controller.mjs
           node --check autonomy-lab/runtime.mjs
-          node --test test-local-gateway.js
+          npm test
+          node --check src/deadline.js
+          node --check src/single-flight.js
           grep -q 'EY_WAKE_WORD_V2_STATE_MACHINE' smart-index.html
           grep -q 'let rec=null' smart-index.html
           grep -q 'function processQueue()' smart-index.html
