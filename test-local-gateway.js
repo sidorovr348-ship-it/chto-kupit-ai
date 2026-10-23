@@ -63,7 +63,11 @@ assert.ok(wakeE2E.includes("static commands=[['Эй','кто такой','Пёт
 const groqStart=src.indexOf("const groq=keyOf('GROQ_API_KEY')");
 const groqEnd=src.indexOf("if(!vision&&errors.some",groqStart);
 const groqFallbackBlock=src.slice(groqStart,groqEnd>groqStart?groqEnd:undefined);
-assert.ok(groqFallbackBlock.indexOf("if(e.status===429)")>=0&&groqFallbackBlock.indexOf("if(e.status===429)")<groqFallbackBlock.indexOf("const earlyLocal=await tryEarlyLocal()"),'Groq rate limits must fall through to alternate providers before spending the remaining deadline on local fallback');
+assert.ok(groqFallbackBlock.includes("GROQ_ERROR_CONTINUE_FALLBACK_CHAIN")&&!groqFallbackBlock.includes("const earlyLocal=await tryEarlyLocal();if(earlyLocal)return earlyLocal;"),'Groq failures must continue through the provider chain before waiting on the local model');
+const coreStart=src.indexOf("async function askInternalCore");
+const coreEnd=src.indexOf("const MAX_TEXT_CONCURRENCY",coreStart);
+const providerCore=src.slice(coreStart,coreEnd);
+assert.ok(providerCore.includes("OPENAI_ERROR_CONTINUE_FALLBACK_CHAIN")&&!providerCore.includes("const local=await tryEarlyLocal();if(local)return local}"),'OpenAI failures must continue through other configured providers before waiting on the local model');
 assert.ok(src.includes("&&!errors.some(e=>/\\b429\\b/.test(e))&&canStart(1500)"),'a rate-limited provider must not trigger a second slow local retry before alternate external providers are tried');
 const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);
