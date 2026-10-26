@@ -60,4 +60,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node wake-buffer-e2e.mjs
+          git fetch origin main --depth=1
+          git show FETCH_HEAD:wake-buffer-e2e.mjs > /tmp/wake-buffer-e2e.mjs
+          node /tmp/wake-buffer-e2e.mjs
