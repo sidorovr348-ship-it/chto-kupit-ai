@@ -49,3 +49,15 @@ jobs:
             echo "=== LOCAL OLLAMA ==="; curl -sS -m 3 http://127.0.0.1:11434/api/tags | head -c 1200; echo
             echo "=== MEMORY ==="; free -h; df -h /; '
           rm -f /tmp/vps_key
+
+      - name: Install Playwright for live repeated-wake test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Test three consecutive wake queries against live production UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          node wake-buffer-e2e.mjs
