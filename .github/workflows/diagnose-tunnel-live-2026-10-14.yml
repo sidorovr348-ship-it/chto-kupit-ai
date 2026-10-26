@@ -28,7 +28,9 @@ jobs:
             echo "=== CLOUD TUNNEL JOURNAL ==="; journalctl --since "30 minutes ago" --no-pager -n 100 -u cloudflared -u cloudflared-alice-ai -u alice-ai -u my-ai-unified-quick-tunnel.service 2>&1 | tail -n 100
             echo "=== BACKEND JOURNAL ==="; journalctl -u my-ai-unified --since "15 minutes ago" --no-pager -n 80
             echo "=== SUPERVISOR JOURNAL ==="; journalctl -u my-ai-unified-supervisor --since "15 minutes ago" --no-pager -n 80
+            echo "=== LOCAL GENERAL CHAT PROBE ==="; /usr/bin/time -f "local_general_seconds=%e" curl -sS -m 22 -X POST http://127.0.0.1:3020/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Почему небо голубое? Ответь кратко.\"}" | head -c 1100; echo
             echo "=== LOCAL CHAT PROBE ==="; /usr/bin/time -f "local_chat_seconds=%e" curl -sS -m 24 -X POST http://127.0.0.1:3020/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Эй что ты умеешь?\"}" | head -c 1000; echo
+            echo "=== PUBLIC GENERAL CHAT PROBE ==="; /usr/bin/time -f "public_general_seconds=%e" curl -sS -m 22 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Почему небо голубое? Ответь кратко.\"}" | head -c 1100; echo
             echo "=== PUBLIC CHAT PROBE ==="; /usr/bin/time -f "public_chat_seconds=%e" curl -sS -m 24 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Эй что ты умеешь?\"}" | head -c 1000; echo
             echo "=== REPEATED PUBLIC CHAT PROBES ==="
             for n in 1 2 3 4; do echo "--- public_chat_probe_$n ---"; /usr/bin/time -f "public_chat_seconds=%e" curl -sS -m 22 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Эй что ты умеешь?\"}" | head -c 650; echo; sleep 2; done
