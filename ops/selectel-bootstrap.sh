@@ -10,6 +10,10 @@ if [[ "$(id -u)" -ne 0 ]]; then
   echo "Запусти сценарий от root: sudo bash $0"
   exit 1
 fi
+if [[ -e "$APP_DIR" || -f "/etc/systemd/system/${SERVICE}.service" ]]; then
+  echo "ОШИБКА: $APP_DIR или systemd-служба уже существуют; отказываюсь перезаписывать существующую установку."
+  exit 1
+fi
 if [[ ! -f "$APP_SRC/package.json" || ! -f "$APP_SRC/local-gateway.js" ]]; then
   echo "ОШИБКА: проект не найден в $APP_SRC. Сначала клонируй репозиторий."
   exit 1
@@ -65,10 +69,10 @@ Type=simple
 User=my-ai-unified
 Group=my-ai-unified
 WorkingDirectory=/opt/my-ai-unified
+EnvironmentFile=-/etc/my-ai-unified.env
 Environment=NODE_ENV=production
 Environment=PORT=3020
 Environment=AUTONOMY_ENABLED=0
-EnvironmentFile=-/etc/my-ai-unified.env
 ExecStart=/usr/bin/node /opt/my-ai-unified/local-gateway.js
 Restart=on-failure
 RestartSec=3
