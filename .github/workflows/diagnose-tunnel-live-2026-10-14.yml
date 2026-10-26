@@ -50,6 +50,7 @@ jobs:
             echo "=== MEMORY ==="; free -h; df -h /; '
           rm -f /tmp/vps_key
 
+      - uses: actions/checkout@v4
       - name: Install Playwright for live repeated-wake test
         shell: bash
         run: |
