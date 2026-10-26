@@ -236,7 +236,7 @@ async function resumeAfterAnswer(){
  if(token!==resumeToken||paused||!enabled)return;
  if(isBusy()){void resumeAfterAnswer();return}
  if(queue.length){processQueue();return}
- if(!permissionBlocked){followupUntil=Date.now()+12000;status('🟡 Возобновляю слушание…');scheduleStart(150)}
+ if(!permissionBlocked){followupUntil=Date.now()+90000;status('🟡 Возобновляю слушание…');scheduleStart(150)}
 }
 function stopCurrent(abort=true){
  clearTimeout(silenceTimer);silenceTimer=null;
