@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const ROOT = __dirname;
-const DATA = path.join(ROOT, 'data', 'supervisor');
+const DATA = process.env.VERCEL ? path.join('/tmp', 'my-ai-unified-supervisor', 'data', 'supervisor') : path.join(ROOT, 'data', 'supervisor');
 const INCIDENTS = path.join(DATA, 'incidents.jsonl');
 const STATE = path.join(DATA, 'state.json');
 fs.mkdirSync(DATA, { recursive: true });
@@ -36,7 +36,8 @@ async function hfFreeCall(messages) {
 }
 
 function bootstrapFreeAgentServer() {
-  if (process.env.HF_FREE_AGENT_BOOTSTRAP_DISABLED === '1') return;
+  // Vercel deployments are immutable: never try to rewrite server.js at runtime.
+  if (process.env.VERCEL || process.env.HF_FREE_AGENT_BOOTSTRAP_DISABLED === '1') return;
   const serverPath = path.join(ROOT, 'server.js');
   try {
     let source = fs.readFileSync(serverPath, 'utf8');
