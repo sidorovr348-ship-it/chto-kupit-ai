@@ -31,7 +31,7 @@ jobs:
             echo "=== LOCAL CHAT PROBE ==="; /usr/bin/time -f "local_chat_seconds=%e" curl -sS -m 24 -X POST http://127.0.0.1:3020/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Эй что ты умеешь?\"}" | head -c 1000; echo
             echo "=== PUBLIC CHAT PROBE ==="; /usr/bin/time -f "public_chat_seconds=%e" curl -sS -m 24 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data "{\"prompt\":\"Эй что ты умеешь?\"}" | head -c 1000; echo
             echo "=== REPEATED PUBLIC CHAT PROBES ==="
-            for n in 1 2 3 4; do echo "--- public_chat_probe_$n ---"; /usr/bin/time -f "public_chat_seconds=%e" curl -sS -m 22 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data "{\\"prompt\\":\\"Эй что ты умеешь?\\"}" | head -c 650; echo; sleep 2; done
+            for n in 1 2 3 4; do echo "--- public_chat_probe_$n ---"; /usr/bin/time -f "public_chat_seconds=%e" curl -sS -m 22 -X POST https://ai.aliceq.ru/chat -H "Content-Type: application/json" --data-binary '{"prompt":"Эй что ты умеешь?"}' | head -c 650; echo; sleep 2; done
             echo "=== PROVIDER SMOKE ==="
             node <<EOF
             const fs=require("fs");
