@@ -57,7 +57,16 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$VPS_HOST"; test -n "$VPS_USER"; test -n "$VPS_SSH_KEY"
-          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+          python3 - <<'PY'
+          import os
+          key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+              raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+          with open("/tmp/vps_key", "w", encoding="utf-8") as f:
+              f.write(key + "\n")
+          PY
+          chmod 600 /tmp/vps_key
+          ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
@@ -87,7 +96,16 @@ jobs:
             fi
           done
           if [ "$acceptance_ok" != 1 ]; then
-            printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+            python3 - <<'PY'
+            import os
+            key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+            if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+                raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+            with open("/tmp/vps_key", "w", encoding="utf-8") as f:
+                f.write(key + "\n")
+            PY
+            chmod 600 /tmp/vps_key
+            ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
             ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
             echo '=== VPS PHOTO DIAGNOSTIC ==='
             ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
@@ -142,7 +160,16 @@ jobs:
         shell: bash
         run: |
           set +e
-          printf '%s\n' "$VPS_SSH_KEY" >/tmp/vps_key; chmod 600 /tmp/vps_key
+          python3 - <<'PY'
+          import os
+          key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+              raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+          with open("/tmp/vps_key", "w", encoding="utf-8") as f:
+              f.write(key + "\n")
+          PY
+          chmod 600 /tmp/vps_key
+          ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
           ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
           echo '=== DIAGNOSTIC TIMESTAMP ==='
           date -Is
