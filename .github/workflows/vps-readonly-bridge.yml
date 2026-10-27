@@ -32,7 +32,15 @@ jobs:
               exit 1
             fi
           done
-          echo "All required connection secrets are present (values not displayed)."
+          if [[ ! "$VPS_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::VPS_HOST contains unsupported characters; set it to the bare host/IP only (no scheme, user@, spaces, or newline). Value intentionally hidden."
+            exit 1
+          fi
+          if [[ ! "$VPS_USER" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::VPS_USER contains unsupported characters. Value intentionally hidden."
+            exit 1
+          fi
+          echo "Required secrets are present; VPS_HOST and VPS_USER formats are valid (values not displayed)."
 
       - name: Run allow-listed read-only health and diagnostics
         env:
@@ -52,15 +60,15 @@ jobs:
           ssh-keygen -y -f "$key_file" >/dev/null
 
           ssh_readonly() {
-            ssh -T \\
-              -i "$key_file" \\
-              -o BatchMode=yes \\
-              -o IdentitiesOnly=yes \\
-              -o StrictHostKeyChecking=yes \\
-              -o UserKnownHostsFile="$hosts_file" \\
-              -o ConnectTimeout=10 \\
-              -o ServerAliveInterval=5 \\
-              -o ServerAliveCountMax=2 \\
+            ssh -T \
+              -i "$key_file" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$hosts_file" \
+              -o ConnectTimeout=10 \
+              -o ServerAliveInterval=5 \
+              -o ServerAliveCountMax=2 \
               "$VPS_USER@$VPS_HOST" "$1"
           }
 
