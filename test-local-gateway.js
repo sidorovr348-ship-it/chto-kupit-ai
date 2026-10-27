@@ -77,3 +77,9 @@ assert.ok(groqRateLimitBlock.includes("numPredict:48,timeoutMs:Math.min(14500,re
 assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.includes("deepseek-flash"),'DeepSeek must join the concurrent fallback race when Groq rate-limits');
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
+
+// ZvenoAI is an opt-in Russia-compatible text route; it must not require a key to boot.
+assert.ok(src.includes("const zvenoai=keyOf('ZVENOAI_API_KEY');if(!vision&&zvenoai&&canStart())"),'ZvenoAI must be optional and text-only in the initial integration');
+assert.ok(src.includes("https://api.zveno.ai/v1/chat/completions")&&src.includes("process.env.ZVENOAI_TEXT_MODEL||'openrouter/free'"),'ZvenoAI must use its documented OpenAI-compatible endpoint and free model default');
+assert.ok(src.includes("provider:'zvenoai'")&&src.includes("ZVENOAI_ERROR_CONTINUE_FALLBACK_CHAIN"),'ZvenoAI failures must continue through the existing provider fallback chain');
+assert.ok(src.includes("zvenoai:!!keyOf('ZVENOAI_API_KEY')"),'health must report whether the ZvenoAI key is configured without exposing the key');
