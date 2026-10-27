@@ -1,0 +1,26 @@
+name: VPS Runner Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  smoke:
+    name: Verify VPS runner identity
+    runs-on: self-hosted
+    timeout-minutes: 2
+    steps:
+      - name: Confirm runner identity without checking out repository code
+        shell: bash
+        run: |
+          set -eu
+          printf 'Runner smoke test started\n'
+          printf 'Host: '
+          hostname
+          printf 'User: '
+          id
+          printf 'Working directory: '
+          pwd
+          test "$(id -un)" = "ghrunner"
+          printf 'PASS: job is running as ghrunner\n'
