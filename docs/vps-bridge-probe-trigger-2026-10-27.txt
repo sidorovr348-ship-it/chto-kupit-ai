@@ -1,0 +1,1 @@
+Harmless trigger commit for the restricted read-only VPS bridge probe. No credentials or server state are stored here.

@@ -1,0 +1,78 @@
+name: VPS read-only bridge probe
+
+on:
+  push:
+    branches:
+      - feat/vps-readonly-bridge-2026-10-27
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vps-readonly-bridge-probe
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate required connection secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY_B64 VPS_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required repository secret is missing: $name"
+              exit 1
+            fi
+          done
+          if [[ ! "$VPS_HOST" =~ ^[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::VPS_HOST contains unsupported characters; set it to the bare host/IP only (no scheme, user@, spaces, or newline). Value intentionally hidden."
+            exit 1
+          fi
+          if [[ ! "$VPS_USER" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::VPS_USER contains unsupported characters. Value intentionally hidden."
+            exit 1
+          fi
+          echo "Required secrets are present; VPS_HOST and VPS_USER formats are valid (values not displayed)."
+
+      - name: Run allow-listed read-only health and diagnostics
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY_B64: ${{ secrets.VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/vps_bridge_key"
+          hosts_file="$RUNNER_TEMP/vps_known_hosts"
+          umask 077
+          printf '%s' "$VPS_SSH_KEY_B64" | base64 --decode > "$key_file"
+          printf '%s\\n' "$VPS_KNOWN_HOSTS" > "$hosts_file"
+          chmod 600 "$key_file" "$hosts_file"
+          trap 'rm -f "$key_file" "$hosts_file"' EXIT
+          ssh-keygen -y -f "$key_file" >/dev/null
+
+          ssh_readonly() {
+            ssh -T \
+              -i "$key_file" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$hosts_file" \
+              -o ConnectTimeout=10 \
+              -o ServerAliveInterval=5 \
+              -o ServerAliveCountMax=2 \
+              "$VPS_USER@$VPS_HOST" "$1"
+          }
+
+          echo "=== HEALTH ==="
+          ssh_readonly health
+          echo "=== READ-ONLY DIAGNOSTICS ==="
+          ssh_readonly diagnostics
