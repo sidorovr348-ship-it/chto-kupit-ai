@@ -59,9 +59,25 @@ jobs:
           test -n "$VPS_HOST"; test -n "$VPS_USER"; test -n "$VPS_SSH_KEY"
           python3 - <<'PY'
           import os
-          key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+          import os, base64, binascii
+          raw = os.environ["VPS_SSH_KEY"].strip()
+          if raw.startswith(("'", '"')) and raw[-1:] == raw[:1]:
+              raw = raw[1:-1]
+          raw = raw.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "")
+          key = raw.strip()
+          if key.startswith("VPS_SSH_KEY="):
+              key = key.split("=", 1)[1].strip().strip("'\"")
           if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-              raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+              compact = "".join(key.split())
+              try:
+                  decoded = base64.b64decode(compact, validate=True).decode("utf-8")
+                  decoded = decoded.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "").strip()
+                  if decoded.startswith("-----BEGIN ") and "PRIVATE KEY-----" in decoded:
+                      key = decoded
+              except (binascii.Error, UnicodeDecodeError, ValueError):
+                  pass
+          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+              raise SystemExit("Unsupported VPS_SSH_KEY format. Expected a private PEM/OpenSSH key, optionally base64-encoded; secret value was not printed.")
           with open("/tmp/vps_key", "w", encoding="utf-8") as f:
               f.write(key + "\n")
           PY
@@ -98,9 +114,25 @@ jobs:
           if [ "$acceptance_ok" != 1 ]; then
             python3 - <<'PY'
             import os
-            key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+            import os, base64, binascii
+            raw = os.environ["VPS_SSH_KEY"].strip()
+            if raw.startswith(("'", '"')) and raw[-1:] == raw[:1]:
+                raw = raw[1:-1]
+            raw = raw.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "")
+            key = raw.strip()
+            if key.startswith("VPS_SSH_KEY="):
+                key = key.split("=", 1)[1].strip().strip("'\"")
             if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-                raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+                compact = "".join(key.split())
+                try:
+                    decoded = base64.b64decode(compact, validate=True).decode("utf-8")
+                    decoded = decoded.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "").strip()
+                    if decoded.startswith("-----BEGIN ") and "PRIVATE KEY-----" in decoded:
+                        key = decoded
+                except (binascii.Error, UnicodeDecodeError, ValueError):
+                    pass
+            if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+                raise SystemExit("Unsupported VPS_SSH_KEY format. Expected a private PEM/OpenSSH key, optionally base64-encoded; secret value was not printed.")
             with open("/tmp/vps_key", "w", encoding="utf-8") as f:
                 f.write(key + "\n")
             PY
@@ -162,9 +194,25 @@ jobs:
           set +e
           python3 - <<'PY'
           import os
-          key = os.environ["VPS_SSH_KEY"].replace("\r", "").replace("\\r", "").replace("\\n", "\n").strip()
+          import os, base64, binascii
+          raw = os.environ["VPS_SSH_KEY"].strip()
+          if raw.startswith(("'", '"')) and raw[-1:] == raw[:1]:
+              raw = raw[1:-1]
+          raw = raw.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "")
+          key = raw.strip()
+          if key.startswith("VPS_SSH_KEY="):
+              key = key.split("=", 1)[1].strip().strip("'\"")
           if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-              raise SystemExit("VPS_SSH_KEY does not look like a PEM/OpenSSH private key")
+              compact = "".join(key.split())
+              try:
+                  decoded = base64.b64decode(compact, validate=True).decode("utf-8")
+                  decoded = decoded.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "").strip()
+                  if decoded.startswith("-----BEGIN ") and "PRIVATE KEY-----" in decoded:
+                      key = decoded
+              except (binascii.Error, UnicodeDecodeError, ValueError):
+                  pass
+          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
+              raise SystemExit("Unsupported VPS_SSH_KEY format. Expected a private PEM/OpenSSH key, optionally base64-encoded; secret value was not printed.")
           with open("/tmp/vps_key", "w", encoding="utf-8") as f:
               f.write(key + "\n")
           PY
