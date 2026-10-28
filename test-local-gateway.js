@@ -85,3 +85,9 @@ assert.ok(src.includes("process.env.ZVENOAI_FALLBACK_TEXT_MODEL||'cohere/north-m
 assert.ok(src.includes("if(typeof text==='string'&&text.trim())return{text,provider:'zvenoai',model}")&&src.includes("throw Error('Empty response content')"),'ZvenoAI empty content must trigger the fallback route instead of returning an empty answer');
 assert.ok(src.includes("provider:'zvenoai'")&&src.includes("ZVENOAI_ERROR_CONTINUE_FALLBACK_CHAIN"),'ZvenoAI failures must continue through the existing provider fallback chain');
 assert.ok(src.includes("zvenoai:!!keyOf('ZVENOAI_API_KEY')"),'health must report whether the ZvenoAI key is configured without exposing the key');
+
+// FreeLLM fallback must be opt-in, loopback-first, and non-fatal when unavailable.
+assert.ok(src.includes("process.env.FREELM_ENABLED==='1'"),'FreeLLM fallback must be explicitly opt-in');
+assert.ok(src.includes('http://127.0.0.1:4000/v1'),'FreeLLM defaults to loopback');
+assert.ok(src.includes("provider:'freelm'"),'FreeLLM success identifies its provider');
+assert.ok(src.includes('FREELM_ERROR_CONTINUE_FALLBACK_CHAIN'),'FreeLLM failures continue existing fallback chain');
