@@ -82,8 +82,18 @@ jobs:
               f.write(key + "\n")
           PY
           chmod 600 /tmp/vps_key
-          ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
-          ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          chmod 600 /tmp/vps_key.pub
+          echo "=== SAFE SSH KEY DIAGNOSTIC ==="
+          key_fp=$(ssh-keygen -lf /tmp/vps_key.pub -E sha256 | awk '{print $2}')
+          echo "VPS_SSH_KEY_FINGERPRINT=$key_fp"
+          if [ "$key_fp" = "SHA256:NXBKMIMu4xv2rTVU3NDonZTqG8HMWEilDZ/GVoeV1wc" ]; then
+            echo "VPS_SSH_KEY_MATCHES_SERVER_AUTHORIZED_KEY=yes"
+          else
+            echo "VPS_SSH_KEY_MATCHES_SERVER_AUTHORIZED_KEY=no"
+          fi
+          if [ "$VPS_USER" = "root" ]; then echo "VPS_USER_IS_ROOT=yes"; else echo "VPS_USER_IS_ROOT=no"; fi
+          ssh_opts=(-i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
           WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
           scp "${ssh_opts[@]}" local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
