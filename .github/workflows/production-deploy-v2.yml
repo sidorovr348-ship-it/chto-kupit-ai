@@ -94,20 +94,20 @@ jobs:
           fi
           if [ "$VPS_USER" = "root" ]; then echo "VPS_USER_IS_ROOT=yes"; else echo "VPS_USER_IS_ROOT=no"; fi
           ssh_opts=(-i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
-          WORKDIR=$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          WORKDIR=$(ssh "${ssh_opts[@]}" "root@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
           [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
-          scp "${ssh_opts[@]}" local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "$VPS_USER@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "mkdir -p '$WORKDIR/src' '$WORKDIR/autonomy-lab'"
-          scp "${ssh_opts[@]}" src/deadline.js src/single-flight.js "$VPS_USER@$VPS_HOST:$WORKDIR/src/"
-          scp "${ssh_opts[@]}" autonomy-lab/*.mjs autonomy-lab/package.json "$VPS_USER@$VPS_HOST:$WORKDIR/autonomy-lab/"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "set -e; cd '$WORKDIR'; npm install --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"
+          scp "${ssh_opts[@]}" local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "root@$VPS_HOST:$WORKDIR/"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "mkdir -p '$WORKDIR/src' '$WORKDIR/autonomy-lab'"
+          scp "${ssh_opts[@]}" src/deadline.js src/single-flight.js "root@$VPS_HOST:$WORKDIR/src/"
+          scp "${ssh_opts[@]}" autonomy-lab/*.mjs autonomy-lab/package.json "root@$VPS_HOST:$WORKDIR/autonomy-lab/"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "set -e; cd '$WORKDIR'; npm install --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"
           healthy=0
           for i in $(seq 1 30); do
-            if ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
+            if ssh "${ssh_opts[@]}" "root@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
             sleep 1
           done
           test "$healthy" = 1
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "cat /tmp/my-ai-health.json"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "cat /tmp/my-ai-health.json"
           rm -f /tmp/vps_key
       - name: Verify complete public production
         shell: bash
@@ -150,7 +150,7 @@ jobs:
             ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
             ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
             echo '=== VPS PHOTO DIAGNOSTIC ==='
-            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
+            ssh "${ssh_opts[@]}" "root@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
             rm -f /tmp/vps_key
             exit 1
           fi
@@ -232,15 +232,15 @@ jobs:
           echo '=== DIAGNOSTIC TIMESTAMP ==='
           date -Is
           echo '=== SERVICE STATUS ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "systemctl --no-pager --full status my-ai-unified || true"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "systemctl --no-pager --full status my-ai-unified || true"
           echo '=== SERVICE JOURNAL ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified --since '30 minutes ago' -n 250 --no-pager || true"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "journalctl -u my-ai-unified --since '30 minutes ago' -n 250 --no-pager || true"
           echo '=== WATCHDOG JOURNAL ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "journalctl -u my-ai-unified-supervisor --since '30 minutes ago' -n 150 --no-pager || true"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "journalctl -u my-ai-unified-supervisor --since '30 minutes ago' -n 150 --no-pager || true"
           echo '=== WATCHDOG LOG ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "tail -n 120 /root/my-ai-unified/data/supervisor/daemon.log 2>/dev/null || true"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "tail -n 120 /root/my-ai-unified/data/supervisor/daemon.log 2>/dev/null || true"
           echo '=== OOM ==='
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "dmesg -T 2>/dev/null | grep -Ei 'out of memory|oom|killed process|my-ai-unified' | tail -n 80 || true"
+          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "dmesg -T 2>/dev/null | grep -Ei 'out of memory|oom|killed process|my-ai-unified' | tail -n 80 || true"
           rm -f /tmp/vps_key
       - name: Run repeated hands-free wake test
         timeout-minutes: 8
