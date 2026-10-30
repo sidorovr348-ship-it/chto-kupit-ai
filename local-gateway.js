@@ -132,8 +132,34 @@ async function enrichSearchResults(items){
   for(const x of list){const page=await readWebPage(x.link);out.push(page?{...x,page}:x)}
   return out;
 }
-const searchCache=new Map();
-async function searchWeb(query,num=10){const cacheKey=String(query||'').trim().toLowerCase();const cached=searchCache.get(cacheKey);if(cached&&Date.now()-cached.ts<60000)return cached.results.slice(0,num);const k=keyOf('SERPER_API_KEY','SERPER_KEY');if(k&&Date.now()>=searchBlockedUntil.serper){try{const r=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':k,'Content-Type':'application/json'},body:JSON.stringify({q:String(query).slice(0,500),gl:'ru',hl:'ru',num}),signal:AbortSignal.timeout(8000)});const raw=await r.text();let d={};try{d=JSON.parse(raw)}catch{}if(r.ok){const out=(d.organic||[]).slice(0,num).map(x=>({title:String(x.title||''),link:String(x.link||''),snippet:String(x.snippet||'')})).filter(x=>x.link.startsWith('http://')||x.link.startsWith('https://'));if(out.length){boundedCacheSet(searchCache,String(query||'').trim().toLowerCase(),{ts:Date.now(),results:out},100);return out}}console.error('SERPER_SEARCH_FAILED',r.status,String(d.message||d.error||raw).slice(0,300));if(r.status===400&&/credit|balance|limit/i.test(String(d.message||d.error||raw)))searchBlockedUntil.serper=Date.now()+600000}catch(e){console.error('SERPER_SEARCH_FAILED',e.message)}}const out=await searchWebFallback(query,num);boundedCacheSet(searchCache,cacheKey,{ts:Date.now(),results:out},100);return out}
+const searchCache=new Map(),searchInFlight=new Map();
+async function searchWeb(query,num=10){
+ const cacheKey=String(query||'').trim().toLowerCase();
+ const cached=cacheGetFresh(searchCache,cacheKey,15*60*1000);
+ if(cached)return cached.results.slice(0,num);
+ if(searchInFlight.has(cacheKey))return (await searchInFlight.get(cacheKey)).slice(0,num);
+ const task=(async()=>{
+   // Free-first: use the independent web search HTML endpoints before any metered API.
+   // Serper is an optional last resort only when all free sources fail to return real results.
+   let out=await searchWebFallback(query,num);
+   const generic=Array.isArray(out)&&out.length>0&&out.every(x=>/внешние поисковые провайдеры временно недоступны|резервная ссылка на поиск/i.test(String(x.snippet||'')));
+   if(generic){
+     const k=keyOf('SERPER_API_KEY','SERPER_KEY');
+     if(k&&Date.now()>=searchBlockedUntil.serper){
+       try{
+         const r=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':k,'Content-Type':'application/json'},body:JSON.stringify({q:String(query).slice(0,500),gl:'ru',hl:'ru',num}),signal:AbortSignal.timeout(8000)});
+         const raw=await r.text();let d={};try{d=JSON.parse(raw)}catch{}
+         if(r.ok){const paid=(d.organic||[]).slice(0,num).map(x=>({title:String(x.title||''),link:String(x.link||''),snippet:String(x.snippet||'')})).filter(x=>x.link.startsWith('http://')||x.link.startsWith('https://'));if(paid.length)out=paid}
+         else{console.error('SERPER_SEARCH_FAILED',r.status,String(d.message||d.error||raw).slice(0,300));if(r.status===400&&/credit|balance|limit/i.test(String(d.message||d.error||raw)))searchBlockedUntil.serper=Date.now()+24*60*60*1000}
+       }catch(e){console.error('SERPER_SEARCH_FAILED',e.message)}
+     }
+   }
+   boundedCacheSet(searchCache,cacheKey,{ts:Date.now(),results:out},200);
+   return out;
+ })();
+ searchInFlight.set(cacheKey,task);
+ try{return (await task).slice(0,num)}finally{if(searchInFlight.get(cacheKey)===task)searchInFlight.delete(cacheKey)}
+}
 async function moscowWeather(){
   const u='https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6173&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m&timezone=Europe/Moscow';
   try{
