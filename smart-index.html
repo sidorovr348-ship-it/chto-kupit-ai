@@ -119,7 +119,7 @@ async function send(queuedText=null){
   let w=add('⏳');busy=true;
   const requestController=new AbortController();activeChatController=requestController;
   try{
-    let body={prompt:t,memoryId:MEMORY_ID,companionMode};
+    let body={prompt:t,memoryId:MEMORY_ID,companionMode,messages:messages.slice(companionMode?-5:-6)};
     if(/(?:мо[её]\s+)?текущ(?:ее|ую)\s+местоположение|где\s+я|мо[её]\s+местоположени(?:е|я)|моя\s+геолокаци|запомни\s+(?:мо[её]\s+)?местоположение/iu.test(t)&&navigator.geolocation){
       try{
         let p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{enableHighAccuracy:true,timeout:10000,maximumAge:60000}));
