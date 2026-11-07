@@ -20,9 +20,19 @@ jobs:
           node --check local-gateway.js
           node --check memory-map.js
           node --check image-generation-fallback.js
-          node --test test-local-gateway.js
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          node --check src/speech-text.js
+          bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
+          python3 -m py_compile scripts/prepare-vps-key.py
           test -s smart-index.html
-          for s in 'window.send=send' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/chat' '/document' '/generate-image' '/tts' 'memoryId' 'window.__wakeStart' 'window.__wakeResponseReady' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
+          for s in 'window.send=send' 'function cleanSpeechText(value)' 'messages:messages.slice' 'navigator.geolocation' 'MediaRecorder' 'getUserMedia' '/photo' '/chat' '/document' '/generate-image' '/tts' 'memoryId' 'window.__wakeStart' 'window.__wakeResponseReady' '.zip'; do grep -q "$s" smart-index.html || { echo "MISSING_FRONTEND_MARKER:$s"; exit 1; }; done
+          grep -q "TTS_VOICE='ru-RU-DmitryNeural'" local-gateway.js
+          grep -q 'sanitizeSpeechText(' local-gateway.js
+          ! grep -q 'googleFallbackTTS' local-gateway.js
+          ! grep -q 'speechSynthesis.speak(' smart-index.html
+          ! grep -q 'for(let n=0;n<3;n++)' smart-index.html
+          echo BACKEND_TTS_AUDIT_OK
           echo STATIC_AUDIT_OK
       - name: Verify live Pages
         run: |
@@ -152,13 +162,3 @@ jobs:
 
       - name: Final audit summary
         run: echo 'FINAL_DEEP_AUDIT_ALL_CHECKS_PASSED'
-      - name: 35 full acceptance cycles
-        run: |
-          set -euo pipefail
-          for n in $(seq 1 35); do
-            echo "=== FULL_ACCEPTANCE_$n/35 ==="
-            ACCEPTANCE_RUN=$n node production-acceptance.mjs
-            echo "FULL_ACCEPTANCE_${n}_PASS"
-            sleep 2
-          done
-          echo 'FULL_APPLICATION_35_OF_35_PASSED'

@@ -13,7 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
       - run: node --check server.js
+      - run: node --check src/speech-text.js
       - run: node validate-inline-scripts.cjs
       - run: node --test
+      - run: bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
+      - run: python3 -m py_compile scripts/prepare-vps-key.py

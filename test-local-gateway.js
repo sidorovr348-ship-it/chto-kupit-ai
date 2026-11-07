@@ -38,14 +38,17 @@ assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fa
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
-assert.ok(ui.includes("Версия интерфейса: 2026-10-20-diagnostic-2")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
+assert.ok(ui.includes("Версия интерфейса: 2026-11-08-voice-reliability-1")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
 assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
+assert.ok(ui.includes("messages:messages.slice(companionMode?-5:-6)"),'chat requests must include recent conversation history and reserve one context slot for companion instructions');
+assert.ok(!ui.includes("let body={prompt:t,memoryId:MEMORY_ID,companionMode};"),'chat requests must not regress to sending only the latest prompt');
 for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#companion').onclick=()=>{companionMode=!companionMode", "localStorage.getItem('ey-companion-mode')", "localStorage.setItem('ey-companion-mode'"])assert.ok(ui.includes(marker),`missing companion UI wiring: ${marker}`);
 // Secondary actions should stay out of the reading area until the user opens the tools dialog.
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
-assert.ok(ui.includes('Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})])'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},310000)'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('Math.min(300000,Math.max(10000,decoded.duration*1000+5000))'),'wake listening must wait for the full answer audio instead of cutting it off at a fixed 25 seconds');
 assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)"),'wake queue must abort a stalled chat request after a bounded deadline');
 assert.ok(ui.includes('finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}'),'wake queue must always clear its watchdog and release wake-owned state');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
@@ -85,3 +88,14 @@ assert.ok(src.includes("process.env.ZVENOAI_FALLBACK_TEXT_MODEL||'cohere/north-m
 assert.ok(src.includes("if(typeof text==='string'&&text.trim())return{text,provider:'zvenoai',model}")&&src.includes("throw Error('Empty response content')"),'ZvenoAI empty content must trigger the fallback route instead of returning an empty answer');
 assert.ok(src.includes("provider:'zvenoai'")&&src.includes("ZVENOAI_ERROR_CONTINUE_FALLBACK_CHAIN"),'ZvenoAI failures must continue through the existing provider fallback chain');
 assert.ok(src.includes("zvenoai:!!keyOf('ZVENOAI_API_KEY')"),'health must report whether the ZvenoAI key is configured without exposing the key');
+
+const {sanitizeSpeechText}=require('./src/speech-text');
+assert.equal(sanitizeSpeechText('**100 000 рублей**'),'100 000 рублей');
+const ttsSection=src.slice(src.indexOf('async function tts('),src.indexOf('async function extractDocument(req)'));
+assert.ok(ttsSection.includes('sanitizeSpeechText(')&&ttsSection.includes('voice:TTS_VOICE'),'server TTS must sanitize text and use the fixed voice');
+assert.ok(!src.includes('googleFallbackTTS')&&!src.includes('TTS_FALLBACK_PROVIDER google-translate'),'TTS must not switch to a different provider/voice');
+assert.ok(src.includes("TTS_VOICE='ru-RU-DmitryNeural'"),'server voice must remain the selected male voice');
+assert.ok(ui.includes('function cleanSpeechText(value)')&&ui.includes('text:speechText'),'frontend must sanitize the TTS copy before sending it');
+assert.ok(!ui.includes('speechSynthesis.speak('),'browser default voice fallback must not switch the speaker');
+assert.ok(!ui.includes('for(let n=0;n<3;n++)'),'frontend API must not automatically retry a POST request');
+assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversation history must remain included');

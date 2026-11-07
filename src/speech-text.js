@@ -1,0 +1,22 @@
+'use strict';
+function sanitizeSpeechText(value){
+ let text=String(value??'');
+ const tick=String.fromCharCode(96);
+ text=text.replace(/!\[([^\]]*)\]\([^)]+\)/g,'$1').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1');
+ text=text.replace(new RegExp(tick.repeat(3)+'[^\\n]*\\n?([\\s\\S]*?)'+tick.repeat(3),'g'),'$1');
+ text=text.replace(new RegExp(tick+'([^'+tick+']+)'+tick,'g'),'$1');
+ text=text.replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*>\s?/gm,'');
+ text=text.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/gm,'');
+ text=text.split('\n').map(line=>{
+  if(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line))return '';
+  if(line.includes('|'))return line.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(part=>part.trim()).filter(Boolean).join(', ');
+  return line;
+ }).join('\n');
+ text=text.replace(/\*\*([\s\S]+?)\*\*/g,'$1').replace(/__([\s\S]+?)__/g,'$1').replace(/~~([\s\S]+?)~~/g,'$1');
+ text=text.replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?])/g,'$1$2').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/g,'$1$2').replace(/<[^>]*>/g,'');
+ text=text.replace(/https?:\/\/\S+/gi,'ссылка');
+ text=text.replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'. ').replace(/(?:\.\s*){2,}/g,'. ');
+ text=text.replace(/\s+([,.;!?])/g,'$1').replace(/([,;])(?:\s*[,;])+/g,'$1').replace(/([,;:!?])\s*\.\s*/g,'$1 ');
+ return text.trim();
+}
+module.exports={sanitizeSpeechText};
