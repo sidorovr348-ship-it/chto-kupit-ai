@@ -1,79 +1,44 @@
-<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Эй</title><style>html{min-height:100%;overflow-y:auto;-webkit-text-size-adjust:100%}body{margin:0;min-height:100%;overflow-y:auto;overscroll-behavior-y:auto;background:#0b0b0d;color:#f5f5f7;font:16px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}main{max-width:860px;margin:auto;padding:10px 10px calc(24px + env(safe-area-inset-bottom))}h1{font-size:28px;margin:4px 0 10px}.chat{height:64vh;min-height:240px;max-height:72vh;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;scrollbar-gutter:stable;background:#151518;border-radius:22px;padding:10px;box-sizing:border-box}.msg{touch-action:pan-y;user-select:text;-webkit-user-select:text}.msg{padding:11px 13px;border-radius:18px;margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.ai{background:#222226}.user{background:#fff;color:#111;margin-left:8%}.bar{display:flex;gap:7px;margin-top:8px}textarea{flex:1;border:0;border-radius:20px;background:#202024;color:#fff;padding:13px;font:inherit}button{border:0;border-radius:20px;padding:11px;background:#202024;color:#fff;font-weight:700}.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}.tool-launch{flex:0 0 auto;min-width:48px;font-size:17px}.tools-modal{display:none;position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.64);padding:16px 12px calc(16px + env(safe-area-inset-bottom));align-items:flex-end;justify-content:center;box-sizing:border-box;backdrop-filter:blur(5px)}.tools-modal.open{display:flex}.tools-sheet{width:100%;max-width:560px;max-height:min(78vh,680px);overflow-y:auto;overscroll-behavior:contain;background:#1a1a1f;border:1px solid #38383f;border-radius:24px;padding:14px;box-sizing:border-box;box-shadow:0 12px 48px rgba(0,0,0,.5)}.tools-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.tools-head h2{font-size:18px;margin:0}.tools-close{font-size:20px;min-width:44px;min-height:44px}.tools-hint{font-size:13px;line-height:1.4;color:#b8b8c2;margin:0 0 10px}.tools-sheet button{min-height:44px;overflow-wrap:anywhere}.camera{display:none;margin-top:8px;background:#000;border-radius:18px;padding:7px}.camera video{width:100%;border-radius:14px}.recording{background:#8b1e2d;box-shadow:0 0 0 3px #c43b50}img{max-width:100%;border-radius:14px}@media(min-width:640px){.tools-modal{align-items:center}.tools-sheet{max-height:80vh}}</style><main><h1>Эй</h1><section class="chat" id="chat"><div class="msg ai">Привет! Я Эй. Чем помочь?</div></section><div class="bar"><textarea id="input" placeholder="Напиши или скажи…"></textarea><button id="send" aria-label="Отправить сообщение" title="Отправить">➤</button><button id="toolsToggle" class="tool-launch" aria-label="Открыть инструменты" aria-haspopup="dialog" aria-expanded="false" title="Инструменты">☰</button></div><section class="camera" id="cameraBox"><video id="cam" autoplay playsinline muted></video></section><div class="tools-modal" id="toolsModal" role="presentation"><section class="tools-sheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle"><div class="tools-head"><h2 id="toolsTitle">Инструменты Эй</h2><button id="toolsClose" class="tools-close" aria-label="Закрыть меню" title="Закрыть">✕</button></div><p class="tools-hint">Дополнительные действия скрыты, пока они не нужны. Выбери инструмент — меню закроется автоматически.</p><div class="actions"><button id="voice">🎙️ Голос</button><button id="photo">📷 Фото</button><button id="camera">📹 Камера</button><button id="video">🎬 Видео</button><button id="file">📎 Файл</button><button id="imagegen">🎨 Картинка</button><button id="companion" aria-pressed="false">💬 Собеседник: выкл.</button><button id="sound">🔊 Звук</button><button id="stop">⏹ Стоп</button><button id="clear">🧹 Очистить</button><button id="camAnalyze">🔎 Что это?</button><button id="camShot">📸 Снимок</button><button id="camOff">⏹ Выключить камеру</button></div></section></div><input id="photoInput" type="file" accept="image/*" multiple hidden><input id="videoInput" type="file" accept="video/*" hidden><input id="fileInput" type="file" accept=".zip,.txt,.md,.csv,.tsv,.json,.xml,.html,.pdf,.docx,.xlsx,.xls" hidden><script>'use strict';const API='https://ai.aliceq.ru',MEMORY_KEY='my-ai-memory-id-v1',MEMORY_ID=localStorage.getItem(MEMORY_KEY)||(crypto.randomUUID?crypto.randomUUID():(Date.now().toString(36)+Math.random().toString(36).slice(2)));localStorage.setItem(MEMORY_KEY,MEMORY_ID);const $=s=>document.querySelector(s),chat=$('#chat'),input=$('#input');let busy=false,activeChatController=null,pendingManual=[],sound=true,audio=new Audio(),messages=[],companionMode=(()=>{try{return localStorage.getItem('ey-companion-mode')==='on'}catch{return false}})(),cameraStream=null,recorder=null,recognition=null,chunks=[],voiceTimer=null,voiceCtx=null,speechGeneration=0,ttsController=null,ttsSource=null;function add(t,c='ai'){let d=document.createElement('div');d.className='msg '+c;d.textContent=String(t||'');chat.append(d);chat.scrollTop=chat.scrollHeight;return d}function links(t){const text=String(t||'').trim();let d=document.createElement('div');d.className='msg ai';d.dataset.e2eResponse='1';if(!text){d.textContent='';chat.append(d);chat.scrollTop=chat.scrollHeight;return d}for(let p of text.split(/(https?:\/\/[^\s]+)/g)){if(/^https?:\/\//i.test(p)){let a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener';a.textContent=p;d.append(a)}else d.append(document.createTextNode(p))}chat.append(d);chat.scrollTop=chat.scrollHeight;return d}async function api(path,b,to=120000,externalSignal=null){
- const requestId=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8));
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),to);
- const abortExternal=()=>controller.abort();
- if(externalSignal){if(externalSignal.aborted)controller.abort();else externalSignal.addEventListener('abort',abortExternal,{once:true})}
- try{
-  if(externalSignal?.aborted)throw Error('Запрос отменён');
-  const response=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':requestId},body:JSON.stringify(b),cache:'no-store',signal:controller.signal});
-  const raw=await response.text();let json;
-  try{json=JSON.parse(raw)}catch{throw Error('Сервер вернул некорректный ответ. Код запроса: '+requestId)}
-  if(!response.ok)throw Error(String(json?.error||'Ошибка сервера HTTP '+response.status)+' Код запроса: '+requestId);
-  if(!json||typeof json!=='object'||Array.isArray(json))throw Error('Сервер вернул ответ неверного формата. Код запроса: '+requestId);
-  return json;
- }catch(error){
-  if(externalSignal?.aborted)throw Error('Запрос отменён. Код запроса: '+requestId);
-  if(error?.name==='AbortError')throw Error('Сервер не ответил вовремя. Повторный запрос не запускал. Код запроса: '+requestId);
-  if(/Failed to fetch|Load failed|NetworkError/i.test(String(error?.message||'')))throw Error('Связь с AI-сервером прервалась. Повторный запрос не запускал, чтобы не создавать дубликаты. Код запроса: '+requestId);
-  throw error;
- }finally{clearTimeout(timer);externalSignal?.removeEventListener('abort',abortExternal)}
-}
-function cleanSpeechText(value){
- let text=String(value||'');
- const tick=String.fromCharCode(96);
- text=text.replace(/!\[([^\]]*)\]\([^)]+\)/g,'$1').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1');
- text=text.replace(new RegExp(tick.repeat(3)+'[^\\n]*\\n?([\\s\\S]*?)'+tick.repeat(3),'g'),'$1');
- text=text.replace(new RegExp(tick+'([^'+tick+']+)'+tick,'g'),'$1');
- text=text.replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*>\s?/gm,'');
- text=text.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/gm,'');
- text=text.split('\n').map(line=>{
-  if(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line))return '';
-  if(line.includes('|'))return line.replace(/^\s*\|/,'').replace(/\|\s*$/,'').split('|').map(part=>part.trim()).filter(Boolean).join(', ');
-  return line;
- }).join('\n');
- text=text.replace(/\*\*([\s\S]+?)\*\*/g,'$1').replace(/__([\s\S]+?)__/g,'$1').replace(/~~([\s\S]+?)~~/g,'$1');
- text=text.replace(/(^|[\s(])\*([^*\n]+)\*(?=$|[\s).,!?])/g,'$1$2').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?])/g,'$1$2').replace(/<[^>]*>/g,'');
- text=text.replace(/https?:\/\/\S+/gi,'ссылка');
- text=text.replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'. ').replace(/(?:\.\s*){2,}/g,'. ');
- text=text.replace(/\s+([,.;!?])/g,'$1').replace(/([,;])(?:\s*[,;])+/g,'$1').replace(/([,;:!?])\s*\.\s*/g,'$1 ');
- return text.trim();
-}
-function say(t){
- const speechText=cleanSpeechText(t).slice(0,3500);
- if(!sound||!speechText){window.__ttsPromise=Promise.resolve();return window.__ttsPromise;}
+<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Эй</title><style>html{min-height:100%;overflow-y:auto;-webkit-text-size-adjust:100%}body{margin:0;min-height:100%;overflow-y:auto;overscroll-behavior-y:auto;background:#0b0b0d;color:#f5f5f7;font:16px -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}main{max-width:860px;margin:auto;padding:10px 10px calc(24px + env(safe-area-inset-bottom))}h1{font-size:28px;margin:4px 0 10px}.chat{height:64vh;min-height:240px;max-height:72vh;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;scrollbar-gutter:stable;background:#151518;border-radius:22px;padding:10px;box-sizing:border-box}.msg{touch-action:pan-y;user-select:text;-webkit-user-select:text}.msg{padding:11px 13px;border-radius:18px;margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}.ai{background:#222226}.user{background:#fff;color:#111;margin-left:8%}.bar{display:flex;gap:7px;margin-top:8px}textarea{flex:1;border:0;border-radius:20px;background:#202024;color:#fff;padding:13px;font:inherit}button{border:0;border-radius:20px;padding:11px;background:#202024;color:#fff;font-weight:700}.actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}.tool-launch{flex:0 0 auto;min-width:48px;font-size:17px}.tools-modal{display:none;position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.64);padding:16px 12px calc(16px + env(safe-area-inset-bottom));align-items:flex-end;justify-content:center;box-sizing:border-box;backdrop-filter:blur(5px)}.tools-modal.open{display:flex}.tools-sheet{width:100%;max-width:560px;max-height:min(78vh,680px);overflow-y:auto;overscroll-behavior:contain;background:#1a1a1f;border:1px solid #38383f;border-radius:24px;padding:14px;box-sizing:border-box;box-shadow:0 12px 48px rgba(0,0,0,.5)}.tools-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.tools-head h2{font-size:18px;margin:0}.tools-close{font-size:20px;min-width:44px;min-height:44px}.tools-hint{font-size:13px;line-height:1.4;color:#b8b8c2;margin:0 0 10px}.tools-sheet button{min-height:44px;overflow-wrap:anywhere}.camera{display:none;margin-top:8px;background:#000;border-radius:18px;padding:7px}.camera video{width:100%;border-radius:14px}.recording{background:#8b1e2d;box-shadow:0 0 0 3px #c43b50}img{max-width:100%;border-radius:14px}@media(min-width:640px){.tools-modal{align-items:center}.tools-sheet{max-height:80vh}}</style><main><h1>Эй</h1><section class="chat" id="chat"><div class="msg ai">Привет! Я Эй. Чем помочь?</div></section><div class="bar"><textarea id="input" placeholder="Напиши или скажи…"></textarea><button id="send" aria-label="Отправить сообщение" title="Отправить">➤</button><button id="toolsToggle" class="tool-launch" aria-label="Открыть инструменты" aria-haspopup="dialog" aria-expanded="false" title="Инструменты">☰</button></div><section class="camera" id="cameraBox"><video id="cam" autoplay playsinline muted></video></section><div class="tools-modal" id="toolsModal" role="presentation"><section class="tools-sheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle"><div class="tools-head"><h2 id="toolsTitle">Инструменты Эй</h2><button id="toolsClose" class="tools-close" aria-label="Закрыть меню" title="Закрыть">✕</button></div><p class="tools-hint">Дополнительные действия скрыты, пока они не нужны. Выбери инструмент — меню закроется автоматически.</p><div class="actions"><button id="voice">🎙️ Голос</button><button id="photo">📷 Фото</button><button id="camera">📹 Камера</button><button id="video">🎬 Видео</button><button id="file">📎 Файл</button><button id="imagegen">🎨 Картинка</button><button id="companion" aria-pressed="false">💬 Собеседник: выкл.</button><button id="sound">🔊 Звук</button><button id="stop">⏹ Стоп</button><button id="clear">🧹 Очистить</button><button id="camAnalyze">🔎 Что это?</button><button id="camShot">📸 Снимок</button><button id="camOff">⏹ Выключить камеру</button></div></section></div><input id="photoInput" type="file" accept="image/*" multiple hidden><input id="videoInput" type="file" accept="video/*" hidden><input id="fileInput" type="file" accept=".zip,.txt,.md,.csv,.tsv,.json,.xml,.html,.pdf,.docx,.xlsx,.xls" hidden><script>'use strict';const API='https://ai.aliceq.ru',MEMORY_KEY='my-ai-memory-id-v1',MEMORY_ID=localStorage.getItem(MEMORY_KEY)||(crypto.randomUUID?crypto.randomUUID():(Date.now().toString(36)+Math.random().toString(36).slice(2)));localStorage.setItem(MEMORY_KEY,MEMORY_ID);const $=s=>document.querySelector(s),chat=$('#chat'),input=$('#input');let busy=false,activeChatController=null,pendingManual=[],sound=true,audio=new Audio(),messages=[],companionMode=(()=>{try{return localStorage.getItem('ey-companion-mode')==='on'}catch{return false}})(),cameraStream=null,recorder=null,recognition=null,chunks=[],voiceTimer=null,voiceCtx=null,speechGeneration=0,ttsController=null,ttsSource=null;function add(t,c='ai'){let d=document.createElement('div');d.className='msg '+c;d.textContent=String(t||'');chat.append(d);chat.scrollTop=chat.scrollHeight;return d}function links(t){const text=String(t||'').trim();let d=document.createElement('div');d.className='msg ai';d.dataset.e2eResponse='1';if(!text){d.textContent='';chat.append(d);chat.scrollTop=chat.scrollHeight;return d}for(let p of text.split(/(https?:\/\/[^\s]+)/g)){if(/^https?:\/\//i.test(p)){let a=document.createElement('a');a.href=p;a.target='_blank';a.rel='noopener';a.textContent=p;d.append(a)}else d.append(document.createTextNode(p))}chat.append(d);chat.scrollTop=chat.scrollHeight;return d}async function api(path,b,to=120000,externalSignal=null){const requestId=(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8));const deadline=Date.now()+to;for(let n=0;n<3;n++){if(externalSignal?.aborted)throw Error('Запрос отменён');const left=deadline-Date.now();if(left<=0)throw Error('Сервер не ответил вовремя.');let c=new AbortController(),tm=setTimeout(()=>c.abort(),left),abortExternal=()=>c.abort();if(externalSignal){if(externalSignal.aborted)c.abort();else externalSignal.addEventListener('abort',abortExternal,{once:true})}try{let r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':requestId},body:JSON.stringify(b),cache:'no-store',signal:c.signal}),t=await r.text(),j={};try{j=JSON.parse(t)}catch{}if(!r.ok){if((r.status>=500||r.status===429)&&n<2&&Date.now()<deadline&&!externalSignal?.aborted){await new Promise(x=>setTimeout(x,Math.min(1000*(n+1),Math.max(0,deadline-Date.now()))));continue}throw Error(j.error||'Ошибка сервера HTTP '+r.status)}return j}catch(e){if(externalSignal?.aborted)throw Error('Запрос отменён');if(e.name==='AbortError'||/Failed to fetch|Load failed|NetworkError/i.test(String(e.message||''))||externalSignal?.aborted||n===2||Date.now()>=deadline)throw Error((e.name==='AbortError'?'Сервер не ответил вовремя.':/Failed to fetch|Load failed|NetworkError/i.test(String(e.message||''))?'Связь с AI-сервером прервалась. Повторный запрос не запускал, чтобы не создавать дубликаты.':e.message)+' Код запроса: '+requestId)}finally{clearTimeout(tm);externalSignal?.removeEventListener('abort',abortExternal)}}throw Error('AI недоступен')}function say(t){
+ if(!sound||!t){window.__ttsPromise=Promise.resolve();return window.__ttsPromise;}
  const generation=++speechGeneration;
  try{ttsController?.abort()}catch{}
  try{ttsSource?.stop(0)}catch{}
- const controller=new AbortController();ttsController=controller;
+ const c=new AbortController();ttsController=c;
  const task=(async()=>{
-  const timeout=setTimeout(()=>controller.abort(),22000);
   try{
-   const response=await fetch(API+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:speechText}),cache:'no-store',signal:controller.signal});
-   if(!response.ok){let detail='';try{detail=(await response.text()).slice(0,180)}catch{}throw Error('TTS HTTP '+response.status+(detail?': '+detail:''))}
-   const bytes=await response.arrayBuffer();
+   // The server first tries Edge TTS and then its Google fallback; 6 seconds cut off the server fallback and forced inconsistent iOS voices.
+   const tm=setTimeout(()=>c.abort(),18000);
+   try{
+    const r=await fetch(API+'/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:String(t).slice(0,3500)}),cache:'no-store',signal:c.signal});
+    if(!r.ok)throw Error();
+    const bytes=await r.arrayBuffer();
+    if(generation!==speechGeneration)return;
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)throw Error('Web Audio unavailable');
+    voiceCtx=voiceCtx||new AC();
+    if(voiceCtx.state==='suspended')await Promise.race([voiceCtx.resume(),new Promise((_,no)=>setTimeout(()=>no(Error('AudioContext resume timeout')),3000))]);
+    const decoded=await voiceCtx.decodeAudioData(bytes.slice(0));
+    if(generation!==speechGeneration)return;
+    const source=voiceCtx.createBufferSource();source.buffer=decoded;source.connect(voiceCtx.destination);ttsSource=source;
+    await new Promise(ok=>{let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(w);if(ttsSource===source)ttsSource=null;ok()};const w=setTimeout(finish,Math.min(25000,decoded.duration*1000+2500));source.onended=finish;source.start(0)});
+   }finally{clearTimeout(tm)}
+  }catch{
    if(generation!==speechGeneration)return;
-   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
-   if(!AudioContextClass)throw Error('Web Audio недоступен');
-   voiceCtx=voiceCtx||new AudioContextClass();
-   if(voiceCtx.state==='suspended')await Promise.race([voiceCtx.resume(),new Promise((_,reject)=>setTimeout(()=>reject(Error('Не удалось включить аудиоконтекст')),3000))]);
-   const decoded=await voiceCtx.decodeAudioData(bytes.slice(0));
-   if(generation!==speechGeneration)return;
-   const source=voiceCtx.createBufferSource();source.buffer=decoded;source.connect(voiceCtx.destination);ttsSource=source;
-   await new Promise(resolve=>{let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(watchdog);if(ttsSource===source)ttsSource=null;resolve()};const watchdog=setTimeout(()=>{try{source.stop(0)}catch{}finish()},Math.min(300000,Math.max(10000,decoded.duration*1000+5000)));source.onended=finish;source.start(0)});
-  }catch(error){
-   if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ закреплённым мужским голосом. Текстовый ответ сохранён. '+String(error?.message||'Ошибка TTS'));
-  }finally{clearTimeout(timeout)}
+   try{
+    if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')throw Error('Браузер не поддерживает резервное озвучивание');
+    await new Promise((ok,no)=>{let done=false;const finish=()=>{if(done)return;done=true;clearTimeout(w);ok()};const w=setTimeout(()=>{finish()},Math.max(5000,Math.min(12000,String(t).length*55)));const u=new SpeechSynthesisUtterance(String(t).slice(0,2500));u.lang='ru-RU';u.onend=finish;u.onerror=()=>{clearTimeout(w);no(Error('Встроенное озвучивание завершилось с ошибкой'))};if(generation!==speechGeneration){finish();return}speechSynthesis.cancel();speechSynthesis.speak(u)});
+   }catch(e){if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ. Проверь громкость и режим беззвучного звука iPhone. '+String(e?.message||''))}
+  }
  })();
- let wakeWaitTimer;
- const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},310000)})]).finally(()=>clearTimeout(wakeWaitTimer));
+ let wakeWaitTimer;const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{interruptSpeech();resolve()},15000)})]).finally(()=>clearTimeout(wakeWaitTimer));
  window.__ttsPromise=wakeSafeTask;
- return wakeSafeTask;
+ return task;
 }
 window.__primeTtsAudio=()=>{try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;voiceCtx=voiceCtx||new AC();if(voiceCtx.state==='suspended')void voiceCtx.resume().catch(()=>{})}catch{}};
 function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{};try{ttsSource?.stop(0)}catch{};ttsSource=null;try{audio.pause();audio.currentTime=0}catch{};try{speechSynthesis?.cancel?.()}catch{};window.__ttsPromise=Promise.resolve()}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function runSelfDiagnostic(){
  const card=add('🔎 Самодиагностика Эй: проверяю компоненты параллельно…');
- const lines=['Версия интерфейса: 2026-11-08-voice-reliability-1'];
+ const lines=['Версия интерфейса: 2026-10-20-diagnostic-2'];
  async function probe(label,path,method='GET',timeoutMs=5000){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
@@ -154,7 +119,7 @@ async function send(queuedText=null){
   let w=add('⏳');busy=true;
   const requestController=new AbortController();activeChatController=requestController;
   try{
-    let body={prompt:t,memoryId:MEMORY_ID,companionMode,messages:messages.slice(companionMode?-5:-6)};
+    let body={prompt:t,memoryId:MEMORY_ID,companionMode};
     if(/(?:мо[её]\s+)?текущ(?:ее|ую)\s+местоположение|где\s+я|мо[её]\s+местоположени(?:е|я)|моя\s+геолокаци|запомни\s+(?:мо[её]\s+)?местоположение/iu.test(t)&&navigator.geolocation){
       try{
         let p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{enableHighAccuracy:true,timeout:10000,maximumAge:60000}));
