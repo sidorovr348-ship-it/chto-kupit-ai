@@ -51,6 +51,14 @@ jobs:
           echo '=== LIVE FALLBACK CALL SITE ==='
           python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="callOllama(messages"; i=s.find(m); print(s[max(0,i-700):i+1800] if i>=0 else "NOT_FOUND")'
           python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="const textTimeout="; i=s.find(m); print(s[max(0,i-500):i+4000] if i>=0 else "NOT_FOUND")'
+          echo '=== NON-SECRET OPTIONAL PROVIDER SETTINGS ==='
+          python3 -c 'from pathlib import Path; keys={"FREELM_ENABLED","FREELM_MODEL","FREELM_BASE_URL","OLLAMA_TIMEOUT_MS","TTS_VOICE"}; paths=[Path("/root/my-ai-unified/.local-ai.env"),Path("/root/chto-kupit-ai.env")]; [(print(str(p),k,v)) for p in paths if p.exists() for line in p.read_text(errors="replace").splitlines() if "=" in line for k,v in [line.split("=",1)] if k in keys]'
+          python3 -c 'from pathlib import Path; paths=[Path("/root/my-ai-unified/.local-ai.env"),Path("/root/chto-kupit-ai.env")]; keys={"FREELM_API_KEY","CLOUDRU_AGENT_TOKEN","HF_TOKEN"}; [(print(str(p),k,"configured",bool(v.strip()))) for p in paths if p.exists() for line in p.read_text(errors="replace").splitlines() if "=" in line for k,v in [line.split("=",1)] if k in keys]'
+          echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
+          curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
+          echo
+          echo '=== CLOUDRU AGENT REFERENCES IN LIVE JS ==='
+          grep -R -n --include='*.js' --exclude='cloudru-agent.js' --exclude-dir=node_modules --exclude='*.log' 'cloudru-agent' /root/my-ai-unified 2>/dev/null | head -n 40
           echo '=== PROVIDER JOURNAL LAST 15 MINUTES ==='
           journalctl -u my-ai-unified.service --since '15 minutes ago' --no-pager 2>&1 | grep -E 'AI_PROVIDER|GROQ|OLLAMA|CHAT_REQUEST|ZVENOAI|FALLBACK|deadline|timeout|429|401|502' | tail -n 240
           echo '=== SYSTEM JOURNAL LAST 15 MINUTES ==='
