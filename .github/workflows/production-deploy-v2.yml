@@ -23,6 +23,8 @@ env:
 
 jobs:
   deploy:
+    outputs:
+      backup_archive: ${{ steps.deploy_backend.outputs.backup_archive }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -222,3 +224,25 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
+      - name: Verify published GitHub Pages
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          test -n "$PAGE_URL"
+          curl -LfsS --retry 10 --retry-all-errors --retry-delay 2 --max-time 60 "$PAGE_URL" -o /tmp/pages.html
+          grep -q 'EY_WAKE_WORD_V2_STATE_MACHINE' /tmp/pages.html
+          grep -q 'function cleanSpeechText(value)' /tmp/pages.html
+          grep -q 'messages:messages.slice' /tmp/pages.html
+          echo PAGES_DEPLOYMENT_OK
+  rollback-vps-if-pages-fail:
+    if: ${{ always() && needs.deploy.result == 'success' && needs.pages.result != 'success' && needs.deploy.outputs.backup_archive != '' }}
+    needs: [deploy, pages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore backend if Pages publication failed
+        env:
+          BACKUP_ARCHIVE: ${{ needs.deploy.outputs.backup_archive }}
+        run: bash scripts/rollback-vps.sh
