@@ -1,0 +1,53 @@
+name: Sync current UI to VPS with single-file rollback
+
+on:
+  push:
+    branches:
+      - ops/sync-current-ui-to-vps-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  sync-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backup and atomically sync smart-index only
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh_vps() { ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$@"; }
+          scp_vps() { scp -i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$@"; }
+          WORKDIR=$(ssh_vps "root@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
+          [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
+          FREE_KB=$(ssh_vps "root@$VPS_HOST" "df -Pk '$WORKDIR' | awk 'NR==2 {print \$4}'")
+          if ! [[ "$FREE_KB" =~ ^[0-9]+$ ]] || [ "$FREE_KB" -lt 100000 ]; then
+            echo "Insufficient or unknown free disk space; UI sync stopped before backup."
+            exit 1
+          fi
+          LOCAL_SHA=$(sha256sum smart-index.html | awk '{print $1}')
+          BACKUP="$WORKDIR/.deploy-backups/smart-index-pre-ui-sync-$GITHUB_SHA.html"
+          TEMP="$WORKDIR/.smart-index-ui-sync-$GITHUB_SHA.tmp"
+          ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; test -s smart-index.html; mkdir -p .deploy-backups; cp -a smart-index.html '$BACKUP'; test -s '$BACKUP'; echo 'BACKUP_SHA='\\$(sha256sum '$BACKUP' | awk '{print \\$1}')"
+          scp_vps smart-index.html "root@$VPS_HOST:$TEMP"
+          if ! ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; test \\$(sha256sum '$TEMP' | awk '{print \\$1}') = '$LOCAL_SHA'; mv '$TEMP' smart-index.html; curl -fsS --max-time 8 'http://127.0.0.1:3020/?ui_sync=$GITHUB_SHA' -o /tmp/ui-sync-local.html; grep -Fq '2026-11-08-voice-reliability-1' /tmp/ui-sync-local.html; grep -Fq 'EY_WAKE_WORD_V2_STATE_MACHINE' /tmp/ui-sync-local.html; grep -Fq \"api('/chat',body,48000,requestController.signal)\" /tmp/ui-sync-local.html; ! grep -Fq 'for(let n=0;n<3;n++)' /tmp/ui-sync-local.html"; then
+            echo "Local UI verification failed; restoring backup."
+            ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$BACKUP' smart-index.html; test \\$(sha256sum smart-index.html | awk '{print \\$1}') = \\$(sha256sum '$BACKUP' | awk '{print \\$1}')"
+            exit 1
+          fi
+          if ! curl -fsS --max-time 15 "https://ai.aliceq.ru/?ui_sync=$GITHUB_SHA" -o /tmp/ui-sync-public.html || ! grep -Fq '2026-11-08-voice-reliability-1' /tmp/ui-sync-public.html; then
+            echo "Public UI verification failed; restoring backup."
+            ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$BACKUP' smart-index.html; test \\$(sha256sum smart-index.html | awk '{print \\$1}') = \\$(sha256sum '$BACKUP' | awk '{print \\$1}')"
+            exit 1
+          fi
+          echo "STATIC_UI_SYNC_OK"
+          echo "BACKUP=$BACKUP"
+          echo "LOCAL_SHA=$LOCAL_SHA"
