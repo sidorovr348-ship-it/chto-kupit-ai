@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 set -Ee
 set -o pipefail
-if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
   echo "VPS_HOST, VPS_USER and VPS_SSH_KEY are required."
-  exit 1
-fi
-if [ "$VPS_USER" != "root" ]; then
-  echo "VPS_USER must be root for the configured my-ai-unified service deployment."
   exit 1
 fi
 python3 scripts/prepare-vps-key.py
@@ -16,6 +12,8 @@ ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
 chmod 600 /tmp/vps_key.pub
 ssh_vps() { ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "$@"; }
 scp_vps() { scp -i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$@"; }
+REMOTE_UID=$(ssh_vps "root@$VPS_HOST" "id -u")
+if [ "$REMOTE_UID" != "0" ]; then echo "SSH key does not have root privileges."; exit 1; fi
 WORKDIR=$(ssh_vps "root@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
 [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
 case "$WORKDIR" in /*) ;; *) echo "Unexpected service working directory; deployment stopped."; exit 1 ;; esac
