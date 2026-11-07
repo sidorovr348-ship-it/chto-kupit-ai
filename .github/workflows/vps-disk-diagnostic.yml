@@ -85,5 +85,17 @@ jobs:
           echo '=== RUNNER PROCESS DETAILS ==='
           ps -p 2233286 -o pid,user,etime,comm 2>&1
           readlink -f /proc/2233286/cwd 2>&1
+          echo '=== RUNNER UPDATE METADATA ==='
+          for p in /home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz /home/ghrunner/actions-runner/bin /home/ghrunner/actions-runner/bin.2.338.2 /home/ghrunner/actions-runner/externals /home/ghrunner/actions-runner/externals.2.338.2 /home/ghrunner/actions-runner/_work/_update; do
+            if [ -e "$p" ]; then stat -c '%y %s %n' "$p"; fi
+          done
+          echo '--- update directory contents ---'
+          ls -lah /home/ghrunner/actions-runner/_work/_update 2>&1 | head -n 60
+          echo '--- runner listener/worker processes ---'
+          ps -eo pid,ppid,user,etime,comm | grep -E 'Runner.Listener|Runner.Worker|MainThread' | grep -v grep || true
+          echo '--- runner update log excerpts ---'
+          if compgen -G '/home/ghrunner/actions-runner/_diag/Runner_*.log' >/dev/null; then
+            grep -iE 'update|version|2\.338' /home/ghrunner/actions-runner/_diag/Runner_*.log 2>/dev/null | tail -n 80
+          fi
           echo '=== DIAGNOSTIC COMPLETE; NO FILES WERE MODIFIED ==='
           REMOTE
