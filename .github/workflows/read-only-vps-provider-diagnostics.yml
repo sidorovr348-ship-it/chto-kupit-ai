@@ -40,6 +40,23 @@ jobs:
           echo '=== LOCAL AI HEALTH ==='
           curl --max-time 8 -sS http://127.0.0.1:3020/local-ai/health
           echo
+          echo '=== LIVE GATEWAY FALLBACK SOURCE ==='
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/root/my-ai-unified/local-gateway.js')
+          s=p.read_text(errors='replace')
+          for marker in ['max_completion_tokens','async function callOllama','function callOllama','OLLAMA_PARALLEL_FALLBACK_ERROR','const textTimeout=']:
+              i=s.find(marker)
+              print('SOURCE_MARKER',marker,'INDEX',i)
+              if i>=0:
+                  print(s[max(0,i-450):i+1000])
+          PY
+          echo '=== OLLAMA LOADED MODEL ==='
+          ollama ps 2>&1
+          echo '=== DIRECT OLLAMA CHAT TEST (48 TOKENS) ==='
+          START_MS=$(date +%s%3N)
+          curl --max-time 18 -sS -w '\nOLLAMA_HTTP=%{http_code} TOTAL_SECONDS=%{time_total}\n' -H 'Content-Type: application/json' -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Кто такой Пётр Первый? Назови годы жизни и две главные реформы."}],"stream":false,"options":{"num_predict":48,"temperature":0.2}}' http://127.0.0.1:11434/api/chat
+          echo "OLLAMA_ELAPSED_MS=$(( $(date +%s%3N) - START_MS ))"
           echo '=== PROVIDER JOURNAL LAST 15 MINUTES ==='
           journalctl -u my-ai-unified.service --since '15 minutes ago' --no-pager 2>&1 | grep -E 'AI_PROVIDER|GROQ|OLLAMA|CHAT_REQUEST|ZVENOAI|FALLBACK|deadline|timeout|429|401|502' | tail -n 240
           echo '=== SYSTEM JOURNAL LAST 15 MINUTES ==='
