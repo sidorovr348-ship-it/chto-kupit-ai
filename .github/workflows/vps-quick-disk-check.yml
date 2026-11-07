@@ -43,6 +43,15 @@ jobs:
           journalctl -u apt-daily.service -u apt-daily-upgrade.service --since '30 minutes ago' --no-pager 2>&1 | tail -n 60
           echo '=== RUNNER UPDATE SIZE ==='
           du -sh /home/ghrunner/actions-runner/_work/_update /home/ghrunner/actions-runner/externals /home/ghrunner/actions-runner/externals.2.338.2 2>&1
+          echo '=== SELF-HOSTED RUNNER SERVICE ==='
+          systemctl show actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service -p ActiveState -p SubState -p MainPID -p ExecMainStartTimestamp -p ExecStart -p WorkingDirectory 2>&1
+          ps -eo pid,ppid,user,etime,comm,args | grep -E '[R]unner.Listener|[R]unner.Worker|[M]ainThread' | head -n 40
+          echo '=== RUNNER JOURNAL LAST 30 MINUTES ==='
+          journalctl -u actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service --since '30 minutes ago' --no-pager 2>&1 | tail -n 80
+          echo '=== RUNNER UPDATE TIMESTAMPS ==='
+          for p in /home/ghrunner/actions-runner/_work/_update /home/ghrunner/actions-runner/externals /home/ghrunner/actions-runner/externals.2.338.2 /home/ghrunner/actions-runner/bin.2.338.2; do
+            if [ -e "$p" ]; then stat -c '%y %s %n' "$p"; fi
+          done
           echo '=== APP SOURCE SIZE ==='
           du -sh /root/my-ai-unified /root/my-ai-unified/node_modules 2>&1
           REMOTE
