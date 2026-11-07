@@ -56,6 +56,11 @@ trap rollback_deploy ERR
 ssh_vps "root@$VPS_HOST" "mkdir -p '$STAGING/src' '$STAGING/autonomy-lab'"
 scp_vps local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json package-lock.json "root@$VPS_HOST:$STAGING/"
 scp_vps -r src/. "root@$VPS_HOST:$STAGING/src/"
+# Keep the VPS legacy CloudRU/supervisor module: the un-deployed legacy server.js still imports it.
+if ssh_vps "root@$VPS_HOST" "test -f '$WORKDIR/src/cloudru-agent.js'"; then
+  ssh_vps "root@$VPS_HOST" "cp -a '$WORKDIR/src/cloudru-agent.js' '$STAGING/src/cloudru-agent.js'"
+  echo "Preserved VPS legacy src/cloudru-agent.js in staging."
+fi
 scp_vps -r autonomy-lab/. "root@$VPS_HOST:$STAGING/autonomy-lab/"
 DEPLOY_MUTATED=1
 ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$STAGING'/local-gateway.js '$STAGING'/smart-index.html '$STAGING'/memory-map.js '$STAGING'/image-generation-fallback.js '$STAGING'/vision-runtime-hotfix.js '$STAGING'/supervisor-daemon.js '$STAGING'/package.json '$STAGING'/package-lock.json .; cp -a '$STAGING'/src/. src/; cp -a '$STAGING'/autonomy-lab/. autonomy-lab/; npm ci --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"

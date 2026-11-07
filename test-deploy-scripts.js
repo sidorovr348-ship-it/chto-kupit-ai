@@ -58,3 +58,10 @@ test('100-case acceptance checks the current chat timeout implementation',()=>{
  assert.ok(acceptance.includes('timer=setTimeout(()=>controller.abort(),to)'));
  assert.ok(!acceptance.includes('const deadline=Date.now()+to'));
 });
+
+test('deployment preserves the VPS legacy CloudRU module referenced by its legacy server.js',()=>{
+ const preserve=deploy.indexOf("cp -a '$WORKDIR/src/cloudru-agent.js' '$STAGING/src/cloudru-agent.js'");
+ const liveCopy=deploy.indexOf("cp -a '$STAGING'/src/. src/");
+ assert.ok(preserve>=0&&liveCopy>preserve);
+ assert.ok(deploy.includes("tar -czf '$BACKUP_ARCHIVE' local-gateway.js"));
+});
