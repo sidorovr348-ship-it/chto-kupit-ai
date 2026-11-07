@@ -25,8 +25,30 @@ async function callVision(prompt, images, options = {}) {
   throw Object.assign(new Error('На VPS установлен текстовый локальный AI без поддержки изображений'), { status: 501 });
 }
 
-async function health() {
-  try { const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(3000) }); const data = await response.json(); const models = Array.isArray(data.models) ? data.models.map(x => x.name) : []; return { ok: response.ok, url: OLLAMA_BASE_URL, model: OLLAMA_MODEL, models }; }
-  catch (error) { return { ok: false, url: OLLAMA_BASE_URL, model: OLLAMA_MODEL, error: error.message }; }
+async function isModelLoaded(timeoutMs = 800) {
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/ps`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) return false;
+    const data = await response.json();
+    const loaded = Array.isArray(data.models) ? data.models : [];
+    return loaded.some(x => String(x.name || x.model || '') === OLLAMA_MODEL);
+  } catch { return false; }
 }
-module.exports = { callOllama, callVision, health, OLLAMA_MODEL };
+
+async function health() {
+  try {
+    const [tagsResponse, psResponse] = await Promise.all([
+      fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(1500) }),
+      fetch(`${OLLAMA_BASE_URL}/api/ps`, { signal: AbortSignal.timeout(1500) })
+    ]);
+    const tags = tagsResponse.ok ? await tagsResponse.json() : {};
+    const ps = psResponse.ok ? await psResponse.json() : {};
+    const models = Array.isArray(tags.models) ? tags.models.map(x => x.name) : [];
+    const loadedModels = Array.isArray(ps.models) ? ps.models.map(x => x.name || x.model).filter(Boolean) : [];
+    const installed = models.includes(OLLAMA_MODEL);
+    const loaded = loadedModels.includes(OLLAMA_MODEL);
+    const ready = Boolean(tagsResponse.ok && psResponse.ok && installed && loaded);
+    return { ok: ready, apiAvailable: Boolean(tagsResponse.ok && psResponse.ok), installed, loaded, ready, url: OLLAMA_BASE_URL, model: OLLAMA_MODEL, models, loadedModels, ...(ready ? {} : { warning: installed ? 'model installed but not loaded in memory' : 'configured model is not installed or running' }) };
+  } catch (error) { return { ok: false, apiAvailable: false, installed: false, loaded: false, ready: false, url: OLLAMA_BASE_URL, model: OLLAMA_MODEL, error: error.message }; }
+}
+module.exports = { callOllama, callVision, health, isModelLoaded, OLLAMA_MODEL };
