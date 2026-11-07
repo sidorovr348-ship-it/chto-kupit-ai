@@ -1,0 +1,52 @@
+name: Snapshot VPS live source to isolated branch
+
+on:
+  push:
+    branches:
+      - diagnose/vps-live-source-snapshot-2026-11-08
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read live files and create isolated snapshot branch
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          mkdir -p /tmp/live-source/src
+          for file in local-gateway.js smart-index.html package.json package-lock.json src/cloudru-agent.js src/local-ai.js; do
+            ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "cat /root/my-ai-unified/$file" > "/tmp/live-source/$file"
+          done
+          git fetch origin main
+          git checkout -B snapshot/vps-live-source-2026-11-08 origin/main
+          cp /tmp/live-source/local-gateway.js local-gateway.js
+          cp /tmp/live-source/smart-index.html smart-index.html
+          cp /tmp/live-source/package.json package.json
+          cp /tmp/live-source/package-lock.json package-lock.json
+          cp /tmp/live-source/src/cloudru-agent.js src/cloudru-agent.js
+          cp /tmp/live-source/src/local-ai.js src/local-ai.js
+          echo '=== SNAPSHOT HASHES ==='
+          sha256sum local-gateway.js smart-index.html package.json package-lock.json src/cloudru-agent.js src/local-ai.js
+          echo '=== CHECK FOR OBVIOUS EMBEDDED SECRET VALUES ==='
+          if grep -nE '(sk-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,})' local-gateway.js smart-index.html package.json package-lock.json src/cloudru-agent.js src/local-ai.js; then
+            echo 'Potential credential pattern found; refusing to push snapshot.'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add local-gateway.js smart-index.html package.json package-lock.json src/cloudru-agent.js src/local-ai.js
+          git commit -m 'chore: snapshot live VPS source before reconciliation'
+          git push origin HEAD:refs/heads/snapshot/vps-live-source-2026-11-08
