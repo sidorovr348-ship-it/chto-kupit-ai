@@ -58,6 +58,11 @@ jobs:
           grep -q 'window.send=send' smart-index.html
           grep -q 'navigator.geolocation' smart-index.html
           grep -q '/generate-image' smart-index.html
+          grep -q "TTS_VOICE='ru-RU-DmitryNeural'" local-gateway.js
+          grep -q 'sanitizeSpeechText(' local-gateway.js
+          ! grep -q 'googleFallbackTTS' local-gateway.js
+          ! grep -q 'speechSynthesis.speak(' smart-index.html
+          ! grep -q 'for(let n=0;n<3;n++)' smart-index.html
       - name: Deploy backend to VPS
         id: deploy_backend
         shell: bash
