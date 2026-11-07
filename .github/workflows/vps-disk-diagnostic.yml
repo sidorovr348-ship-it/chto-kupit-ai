@@ -30,11 +30,13 @@ jobs:
           df -hT /
           echo '=== FILESYSTEM INODES ==='
           df -i /
-          echo '=== TOP-LEVEL DIRECTORY SIZES ==='
-          for p in /root /var /tmp /home; do
+          echo '=== ALL ROOT DIRECTORY SIZES ==='
+          timeout 90 du -xhd1 / 2>/dev/null | sort -h
+          echo '=== HOME/USR/OPT SUBDIRECTORY SIZES ==='
+          for p in /home/ghrunner /home/ghrunner/_work /home/ghrunner/_tool /home/ghrunner/.cache /usr/local /usr/local/lib /usr/share /usr/lib /opt /snap /boot /mnt; do
             if [ -d "$p" ]; then
               echo "--- $p ---"
-              timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 30
+              timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 35
             fi
           done
           echo '=== APP AND DATA DIRECTORY SIZES ==='
@@ -44,6 +46,12 @@ jobs:
               timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 25
             fi
           done
+          echo '=== LARGE FILES IN RUNNER AND USRLOCAL ==='
+          timeout 60 find /home/ghrunner /usr/local /opt -xdev -type f -size +50M -printf '%s\t%p\n' 2>/dev/null | sort -n | tail -n 60
+          echo '=== RUNNER SERVICES ==='
+          systemctl list-units --type=service --all --no-pager 2>/dev/null | grep -Ei 'runner|actions|ghrunner|vpsbridge' | head -n 80 || true
+          echo '=== PROCESS MEMORY SUMMARY ==='
+          ps -eo pid,user,comm,%mem,%cpu --sort=-%mem | head -n 30
           echo '=== FILES LARGER THAN 50 MB ==='
           timeout 60 find /root /var /tmp -xdev -type f -size +50M -printf '%s\t%p\n' 2>/dev/null | sort -n | tail -n 50
           echo '=== OPEN DELETED FILES ==='
