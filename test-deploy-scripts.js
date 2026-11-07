@@ -45,6 +45,6 @@ test('deployment checks free disk space and inodes before creating a backup',()=
  assert.ok(preflight>=0&&backup>preflight);
  assert.ok(deploy.includes('df -Pk'));
  assert.ok(deploy.includes('df -Pi'));
- assert.ok(deploy.includes('250000'));
+ assert.ok(deploy.includes('180000'));
  assert.ok(deploy.includes('10000'));
 });

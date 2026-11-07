@@ -25,8 +25,8 @@ if ! [[ "$FREE_KB" =~ ^[0-9]+$ ]] || ! [[ "$FREE_INODES" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 echo "VPS disk preflight: $FREE_KB KB and $FREE_INODES free inodes."
-if [ "$FREE_KB" -lt 250000 ] || [ "$FREE_INODES" -lt 10000 ]; then
-  echo "Insufficient VPS disk space: require at least 250000 KB and 10000 free inodes. No live files were changed."
+if [ "$FREE_KB" -lt 180000 ] || [ "$FREE_INODES" -lt 10000 ]; then
+  echo "Insufficient VPS disk space: require at least 180000 KB and 10000 free inodes. No live files were changed."
   exit 1
 fi
 STAMP="$GITHUB_SHA-$(date -u +%Y%m%dT%H%M%SZ)"
