@@ -1,0 +1,81 @@
+name: Preserve and clear regenerable VPS APT caches
+
+on:
+  push:
+    branches:
+      - vps-safe-apt-cache-cleanup-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  preserve-and-clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive APT cache files outside VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "tar -czf - -C /var/cache apt -C /var/lib apt/lists" > /tmp/vps-apt-caches-before-cleanup.tar.gz
+          tar -tzf /tmp/vps-apt-caches-before-cleanup.tar.gz > /tmp/vps-apt-caches-filelist.txt
+          test -s /tmp/vps-apt-caches-filelist.txt
+          echo "APT cache archive created: $(stat -c %s /tmp/vps-apt-caches-before-cleanup.tar.gz) bytes."
+      - name: Preserve APT cache archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-apt-caches-before-cleanup-2026-11-08
+          path: /tmp/vps-apt-caches-before-cleanup.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove only inactive, regenerable APT cache files
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          for s in apt-daily.service apt-daily-upgrade.service; do
+            if systemctl is-active --quiet "$s"; then
+              echo "$s is active; refusing APT cache cleanup."
+              exit 1
+            fi
+          done
+          if ps -eo comm= | grep -Eq '^(apt|apt-get|dpkg)$'; then
+            echo "APT/DPKG process is active; refusing cleanup."
+            exit 1
+          fi
+          for p in /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+            if [ -e "$p" ] && fuser "$p" >/dev/null 2>&1; then
+              echo "APT lock is held: $p"
+              exit 1
+            fi
+          done
+          if lsof +D /var/cache/apt 2>/dev/null | tail -n +2 | grep -q .; then
+            echo "APT cache files are open; refusing cleanup."
+            exit 1
+          fi
+          if lsof +D /var/lib/apt/lists 2>/dev/null | tail -n +2 | grep -q .; then
+            echo "APT list files are open; refusing cleanup."
+            exit 1
+          fi
+          echo '=== REMOVE REGENERABLE CACHE FILES ONLY ==='
+          find /var/cache/apt -maxdepth 1 -type f \\( -name 'pkgcache.bin*' -o -name 'srcpkgcache.bin' \\) -print -delete
+          find /var/lib/apt/lists -maxdepth 1 -type f ! -name lock -print -delete
+          echo '=== VERIFY ==='
+          du -sh /var/cache/apt /var/lib/apt/lists
+          df -h /
+          echo 'APT caches cleared. No package installation, app data, logs, runner files, or backups were touched.'
+          REMOTE
