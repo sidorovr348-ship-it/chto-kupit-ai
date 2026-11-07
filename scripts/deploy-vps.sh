@@ -27,8 +27,8 @@ ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; test -s local-gateway.js; test 
 if [ -n "$GITHUB_OUTPUT" ]; then echo "backup_archive=$BACKUP_ARCHIVE" >> "$GITHUB_OUTPUT"; fi
 ssh_vps "root@$VPS_HOST" "mkdir -p '$STAGING/src' '$STAGING/autonomy-lab'"
 scp_vps local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "root@$VPS_HOST:$STAGING/"
-scp_vps src/deadline.js src/single-flight.js src/speech-text.js "root@$VPS_HOST:$STAGING/src/"
-scp_vps autonomy-lab/*.mjs autonomy-lab/package.json "root@$VPS_HOST:$STAGING/autonomy-lab/"
+scp_vps -r src/. "root@$VPS_HOST:$STAGING/src/"
+scp_vps -r autonomy-lab/. "root@$VPS_HOST:$STAGING/autonomy-lab/"
 DEPLOY_MUTATED=0
 rollback_deploy() {
   local code=$?
