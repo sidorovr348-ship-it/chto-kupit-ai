@@ -26,6 +26,12 @@ jobs:
           ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
           ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
           set +e
+          echo '=== ROLLBACK HEALTH CHECK ==='
+          systemctl is-active my-ai-unified.service 2>&1
+          curl --max-time 10 -sS http://127.0.0.1:3020/health 2>&1
+          echo
+          curl --max-time 15 -sS https://ai.aliceq.ru/health 2>&1
+          echo
           echo '=== DISK ==='
           df -h /
           df -Pk /
