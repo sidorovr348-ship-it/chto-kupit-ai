@@ -3,7 +3,7 @@ function sanitizeSpeechText(value){
  let text=String(value??'');
  const tick=String.fromCharCode(96);
  text=text.replace(/!\[([^\]]*)\]\([^)]+\)/g,'$1').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1');
- text=text.replace(new RegExp(tick.repeat(3)+'[^\n]*\n?([\s\S]*?)'+tick.repeat(3),'g'),'$1');
+ text=text.replace(new RegExp(tick.repeat(3)+'[^\\n]*\\n?([\\s\\S]*?)'+tick.repeat(3),'g'),'$1');
  text=text.replace(new RegExp(tick+'([^'+tick+']+)'+tick,'g'),'$1');
  text=text.replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*>\s?/gm,'');
  text=text.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/gm,'');
