@@ -34,7 +34,7 @@ function cleanSpeechText(value){
  text=text.replace(/\*\*|__|~~/g,'').replace(/[*_~]/g,'').replace(/<[^>]*>/g,'');
  text=text.replace(/https?:\/\/\S+/gi,'ссылка');
  text=text.replace(/[ \t]+/g,' ').replace(/\s*\n\s*/g,'. ').replace(/(?:\.\s*){2,}/g,'. ');
- text=text.replace(/\s+([,.;!?])/g,'$1').replace(/([,;])(?:\s*[,;])+/g,'$1');
+ text=text.replace(/\s+([,.;!?])/g,'$1').replace(/([,;])(?:\s*[,;])+/g,'$1').replace(/([,;:!?])\s*\.\s*/g,'$1 ');
  return text.trim();
 }
 function say(t){
