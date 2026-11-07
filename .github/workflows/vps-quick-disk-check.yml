@@ -1,0 +1,48 @@
+name: VPS quick read-only disk check
+
+on:
+  push:
+    branches:
+      - vps-quick-disk-check-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read current disk and APT timer state
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== DISK ==='
+          df -h /
+          df -Pk /
+          df -Pi /
+          echo '=== APT CACHE SIZES ==='
+          du -sh /var/cache/apt /var/lib/apt/lists 2>&1
+          echo '=== APT CACHE FILES ==='
+          find /var/cache/apt -maxdepth 1 -type f -printf '%s\\t%TY-%Tm-%Td %TH:%TM\\t%p\\n' 2>/dev/null | sort -n | tail -n 30
+          find /var/lib/apt/lists -maxdepth 1 -type f -printf '%s\\t%TY-%Tm-%Td %TH:%TM\\t%p\\n' 2>/dev/null | sort -n | tail -n 30
+          echo '=== APT SERVICE STATE ==='
+          for s in apt-daily.service apt-daily-upgrade.service apt-daily.timer apt-daily-upgrade.timer; do
+            systemctl show "$s" -p ActiveState -p SubState -p MainPID -p ExecMainStartTimestamp -p ExecMainExitTimestamp 2>&1
+          done
+          echo '=== APT LOG LAST 30 MINUTES ==='
+          journalctl -u apt-daily.service -u apt-daily-upgrade.service --since '30 minutes ago' --no-pager 2>&1 | tail -n 60
+          echo '=== RUNNER UPDATE SIZE ==='
+          du -sh /home/ghrunner/actions-runner/_work/_update /home/ghrunner/actions-runner/externals /home/ghrunner/actions-runner/externals.2.338.2 2>&1
+          echo '=== APP SOURCE SIZE ==='
+          du -sh /root/my-ai-unified /root/my-ai-unified/node_modules 2>&1
+          REMOTE
