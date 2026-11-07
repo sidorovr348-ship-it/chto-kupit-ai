@@ -204,6 +204,8 @@ jobs:
         run: bash scripts/rollback-vps.sh
 
   pages:
+    outputs:
+      deployment_succeeded: ${{ steps.deployment.outcome }}
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -241,7 +243,7 @@ jobs:
           grep -q 'messages:messages.slice' /tmp/pages.html
           echo PAGES_DEPLOYMENT_OK
   rollback-vps-if-pages-fail:
-    if: ${{ always() && needs.deploy.result == 'success' && needs.pages.result != 'success' && needs.deploy.outputs.backup_archive != '' }}
+    if: ${{ always() && needs.deploy.result == 'success' && needs.pages.result != 'success' && needs.pages.outputs.deployment_succeeded != 'success' && needs.deploy.outputs.backup_archive != '' }}
     needs: [deploy, pages]
     runs-on: ubuntu-latest
     timeout-minutes: 10
