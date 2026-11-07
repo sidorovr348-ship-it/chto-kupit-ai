@@ -1,0 +1,40 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const deploy=fs.readFileSync('scripts/deploy-vps.sh','utf8');
+const rollback=fs.readFileSync('scripts/rollback-vps.sh','utf8');
+
+test('deployment checks actual SSH root privileges, not the VPS_USER secret',()=>{
+ assert.ok(deploy.includes('REMOTE_UID=$(ssh_vps "root@$VPS_HOST" "id -u")'));
+ assert.ok(rollback.includes('REMOTE_UID=$(ssh_vps "root@$VPS_HOST" "id -u")'));
+ assert.ok(!deploy.includes('VPS_USER must be root'));
+ assert.ok(!rollback.includes('VPS_USER must be root'));
+ assert.ok(!deploy.includes('VPS_USER'));
+});
+
+test('backup archive is created before live files are mutated',()=>{
+ const backup=deploy.indexOf("tar -czf '$BACKUP_ARCHIVE'");
+ const mutation=deploy.indexOf('DEPLOY_MUTATED=1');
+ assert.ok(backup>=0&&mutation>backup);
+ assert.ok(deploy.indexOf('backup_archive=$BACKUP_ARCHIVE')<mutation);
+});
+
+test('failed deployment restores the archived source and restarts only the app service',()=>{
+ assert.ok(deploy.includes('rollback_deploy()'));
+ assert.ok(deploy.includes("tar -xzf '$BACKUP_ARCHIVE' -C '$WORKDIR'"));
+ assert.ok(deploy.includes('systemctl restart my-ai-unified'));
+});
+
+test('external rollback restores package lock and reinstalls locked dependencies',()=>{
+ assert.ok(rollback.includes("tar -xzf '$BACKUP_ARCHIVE' -C '$WORKDIR'"));
+ assert.ok(rollback.includes('npm ci --omit=dev'));
+ assert.ok(rollback.includes('systemctl restart my-ai-unified'));
+});
+
+test('deployment stages complete source and autonomy trees before copying',()=>{
+ assert.ok(deploy.includes('scp_vps -r src/.'));
+ assert.ok(deploy.includes('scp_vps -r autonomy-lab/.'));
+ assert.ok(deploy.includes("cp -a '$STAGING'/src/. src/"));
+ assert.ok(deploy.includes("cp -a '$STAGING'/autonomy-lab/. autonomy-lab/"));
+});
