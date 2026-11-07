@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
           echo '=== REMOVE REGENERABLE CACHE FILES ONLY ==='
-          find /var/cache/apt -maxdepth 1 -type f \\( -name 'pkgcache.bin*' -o -name 'srcpkgcache.bin' \\) -print -delete
+          find /var/cache/apt -maxdepth 1 -type f \( -name 'pkgcache.bin*' -o -name 'srcpkgcache.bin' \) -print -delete
           find /var/lib/apt/lists -maxdepth 1 -type f ! -name lock -print -delete
           echo '=== VERIFY ==='
           du -sh /var/cache/apt /var/lib/apt/lists
