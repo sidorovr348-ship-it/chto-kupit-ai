@@ -1,0 +1,85 @@
+name: Preserve and remove obsolete VPS runner installer
+
+on:
+  push:
+    branches:
+      - vps-safe-space-cleanup-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  preserve-and-clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify the exact obsolete installer archive
+        id: snapshot
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          REMOTE_FILE=/home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "test -f '$REMOTE_FILE'"
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "systemctl is-active --quiet actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service"
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner\\.Worker|Worker)$'"; then
+            echo "A runner worker is active; refusing cleanup."
+            exit 1
+          fi
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "lsof '$REMOTE_FILE' >/dev/null 2>&1"; then
+            echo "Installer archive is open by a process; refusing cleanup."
+            exit 1
+          fi
+          REMOTE_SIZE=$(ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "stat -c %s '$REMOTE_FILE'")
+          case "$REMOTE_SIZE" in ''|*[!0-9]*) echo "Invalid installer size"; exit 1;; esac
+          if [ "$REMOTE_SIZE" -lt 200000000 ] || [ "$REMOTE_SIZE" -gt 250000000 ]; then
+            echo "Unexpected installer size; refusing cleanup."
+            exit 1
+          fi
+          REMOTE_SHA=$(ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "sha256sum '$REMOTE_FILE' | cut -d' ' -f1")
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "cat '$REMOTE_FILE'" > /tmp/actions-runner-linux-x64-2.338.0.tar.gz
+          LOCAL_SIZE=$(stat -c %s /tmp/actions-runner-linux-x64-2.338.0.tar.gz)
+          LOCAL_SHA=$(sha256sum /tmp/actions-runner-linux-x64-2.338.0.tar.gz | cut -d' ' -f1)
+          test "$LOCAL_SIZE" = "$REMOTE_SIZE"
+          test "$LOCAL_SHA" = "$REMOTE_SHA"
+          echo "remote_sha=$REMOTE_SHA" >> "$GITHUB_OUTPUT"
+          echo "remote_size=$REMOTE_SIZE" >> "$GITHUB_OUTPUT"
+          echo "Verified installer copy: $REMOTE_SIZE bytes; SHA-256 matches."
+      - name: Preserve installer archive outside VPS
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-runner-installer-2.338.0-preserved
+          path: /tmp/actions-runner-linux-x64-2.338.0.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove only the preserved, unused installer archive
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          EXPECTED_SHA: ${{ steps.snapshot.outputs.remote_sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          REMOTE_FILE=/home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "systemctl is-active --quiet actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service"
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner\\.Worker|Worker)$'"; then
+            echo "A runner worker became active; refusing cleanup."
+            exit 1
+          fi
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "lsof '$REMOTE_FILE' >/dev/null 2>&1"; then
+            echo "Installer archive became active; refusing cleanup."
+            exit 1
+          fi
+          CURRENT_SHA=$(ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "sha256sum '$REMOTE_FILE' | cut -d' ' -f1")
+          test "$CURRENT_SHA" = "$EXPECTED_SHA"
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "rm -f -- '$REMOTE_FILE' && test ! -e '$REMOTE_FILE' && df -h /"
+          echo "Removed exactly one preserved, regenerable installer archive. No runner binaries, update directories, app files or backups were removed."
