@@ -18,6 +18,17 @@ WORKDIR=$(ssh_vps "root@$VPS_HOST" "systemctl show -p WorkingDirectory --value m
 [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
 case "$WORKDIR" in /*) ;; *) echo "Unexpected service working directory; deployment stopped."; exit 1 ;; esac
 case "$WORKDIR" in *"'"*) echo "Unsafe quote character in service working directory; deployment stopped."; exit 1 ;; esac
+FREE_KB=$(ssh_vps "root@$VPS_HOST" "df -Pk '$WORKDIR' | awk 'NR==2 {print \$4}'")
+FREE_INODES=$(ssh_vps "root@$VPS_HOST" "df -Pi '$WORKDIR' | awk 'NR==2 {print \$4}'")
+if ! [[ "$FREE_KB" =~ ^[0-9]+$ ]] || ! [[ "$FREE_INODES" =~ ^[0-9]+$ ]]; then
+  echo "Could not reliably read VPS free disk space; deployment stopped before backup."
+  exit 1
+fi
+echo "VPS disk preflight: $FREE_KB KB and $FREE_INODES free inodes."
+if [ "$FREE_KB" -lt 250000 ] || [ "$FREE_INODES" -lt 10000 ]; then
+  echo "Insufficient VPS disk space: require at least 250000 KB and 10000 free inodes. No live files were changed."
+  exit 1
+fi
 STAMP="$GITHUB_SHA-$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_ARCHIVE="$WORKDIR/.deploy-backups/pre-$STAMP.tar.gz"
 STAGING="$WORKDIR/.deploy-staging-$STAMP"

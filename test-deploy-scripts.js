@@ -38,3 +38,13 @@ test('deployment stages complete source and autonomy trees before copying',()=>{
  assert.ok(deploy.includes("cp -a '$STAGING'/src/. src/"));
  assert.ok(deploy.includes("cp -a '$STAGING'/autonomy-lab/. autonomy-lab/"));
 });
+
+test('deployment checks free disk space and inodes before creating a backup',()=>{
+ const preflight=deploy.indexOf('FREE_KB=');
+ const backup=deploy.indexOf("tar -czf '$BACKUP_ARCHIVE'");
+ assert.ok(preflight>=0&&backup>preflight);
+ assert.ok(deploy.includes('df -Pk'));
+ assert.ok(deploy.includes('df -Pi'));
+ assert.ok(deploy.includes('250000'));
+ assert.ok(deploy.includes('10000'));
+});
