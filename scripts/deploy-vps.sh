@@ -35,7 +35,7 @@ rollback_deploy() {
   trap - ERR
   if [ "$DEPLOY_MUTATED" = "1" ]; then
     echo "DEPLOY_FAILED_ATTEMPTING_ROLLBACK"
-    if ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; rm -rf local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json package-lock.json src autonomy-lab; tar -xzf '$BACKUP_ARCHIVE' -C '$WORKDIR'; systemctl restart my-ai-unified; for i in \$(seq 1 30); do if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/dev/null; then exit 0; fi; sleep 1; done; exit 1"; then
+    if ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; rm -rf local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json package-lock.json src autonomy-lab; tar -xzf '$BACKUP_ARCHIVE' -C '$WORKDIR'; if [ -s package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund; else npm install --omit=dev --no-audit --no-fund; fi; systemctl restart my-ai-unified; for i in \$(seq 1 30); do if curl -fsS --max-time 3 http://127.0.0.1:3020/health >/dev/null; then exit 0; fi; sleep 1; done; exit 1"; then
       echo "DEPLOY_ROLLBACK_OK"
       if [ -n "$GITHUB_OUTPUT" ]; then echo "rolled_back=true" >> "$GITHUB_OUTPUT"; fi
     else
