@@ -18,7 +18,7 @@ const staticChecks=[
 ['generate-image marker',async()=>ok((await (await fetch(APP+'?a=106')).text()).includes('/generate-image'),'image')],
 ['window.send marker',async()=>ok((await (await fetch(APP+'?a=107')).text()).includes('window.send=send'),'send')],
 ['memory marker',async()=>ok((await (await fetch(APP+'?a=108')).text()).includes('memoryId'),'memory')],
-['total chat deadline marker',async()=>ok((await (await fetch(APP+'?a=109')).text()).includes('const deadline=Date.now()+to'),'deadline')]
+['chat API timeout marker',async()=>{const html=await (await fetch(APP+'?a=109')).text();ok(html.includes("api('/chat',body,48000,requestController.signal)")&&html.includes('timer=setTimeout(()=>controller.abort(),to)'),'chat timeout')}]
 ];
 for(const [a,b] of staticChecks)await check(a,b);
 for(let i=0;i<5;i++)await check('health '+(i+1),async()=>{const x=await req('/health',undefined,'GET');ok(x.ok&&x.service==='my-ai-unified','health')});
