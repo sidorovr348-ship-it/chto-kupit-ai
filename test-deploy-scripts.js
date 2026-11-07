@@ -48,3 +48,13 @@ test('deployment checks free disk space and inodes before creating a backup',()=
  assert.ok(deploy.includes('180000'));
  assert.ok(deploy.includes('10000'));
 });
+
+test('100-case acceptance checks the current chat timeout implementation',()=>{
+ const html=fs.readFileSync('smart-index.html','utf8');
+ const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
+ assert.ok(html.includes("api('/chat',body,48000,requestController.signal)"));
+ assert.ok(html.includes('timer=setTimeout(()=>controller.abort(),to)'));
+ assert.ok(acceptance.includes("api('/chat',body,48000,requestController.signal)"));
+ assert.ok(acceptance.includes('timer=setTimeout(()=>controller.abort(),to)'));
+ assert.ok(!acceptance.includes('const deadline=Date.now()+to'));
+});

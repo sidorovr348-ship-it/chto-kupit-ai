@@ -16,6 +16,7 @@ jobs:
       - run: npm ci
       - run: node --check server.js
       - run: node --check src/speech-text.js
+      - run: node --check acceptance-100.mjs
       - run: node validate-inline-scripts.cjs
       - run: node --test
       - run: bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
