@@ -55,7 +55,7 @@ jobs:
           if ! curl -fsS --max-time 15 "https://ai.aliceq.ru/?ui_sync=$GITHUB_SHA" -o /tmp/ui-sync-public.html || ! grep -Fq '2026-11-08-voice-reliability-1' /tmp/ui-sync-public.html; then
             echo "Public UI verification failed; restoring backup."
             ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$BACKUP' smart-index.html"
-            RESTORED_SHA=$(ssh_vps "root@$VPS_HOST" "sha256sum smart-index.html | cut -d' ' -f1")
+            RESTORED_SHA=$(ssh_vps "root@$VPS_HOST" "cd '$WORKDIR'; sha256sum smart-index.html | cut -d' ' -f1")
             test "$RESTORED_SHA" = "$BACKUP_SHA"
             exit 1
           fi
