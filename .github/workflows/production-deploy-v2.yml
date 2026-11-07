@@ -30,6 +30,7 @@ jobs:
       - name: Validate source
         run: |
           set -euo pipefail
+          bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
           node --check local-gateway.js
           node --check memory-map.js
           node --check image-generation-fallback.js
@@ -53,62 +54,10 @@ jobs:
           grep -q 'navigator.geolocation' smart-index.html
           grep -q '/generate-image' smart-index.html
       - name: Deploy backend to VPS
+        id: deploy_backend
         shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$VPS_HOST"; test -n "$VPS_USER"; test -n "$VPS_SSH_KEY"
-          python3 - <<'PY'
-          import os
-          import os, base64, binascii
-          raw = os.environ["VPS_SSH_KEY"].strip()
-          if raw.startswith(("'", '"')) and raw[-1:] == raw[:1]:
-              raw = raw[1:-1]
-          raw = raw.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "")
-          key = raw.strip()
-          if key.startswith("VPS_SSH_KEY="):
-              key = key.split("=", 1)[1].strip().strip("'\"")
-          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-              compact = "".join(key.split())
-              try:
-                  decoded = base64.b64decode(compact, validate=True).decode("utf-8")
-                  decoded = decoded.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "").strip()
-                  if decoded.startswith("-----BEGIN ") and "PRIVATE KEY-----" in decoded:
-                      key = decoded
-              except (binascii.Error, UnicodeDecodeError, ValueError):
-                  pass
-          if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-              raise SystemExit('Unsupported VPS_SSH_KEY format; secret value was not printed. Safe diagnostics: chars=%d lines=%d pem_header=%s public_key_header=%s putty_header=%s env_assignment=%s' % (len(raw), len(raw.splitlines()), str(raw.startswith("-----BEGIN ")), str(raw.startswith(("ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"))), str(raw.startswith("PuTTY-User-Key-File-")), str(raw.startswith("VPS_SSH_KEY="))))
-          with open("/tmp/vps_key", "w", encoding="utf-8") as f:
-              f.write(key + "\n")
-          PY
-          chmod 600 /tmp/vps_key
-          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
-          chmod 600 /tmp/vps_key.pub
-          echo "=== SAFE SSH KEY DIAGNOSTIC ==="
-          key_fp=$(ssh-keygen -lf /tmp/vps_key.pub -E sha256 | awk '{print $2}')
-          echo "VPS_SSH_KEY_FINGERPRINT=$key_fp"
-          if [ "$key_fp" = "SHA256:NXBKMIMu4xv2rTVU3NDonZTqG8HMWEilDZ/GVoeV1wc" ]; then
-            echo "VPS_SSH_KEY_MATCHES_SERVER_AUTHORIZED_KEY=yes"
-          else
-            echo "VPS_SSH_KEY_MATCHES_SERVER_AUTHORIZED_KEY=no"
-          fi
-          if [ "$VPS_USER" = "root" ]; then echo "VPS_USER_IS_ROOT=yes"; else echo "VPS_USER_IS_ROOT=no"; fi
-          ssh_opts=(-i /tmp/vps_key -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3)
-          WORKDIR=$(ssh "${ssh_opts[@]}" "root@$VPS_HOST" "systemctl show -p WorkingDirectory --value my-ai-unified")
-          [ -n "$WORKDIR" ] || WORKDIR=/root/my-ai-unified
-          scp "${ssh_opts[@]}" local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "root@$VPS_HOST:$WORKDIR/"
-          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "mkdir -p '$WORKDIR/src' '$WORKDIR/autonomy-lab'"
-          scp "${ssh_opts[@]}" src/deadline.js src/single-flight.js "root@$VPS_HOST:$WORKDIR/src/"
-          scp "${ssh_opts[@]}" autonomy-lab/*.mjs autonomy-lab/package.json "root@$VPS_HOST:$WORKDIR/autonomy-lab/"
-          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "set -e; cd '$WORKDIR'; npm install --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"
-          healthy=0
-          for i in $(seq 1 30); do
-            if ssh "${ssh_opts[@]}" "root@$VPS_HOST" "curl -fsS http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
-            sleep 1
-          done
-          test "$healthy" = 1
-          ssh "${ssh_opts[@]}" "root@$VPS_HOST" "cat /tmp/my-ai-health.json"
-          rm -f /tmp/vps_key
+        run: bash scripts/deploy-vps.sh
+
       - name: Verify complete public production
         shell: bash
         run: |
@@ -122,36 +71,7 @@ jobs:
             fi
           done
           if [ "$acceptance_ok" != 1 ]; then
-            python3 - <<'PY'
-            import os
-            import os, base64, binascii
-            raw = os.environ["VPS_SSH_KEY"].strip()
-            if raw.startswith(("'", '"')) and raw[-1:] == raw[:1]:
-                raw = raw[1:-1]
-            raw = raw.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "")
-            key = raw.strip()
-            if key.startswith("VPS_SSH_KEY="):
-                key = key.split("=", 1)[1].strip().strip("'\"")
-            if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-                compact = "".join(key.split())
-                try:
-                    decoded = base64.b64decode(compact, validate=True).decode("utf-8")
-                    decoded = decoded.replace("\\r", "\r").replace("\\n", "\n").replace("\r", "").strip()
-                    if decoded.startswith("-----BEGIN ") and "PRIVATE KEY-----" in decoded:
-                        key = decoded
-                except (binascii.Error, UnicodeDecodeError, ValueError):
-                    pass
-            if not key.startswith("-----BEGIN ") or "PRIVATE KEY-----" not in key:
-                raise SystemExit('Unsupported VPS_SSH_KEY format; secret value was not printed. Safe diagnostics: chars=%d lines=%d pem_header=%s public_key_header=%s putty_header=%s env_assignment=%s' % (len(raw), len(raw.splitlines()), str(raw.startswith("-----BEGIN ")), str(raw.startswith(("ssh-rsa ", "ssh-ed25519 ", "ecdsa-sha2-"))), str(raw.startswith("PuTTY-User-Key-File-")), str(raw.startswith("VPS_SSH_KEY="))))
-            with open("/tmp/vps_key", "w", encoding="utf-8") as f:
-                f.write(key + "\n")
-            PY
-            chmod 600 /tmp/vps_key
-            ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
-            ssh_opts=(-i /tmp/vps_key -o StrictHostKeyChecking=no -o ConnectTimeout=15)
-            echo '=== VPS PHOTO DIAGNOSTIC ==='
-            ssh "${ssh_opts[@]}" "root@$VPS_HOST" "curl -sS -D /tmp/photo.diag.headers -o /tmp/photo.diag.out -X POST http://127.0.0.1:3020/photo -H 'Content-Type: application/json' --data-binary '{\"images\":[\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC\"],\"prompt\":\"Опиши изображение.\"}'; cat /tmp/photo.diag.headers; cat /tmp/photo.diag.out; echo '=== SERVICE ==='; systemctl --no-pager --full status my-ai-unified || true; echo '=== JOURNAL ==='; journalctl -u my-ai-unified -n 120 --no-pager || true"
-            rm -f /tmp/vps_key
+            echo 'PRODUCTION_ACCEPTANCE_FAILED'
             exit 1
           fi
           status=""
@@ -266,6 +186,12 @@ jobs:
           grep -q 'MediaRecorder' /tmp/live-app.html
           grep -q 'navigator.geolocation' /tmp/live-app.html
           echo PRODUCTION_APP_ROOT_OK
+      - name: Roll back VPS if any production verification fails
+        if: ${{ failure() && steps.deploy_backend.outputs.backup_archive != '' && steps.deploy_backend.outputs.rolled_back != 'true' }}
+        shell: bash
+        env:
+          BACKUP_ARCHIVE: ${{ steps.deploy_backend.outputs.backup_archive }}
+        run: bash scripts/rollback-vps.sh
 
   pages:
     needs: deploy

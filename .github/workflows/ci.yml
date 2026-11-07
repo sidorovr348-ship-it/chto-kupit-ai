@@ -17,3 +17,4 @@ jobs:
       - run: node --check server.js
       - run: node validate-inline-scripts.cjs
       - run: node --test
+      - run: bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
