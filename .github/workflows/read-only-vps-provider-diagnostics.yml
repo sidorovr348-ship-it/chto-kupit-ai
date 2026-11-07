@@ -43,12 +43,14 @@ jobs:
           echo '=== LIVE GATEWAY FALLBACK SOURCE ==='
           python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="max_completion_tokens"; i=s.find(m); print("SOURCE_TOKEN_BUDGET",s[max(0,i-450):i+1000] if i>=0 else "NOT_FOUND")'
           python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="callOllama"; i=s.find(m); print("SOURCE_OLLAMA_FALLBACK",s[max(0,i-500):i+1400] if i>=0 else "NOT_FOUND")'
-          echo '=== OLLAMA LOADED MODEL ==='
-          ollama ps 2>&1
-          echo '=== DIRECT OLLAMA CHAT TEST (48 TOKENS) ==='
-          START_MS=$(date +%s%3N)
-          curl --max-time 18 -sS -w '\nOLLAMA_HTTP=%{http_code} TOTAL_SECONDS=%{time_total}\n' -H 'Content-Type: application/json' -d '{"model":"qwen3:0.6b","messages":[{"role":"user","content":"Кто такой Пётр Первый? Назови годы жизни и две главные реформы."}],"stream":false,"options":{"num_predict":48,"temperature":0.2}}' http://127.0.0.1:11434/api/chat
-          echo "OLLAMA_ELAPSED_MS=$(( $(date +%s%3N) - START_MS ))"
+          echo '=== OLLAMA MODEL STATE ==='
+          timeout 5 ollama ps 2>&1
+          timeout 5 ollama list 2>&1
+          du -sh /root/.ollama/models /usr/share/ollama/.ollama/models /var/lib/ollama/models 2>&1
+          ps -eo pid,rss,etime,comm,args | grep -E '[o]llama|[m]y-ai-unified' | head -n 30
+          echo '=== LIVE FALLBACK CALL SITE ==='
+          python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="callOllama(messages"; i=s.find(m); print(s[max(0,i-700):i+1800] if i>=0 else "NOT_FOUND")'
+          python3 -c 'from pathlib import Path; s=Path("/root/my-ai-unified/local-gateway.js").read_text(errors="replace"); m="const textTimeout="; i=s.find(m); print(s[max(0,i-500):i+4000] if i>=0 else "NOT_FOUND")'
           echo '=== PROVIDER JOURNAL LAST 15 MINUTES ==='
           journalctl -u my-ai-unified.service --since '15 minutes ago' --no-pager 2>&1 | grep -E 'AI_PROVIDER|GROQ|OLLAMA|CHAT_REQUEST|ZVENOAI|FALLBACK|deadline|timeout|429|401|502' | tail -n 240
           echo '=== SYSTEM JOURNAL LAST 15 MINUTES ==='
