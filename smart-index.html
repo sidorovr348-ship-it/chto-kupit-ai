@@ -58,13 +58,13 @@ function say(t){
    const decoded=await voiceCtx.decodeAudioData(bytes.slice(0));
    if(generation!==speechGeneration)return;
    const source=voiceCtx.createBufferSource();source.buffer=decoded;source.connect(voiceCtx.destination);ttsSource=source;
-   await new Promise(resolve=>{let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(watchdog);if(ttsSource===source)ttsSource=null;resolve()};const watchdog=setTimeout(finish,Math.min(25000,decoded.duration*1000+2500));source.onended=finish;source.start(0)});
+   await new Promise(resolve=>{let finished=false;const finish=()=>{if(finished)return;finished=true;clearTimeout(watchdog);if(ttsSource===source)ttsSource=null;resolve()};const watchdog=setTimeout(()=>{try{source.stop(0)}catch{}finish()},Math.min(300000,Math.max(10000,decoded.duration*1000+5000)));source.onended=finish;source.start(0)});
   }catch(error){
    if(generation===speechGeneration)add('🔴 Не удалось озвучить ответ закреплённым мужским голосом. Текстовый ответ сохранён. '+String(error?.message||'Ошибка TTS'));
   }finally{clearTimeout(timeout)}
  })();
  let wakeWaitTimer;
- const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},26000)})]).finally(()=>clearTimeout(wakeWaitTimer));
+ const wakeSafeTask=Promise.race([task,new Promise(resolve=>{wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},310000)})]).finally(()=>clearTimeout(wakeWaitTimer));
  window.__ttsPromise=wakeSafeTask;
  return wakeSafeTask;
 }

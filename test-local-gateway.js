@@ -47,7 +47,8 @@ for(const marker of ['id="companion"','memoryId:MEMORY_ID,companionMode',"$('#co
 for(const marker of ['id="toolsToggle"','id="toolsModal"','role="dialog" aria-modal="true"','function openTools()','function closeTools()','e.key===\'Escape\'','id="camAnalyze"','id="camShot"','id="camOff"'])assert.ok(ui.includes(marker),`missing on-demand tools popup wiring: ${marker}`);
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__ttsPromise;'),'muted/empty speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
-assert.ok(ui.includes('wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},26000)'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},310000)'),'wake recovery must not wait forever for a stalled TTS task');
+assert.ok(ui.includes('Math.min(300000,Math.max(10000,decoded.duration*1000+5000))'),'wake listening must wait for the full answer audio instead of cutting it off at a fixed 25 seconds');
 assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)"),'wake queue must abort a stalled chat request after a bounded deadline');
 assert.ok(ui.includes('finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}'),'wake queue must always clear its watchdog and release wake-owned state');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
