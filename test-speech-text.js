@@ -18,3 +18,7 @@ test('normalizes tables, URLs and repeated punctuation',()=>{
 });
 
 test('returns an empty string for empty input',()=>assert.equal(sanitizeSpeechText('  '),''));
+
+test('preserves multiplication and underscore identifiers',()=>{
+ assert.equal(sanitizeSpeechText('Формула 2*2=4, поле user_name.'),'Формула 2*2=4, поле user_name.');
+});
