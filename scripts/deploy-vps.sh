@@ -26,7 +26,7 @@ STAGING="$WORKDIR/.deploy-staging-$STAMP"
 ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; test -s local-gateway.js; test -s smart-index.html; test -d src; test -d autonomy-lab; mkdir -p .deploy-backups; if [ -f package-lock.json ]; then tar -czf '$BACKUP_ARCHIVE' local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json package-lock.json src autonomy-lab; else tar -czf '$BACKUP_ARCHIVE' local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json src autonomy-lab; fi"
 if [ -n "$GITHUB_OUTPUT" ]; then echo "backup_archive=$BACKUP_ARCHIVE" >> "$GITHUB_OUTPUT"; fi
 ssh_vps "root@$VPS_HOST" "mkdir -p '$STAGING/src' '$STAGING/autonomy-lab'"
-scp_vps local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json "root@$VPS_HOST:$STAGING/"
+scp_vps local-gateway.js smart-index.html memory-map.js image-generation-fallback.js vision-runtime-hotfix.js supervisor-daemon.js package.json package-lock.json "root@$VPS_HOST:$STAGING/"
 scp_vps -r src/. "root@$VPS_HOST:$STAGING/src/"
 scp_vps -r autonomy-lab/. "root@$VPS_HOST:$STAGING/autonomy-lab/"
 DEPLOY_MUTATED=0
@@ -48,7 +48,7 @@ rollback_deploy() {
 }
 trap rollback_deploy ERR
 DEPLOY_MUTATED=1
-ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$STAGING'/local-gateway.js '$STAGING'/smart-index.html '$STAGING'/memory-map.js '$STAGING'/image-generation-fallback.js '$STAGING'/vision-runtime-hotfix.js '$STAGING'/supervisor-daemon.js '$STAGING'/package.json .; cp -a '$STAGING'/src/. src/; cp -a '$STAGING'/autonomy-lab/. autonomy-lab/; npm install --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"
+ssh_vps "root@$VPS_HOST" "set -e; cd '$WORKDIR'; cp -a '$STAGING'/local-gateway.js '$STAGING'/smart-index.html '$STAGING'/memory-map.js '$STAGING'/image-generation-fallback.js '$STAGING'/vision-runtime-hotfix.js '$STAGING'/supervisor-daemon.js '$STAGING'/package.json '$STAGING'/package-lock.json .; cp -a '$STAGING'/src/. src/; cp -a '$STAGING'/autonomy-lab/. autonomy-lab/; npm ci --omit=dev --no-audit --no-fund; node --check local-gateway.js; node --check memory-map.js; node --check image-generation-fallback.js; node --check vision-runtime-hotfix.js; node --check supervisor-daemon.js; node image-generation-fallback.js local-gateway.js; node vision-runtime-hotfix.js local-gateway.js; node --check local-gateway.js; systemctl restart my-ai-unified"
 healthy=0
 for attempt in $(seq 1 30); do
   if ssh_vps "root@$VPS_HOST" "curl -fsS --max-time 3 http://127.0.0.1:3020/health >/tmp/my-ai-health.json"; then healthy=1; break; fi
