@@ -28,7 +28,7 @@ jobs:
           REMOTE_FILE=/home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz
           ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "test -f '$REMOTE_FILE'"
           ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "systemctl is-active --quiet actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service"
-          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner\\.Worker|Worker)$'"; then
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner[.]Worker|Worker)$'"; then
             echo "A runner worker is active; refusing cleanup."
             exit 1
           fi
@@ -71,7 +71,7 @@ jobs:
           ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
           REMOTE_FILE=/home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz
           ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "systemctl is-active --quiet actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service"
-          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner\\.Worker|Worker)$'"; then
+          if ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "ps -eo comm= | grep -Eq '^(Runner[.]Worker|Worker)$'"; then
             echo "A runner worker became active; refusing cleanup."
             exit 1
           fi
