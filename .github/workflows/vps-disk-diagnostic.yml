@@ -1,0 +1,62 @@
+name: VPS read-only disk diagnostic
+
+on:
+  push:
+    branches:
+      - vps-disk-diagnostic-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only VPS disk inventory
+        env:
+          VPS_HOST: \${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: \${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== FILESYSTEM SPACE ==='
+          df -hT /
+          echo '=== FILESYSTEM INODES ==='
+          df -i /
+          echo '=== TOP-LEVEL DIRECTORY SIZES ==='
+          for p in /root /var /tmp /home; do
+            if [ -d "$p" ]; then
+              echo "--- $p ---"
+              timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 30
+            fi
+          done
+          echo '=== APP AND DATA DIRECTORY SIZES ==='
+          for p in /root/my-ai-unified /root/my-ai-unified-data /root/my-ai-unified/data /var/log /var/log/journal /var/cache/apt /var/lib; do
+            if [ -d "$p" ]; then
+              echo "--- $p ---"
+              timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 25
+            fi
+          done
+          echo '=== FILES LARGER THAN 50 MB ==='
+          timeout 60 find /root /var /tmp -xdev -type f -size +50M -printf '%s\t%p\n' 2>/dev/null | sort -n | tail -n 50
+          echo '=== OPEN DELETED FILES ==='
+          if command -v lsof >/dev/null 2>&1; then
+            timeout 20 lsof +L1 2>/dev/null | head -n 80
+          else
+            echo 'lsof not installed'
+          fi
+          echo '=== JOURNAL SIZE ==='
+          journalctl --disk-usage 2>&1
+          echo '=== DOCKER DISK USAGE ==='
+          if command -v docker >/dev/null 2>&1; then docker system df 2>&1; else echo 'docker not installed'; fi
+          echo '=== SERVICE STATUS (READ ONLY) ==='
+          systemctl --no-pager --full status my-ai-unified 2>&1 | head -n 35
+          echo '=== DIAGNOSTIC COMPLETE; NO FILES WERE MODIFIED ==='
+          REMOTE
