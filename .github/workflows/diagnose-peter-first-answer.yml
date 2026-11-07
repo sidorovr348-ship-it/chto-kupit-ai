@@ -1,0 +1,53 @@
+name: Diagnose intermittent Peter I answer
+
+on:
+  push:
+    branches:
+      - diagnose/peter-first-answer-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe public API without changing production
+        run: |
+          node --input-type=module <<'NODE'
+          const API = 'https://ai.aliceq.ru';
+          const health = await fetch(API + '/health', { signal: AbortSignal.timeout(10000) });
+          console.log('HEALTH', health.status, await health.text());
+          for (let i = 1; i <= 10; i++) {
+            const started = Date.now();
+            try {
+              const response = await fetch(API + '/chat', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ prompt: 'Кто такой Пётр Первый? Дай краткий, но содержательный ответ: годы жизни, период правления и главные реформы.' }),
+                signal: AbortSignal.timeout(30000),
+                cache: 'no-store'
+              });
+              const raw = await response.text();
+              let data;
+              try { data = JSON.parse(raw); } catch { data = { raw }; }
+              const answer = String(data.result ?? data.text ?? data.answer ?? '');
+              console.log('PETER_PROBE', JSON.stringify({
+                n: i,
+                http: response.status,
+                ok: data.ok,
+                elapsedMs: Date.now() - started,
+                route: data.route,
+                provider: data.provider,
+                model: data.model,
+                answerLength: answer.length,
+                answer: answer.slice(0, 700),
+                error: data.error
+              }));
+            } catch (error) {
+              console.log('PETER_PROBE_ERROR', JSON.stringify({ n: i, elapsedMs: Date.now() - started, error: String(error?.message || error) }));
+            }
+          }
+          NODE
