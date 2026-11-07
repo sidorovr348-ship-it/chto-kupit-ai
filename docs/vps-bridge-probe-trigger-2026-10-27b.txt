@@ -1,0 +1,1 @@
+Harmless trigger to validate the restricted read-only VPS bridge workflow after updating VPS_SSH_KEY_B64.
