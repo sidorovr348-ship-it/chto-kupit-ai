@@ -1,0 +1,57 @@
+name: VPS read-only APT cache and open-file diagnostic
+
+on:
+  push:
+    branches:
+      - vps-apt-cache-diagnostic-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect APT activity and cache ownership without modifying VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== APT/DPKG PROCESSES ==='
+          ps -eo pid,ppid,user,etime,comm,args | grep -Ei '[a]pt|[d]pkg|[u]nattended' | head -n 80
+          echo '=== KNOWN PID 1310 ==='
+          ps -p 1310 -o pid,ppid,user,etime,comm,args 2>&1
+          echo '=== APT SERVICES AND TIMERS ==='
+          for s in apt-daily.service apt-daily-upgrade.service unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer; do
+            echo "--- $s ---"
+            systemctl show "$s" -p ActiveState -p SubState -p MainPID -p ExecStart 2>&1
+          done
+          echo '=== APT/DPKG LOCK HOLDERS ==='
+          for p in /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock /var/cache/apt/archives/lock; do
+            echo "--- $p ---"
+            if [ -e "$p" ]; then fuser -v "$p" 2>&1; else echo 'not present'; fi
+          done
+          echo '=== APT CACHE FILE INVENTORY ==='
+          for p in /var/cache/apt /var/lib/apt/lists; do
+            echo "--- $p ---"
+            du -sh "$p" 2>&1
+            find "$p" -maxdepth 2 -type f -printf '%s\\t%TY-%Tm-%Td %TH:%TM\\t%p\\n' 2>/dev/null | sort -n | tail -n 60
+          done
+          echo '=== APT CACHE OPEN FILES ==='
+          lsof -nP +D /var/cache/apt 2>&1 | head -n 80
+          lsof -nP +D /var/lib/apt/lists 2>&1 | head -n 80
+          echo '=== RUNNER INSTALLER OPEN FILE HOLDER ==='
+          lsof -nP /home/ghrunner/actions-runner/actions-runner-linux-x64-2.338.0.tar.gz 2>&1
+          echo '=== DISK AFTER READ-ONLY DIAGNOSTIC ==='
+          df -h /
+          echo '=== COMPLETE; NO FILES WERE MODIFIED ==='
+          REMOTE
