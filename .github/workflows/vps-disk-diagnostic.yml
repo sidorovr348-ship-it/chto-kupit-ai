@@ -66,5 +66,24 @@ jobs:
           if command -v docker >/dev/null 2>&1; then docker system df 2>&1; else echo 'docker not installed'; fi
           echo '=== SERVICE STATUS (READ ONLY) ==='
           systemctl --no-pager --full status my-ai-unified 2>&1 | head -n 35
+          echo '=== SELF-HOSTED RUNNER DIRECTORY ==='
+          if [ -d /home/ghrunner/actions-runner ]; then
+            timeout 60 du -xhd1 /home/ghrunner/actions-runner 2>/dev/null | sort -h
+            for p in /home/ghrunner/actions-runner/_work /home/ghrunner/actions-runner/_work/_update /home/ghrunner/actions-runner/externals /home/ghrunner/actions-runner/externals.2.338.2 /home/ghrunner/actions-runner/_diag; do
+              if [ -d "$p" ]; then
+                echo "--- $p ---"
+                timeout 45 du -xhd1 "$p" 2>/dev/null | sort -h | tail -n 35
+              fi
+            done
+            echo '--- runner large files ---'
+            timeout 45 find /home/ghrunner/actions-runner -maxdepth 4 -type f -size +100M -printf '%s\t%p\n' 2>/dev/null | sort -n | tail -n 40
+            echo '--- runner directory entries ---'
+            ls -lah /home/ghrunner/actions-runner | head -n 80
+          fi
+          echo '=== RUNNER SERVICE DETAILS ==='
+          systemctl show actions.runner.sidorovr348-ship-it-chto-kupit-ai.vps-6810.service -p ActiveState -p SubState -p MainPID -p ExecStart -p WorkingDirectory 2>&1
+          echo '=== RUNNER PROCESS DETAILS ==='
+          ps -p 2233286 -o pid,user,etime,comm 2>&1
+          readlink -f /proc/2233286/cwd 2>&1
           echo '=== DIAGNOSTIC COMPLETE; NO FILES WERE MODIFIED ==='
           REMOTE
