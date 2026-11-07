@@ -2,7 +2,7 @@
 set -Ee
 set -o pipefail
 if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
-  echo "VPS_HOST, VPS_USER and VPS_SSH_KEY are required."
+  echo "VPS_HOST and VPS_SSH_KEY are required."
   exit 1
 fi
 python3 scripts/prepare-vps-key.py

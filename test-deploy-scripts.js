@@ -10,6 +10,7 @@ test('deployment checks actual SSH root privileges, not the VPS_USER secret',()=
  assert.ok(rollback.includes('REMOTE_UID=$(ssh_vps "root@$VPS_HOST" "id -u")'));
  assert.ok(!deploy.includes('VPS_USER must be root'));
  assert.ok(!rollback.includes('VPS_USER must be root'));
+ assert.ok(!deploy.includes('VPS_USER'));
 });
 
 test('backup archive is created before live files are mutated',()=>{
