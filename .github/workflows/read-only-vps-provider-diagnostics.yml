@@ -1,0 +1,47 @@
+name: Read-only VPS provider diagnostics
+
+on:
+  push:
+    branches:
+      - diagnose/provider-journal-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read provider and local fallback diagnostics
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key > /tmp/vps_key.pub
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== CLOCK AND LOAD ==='
+          date -Is
+          uptime
+          free -h
+          df -h /
+          df -Pi /
+          echo '=== SERVICE ==='
+          systemctl show my-ai-unified.service -p ActiveState -p SubState -p MainPID -p ExecMainStartTimestamp -p NRestarts
+          echo '=== LOCAL HEALTH ==='
+          curl --max-time 8 -sS http://127.0.0.1:3020/health
+          echo
+          echo '=== LOCAL AI HEALTH ==='
+          curl --max-time 8 -sS http://127.0.0.1:3020/local-ai/health
+          echo
+          echo '=== PROVIDER JOURNAL LAST 15 MINUTES ==='
+          journalctl -u my-ai-unified.service --since '15 minutes ago' --no-pager 2>&1 | grep -E 'AI_PROVIDER|GROQ|OLLAMA|CHAT_REQUEST|ZVENOAI|FALLBACK|deadline|timeout|429|401|502' | tail -n 240
+          echo '=== SYSTEM JOURNAL LAST 15 MINUTES ==='
+          journalctl -k --since '15 minutes ago' --no-pager 2>&1 | tail -n 80
+          REMOTE
