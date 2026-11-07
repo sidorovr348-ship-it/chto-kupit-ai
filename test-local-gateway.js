@@ -87,3 +87,14 @@ assert.ok(src.includes("process.env.ZVENOAI_FALLBACK_TEXT_MODEL||'cohere/north-m
 assert.ok(src.includes("if(typeof text==='string'&&text.trim())return{text,provider:'zvenoai',model}")&&src.includes("throw Error('Empty response content')"),'ZvenoAI empty content must trigger the fallback route instead of returning an empty answer');
 assert.ok(src.includes("provider:'zvenoai'")&&src.includes("ZVENOAI_ERROR_CONTINUE_FALLBACK_CHAIN"),'ZvenoAI failures must continue through the existing provider fallback chain');
 assert.ok(src.includes("zvenoai:!!keyOf('ZVENOAI_API_KEY')"),'health must report whether the ZvenoAI key is configured without exposing the key');
+
+const {sanitizeSpeechText}=require('./src/speech-text');
+assert.equal(sanitizeSpeechText('**100 000 рублей**'),'100 000 рублей');
+const ttsSection=src.slice(src.indexOf('async function tts('),src.indexOf('async function extractDocument(req)'));
+assert.ok(ttsSection.includes('sanitizeSpeechText(')&&ttsSection.includes('voice:TTS_VOICE'),'server TTS must sanitize text and use the fixed voice');
+assert.ok(!src.includes('googleFallbackTTS')&&!src.includes('TTS_FALLBACK_PROVIDER google-translate'),'TTS must not switch to a different provider/voice');
+assert.ok(src.includes("TTS_VOICE='ru-RU-DmitryNeural'"),'server voice must remain the selected male voice');
+assert.ok(ui.includes('function cleanSpeechText(value)')&&ui.includes('text:speechText'),'frontend must sanitize the TTS copy before sending it');
+assert.ok(!ui.includes('speechSynthesis.speak('),'browser default voice fallback must not switch the speaker');
+assert.ok(!ui.includes('for(let n=0;n<3;n++)'),'frontend API must not automatically retry a POST request');
+assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversation history must remain included');
