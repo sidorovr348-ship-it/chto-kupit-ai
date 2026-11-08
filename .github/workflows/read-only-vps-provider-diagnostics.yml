@@ -117,6 +117,20 @@ jobs:
                       if line.startswith(('FREELM_ENABLED=','FREELM_MODEL=','FREELM_BASE_URL=')): print(line)
                   print('FREELM_API_KEY_CONFIGURED',any(x.startswith('FREELM_API_KEY=') and bool(x.split('=',1)[1].strip()) for x in lines))
           PY
+          echo '=== FREELM SYNTHETIC VISION SMOKE TEST (RED SQUARE; NO USER DATA) ==='
+          timeout 35 /opt/freelm-venv/bin/python - <<'PY'
+          from freelm import FreeLLM
+          data='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='
+          llm=FreeLLM.from_env()
+          try:
+              r=llm.chat([{'role':'user','content':[{'type':'text','text':'Look at the attached image. State its main colour in one word.'},{'type':'image_url','image_url':{'url':data}}]}],model='auto')
+              print('FREELM_VISION_PROVIDER',getattr(r,'provider','unknown'))
+              print('FREELM_VISION_MODEL',getattr(r,'model','unknown'))
+              print('FREELM_VISION_TEXT',str(getattr(r,'text',r))[:300])
+          except Exception as e:
+              print('FREELM_VISION_ERROR',type(e).__name__,str(e)[:500])
+              raise
+          PY
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
