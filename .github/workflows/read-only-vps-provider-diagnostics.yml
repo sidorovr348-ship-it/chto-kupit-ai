@@ -1,4 +1,4 @@
-name: Read-only VPS provider diagnostics
+name: VPS diagnostics and temporary FreeLLM smoke
 # Fresh post-deploy snapshot; remote commands are read-only.
 
 on:
@@ -169,6 +169,60 @@ jobs:
           except Exception as e:
               print('FREELM_VISION_ERROR',type(e).__name__,str(e)[:500])
               raise
+          PY
+          echo '=== TEMPORARY FREELM LOCAL API SMOKE (START/TEST/STOP; SYNTHETIC DATA ONLY) ==='
+          python3 - <<'PY'
+          import json, subprocess, time, urllib.request, urllib.error
+          from pathlib import Path
+          def read_env(path):
+              d={}
+              for line in Path(path).read_text(errors='replace').splitlines():
+                  line=line.strip()
+                  if not line or line.startswith('#') or '=' not in line: continue
+                  if line.startswith('export '): line=line[7:]
+                  k,v=line.split('=',1); d[k.strip()]=v.strip().strip('"').strip("'")
+              return d
+          app=read_env('/root/my-ai-unified/.local-ai.env')
+          key=app.get('FREELM_API_KEY','')
+          before=subprocess.run(['systemctl','is-active','freelm.service'],text=True,capture_output=True).stdout.strip()
+          enabled=subprocess.run(['systemctl','is-enabled','freelm.service'],text=True,capture_output=True).stdout.strip()
+          print('FREELM_PRE_ACTIVE',before,'ENABLED',enabled,'APP_KEY_CONFIGURED',bool(key))
+          started=False
+          def request(path,payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request('http://127.0.0.1:4000/v1/'+path,data=data,headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                  body=resp.read().decode(errors='replace')
+                  return resp.status,resp.headers,body
+          try:
+              if before!='active':
+                  subprocess.run(['systemctl','start','freelm.service'],check=True,timeout=20)
+                  started=True
+              ready=False
+              for _ in range(12):
+                  try:
+                      status,headers,body=request('models')
+                      print('FREELM_MODELS_HTTP',status,'BODY',body[:500]); ready=True; break
+                  except Exception:
+                      time.sleep(.5)
+              if ready:
+                  for label,payload in [
+                      ('TEXT',{'model':'chat:fast','messages':[{'role':'user','content':'Reply with exactly OK.'}],'max_tokens':20}),
+                      ('VISION',{'model':'auto','messages':[{'role':'user','content':[{'type':'text','text':'State the main colour of this image in one word.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='}}]}],'max_tokens':30})]:
+                      try:
+                          status,headers,body=request('chat/completions',payload)
+                          print('FREELM_'+label+'_HTTP',status,'ROUTE',headers.get('X-Routed-Via') or headers.get('X-Provider') or '(not exposed)','BODY',body[:800])
+                      except urllib.error.HTTPError as e:
+                          print('FREELM_'+label+'_HTTP_ERROR',e.code,e.read().decode(errors='replace')[:800])
+                      except Exception as e: print('FREELM_'+label+'_ERROR',type(e).__name__,str(e)[:500])
+              else: print('FREELM_LOCAL_API_NOT_READY')
+          except Exception as e: print('FREELM_SERVICE_START_ERROR',type(e).__name__,str(e)[:500])
+          finally:
+              if started:
+                  subprocess.run(['systemctl','stop','freelm.service'],text=True,capture_output=True,timeout=20)
+              after=subprocess.run(['systemctl','is-active','freelm.service'],text=True,capture_output=True).stdout.strip()
+              enabled_after=subprocess.run(['systemctl','is-enabled','freelm.service'],text=True,capture_output=True).stdout.strip()
+              print('FREELM_POST_ACTIVE',after,'ENABLED',enabled_after)
           PY
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
