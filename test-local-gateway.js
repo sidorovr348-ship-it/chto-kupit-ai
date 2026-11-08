@@ -104,3 +104,14 @@ assert.ok(src.includes("body.max_completion_tokens=vision?1024:64;"),'Qwen text 
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
 assert.ok(src.includes("finish_reason:choice.finish_reason||null")&&src.includes("completion_tokens:d?.usage?.completion_tokens??null")&&src.includes("content_chars:String(content).length"),'provider success logs must expose safe quality and token metrics');
 assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
+
+// Vision provider cooldowns must prevent long retry waits after upstream 429 responses.
+const imagePatch=fs.readFileSync('image-generation-fallback.js','utf8');
+const visionPatch=fs.readFileSync('vision-runtime-hotfix.js','utf8');
+const autonomyE2E=fs.readFileSync('autonomy-full-capability-e2e.mjs','utf8');
+const acceptance100=fs.readFileSync('acceptance-100.mjs','utf8');
+assert.ok(src.includes("mistralMessages,12000,true")&&src.includes("mistralBlockedUntil=Date.now()+cooldown")&&!src.includes('MISTRAL_VISION_RATE_LIMIT_RETRY'),'Mistral vision 429 must be circuit-broken without sleeping inside the request');
+assert.ok(imagePatch.includes('Date.now()<mistralBlockedUntil')&&imagePatch.includes('if(r.status===429){')&&imagePatch.includes('mistralBlockedUntil=Date.now()+60000'),'direct Mistral photo middleware must stop cycling models after a rate limit');
+assert.ok(visionPatch.includes('Date.now()<groqBlockedUntil')&&visionPatch.includes('setTimeout(()=>ctl.abort(),15000)')&&visionPatch.includes('groqBlockedUntil=Date.now()'),'Groq Responses vision middleware must have a short timeout and provider cooldown');
+assert.ok(autonomyE2E.includes('const readyUntil = Date.now() + 10000')&&autonomyE2E.includes('await new Promise(resolve => setTimeout(resolve, 250))'),'autonomy E2E must wait for the intentionally asynchronous bounded runtime initialization');
+assert.ok(acceptance100.includes("},'POST',50000);ok(x.ok&&textOf(x).length>0,'photo')"),'photo acceptance timeout must exceed the documented 45-second vision route deadline');
