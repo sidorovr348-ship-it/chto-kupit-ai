@@ -207,8 +207,8 @@ jobs:
                       time.sleep(.5)
               if ready:
                   for label,payload in [
-                      ('TEXT',{'model':'chat:fast','messages':[{'role':'user','content':'Reply with exactly OK.'}],'max_tokens':20}),
-                      ('VISION',{'model':'auto','messages':[{'role':'user','content':[{'type':'text','text':'State the main colour of this image in one word.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='}}]}],'max_tokens':30})]:
+                      ('TEXT',{'model':'chat:fast','messages':[{'role':'user','content':'Reply with exactly OK.'}],'max_tokens':512}),
+                      ('VISION',{'model':'auto','messages':[{'role':'user','content':[{'type':'text','text':'State the main colour of this image in one word.'},{'type':'image_url','image_url':{'url':'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='}}]}],'max_tokens':512})]:
                       try:
                           status,headers,body=request('chat/completions',payload)
                           print('FREELM_'+label+'_HTTP',status,'ROUTE',headers.get('X-Routed-Via') or headers.get('X-Provider') or '(not exposed)','BODY',body[:800])
