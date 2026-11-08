@@ -62,7 +62,12 @@ jobs:
           systemctl list-units --type=service --all --no-legend 2>&1 | grep -Ei 'free|llm|vllm|ollama' || true
           ps -eo pid,comm,args 2>&1 | grep -Ei 'free.?llm|llama|vllm|ollama|llamacpp' | grep -v grep | head -n 40 || true
           ss -ltnp 2>&1 | grep -E ':4000|:11434' || true
-          find /root -maxdepth 3 \\( -iname '*free*llm*' -o -iname '*freellm*' \\) -print 2>/dev/null | head -n 40 || true
+          find /root /opt /usr/local -maxdepth 3 -iname '*freellm*' -print 2>/dev/null | head -n 40 || true
+          echo '=== FREELM UNIT PROPERTIES (NO ENV VALUES) ==='
+          systemctl show freelm.service -p FragmentPath -p ExecStart -p WorkingDirectory -p User -p EnvironmentFiles -p MemoryMax -p MemoryHigh -p LoadState -p ActiveState -p SubState 2>&1 || true
+          unit=$(systemctl show -p FragmentPath --value freelm.service 2>/dev/null || true)
+          if [ -n "$unit" ] && [ -f "$unit" ]; then sed -E 's/(API_KEY|TOKEN|SECRET)=.*/\\1=[REDACTED]/I' "$unit"; fi
+          command -v freelm 2>&1 || true
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
