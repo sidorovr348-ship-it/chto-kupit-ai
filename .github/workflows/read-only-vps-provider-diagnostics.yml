@@ -57,6 +57,12 @@ jobs:
           echo '=== NON-SECRET OPTIONAL PROVIDER SETTINGS ==='
           python3 -c 'from pathlib import Path; keys={"FREELM_ENABLED","FREELM_MODEL","FREELM_BASE_URL","OLLAMA_TIMEOUT_MS","TTS_VOICE"}; paths=[Path("/root/my-ai-unified/.local-ai.env"),Path("/root/chto-kupit-ai.env")]; [(print(str(p),k,v)) for p in paths if p.exists() for line in p.read_text(errors="replace").splitlines() if "=" in line for k,v in [line.split("=",1)] if k in keys]'
           python3 -c 'from pathlib import Path; paths=[Path("/root/my-ai-unified/.local-ai.env"),Path("/root/chto-kupit-ai.env")]; keys={"FREELM_API_KEY","CLOUDRU_AGENT_TOKEN","HF_TOKEN"}; [(print(str(p),k,"configured",bool(v.strip()))) for p in paths if p.exists() for line in p.read_text(errors="replace").splitlines() if "=" in line for k,v in [line.split("=",1)] if k in keys]'
+          echo '=== FREE LLM SERVICE DISCOVERY ==='
+          systemctl list-unit-files --type=service --no-legend 2>&1 | grep -Ei 'free|llm|vllm|ollama' || true
+          systemctl list-units --type=service --all --no-legend 2>&1 | grep -Ei 'free|llm|vllm|ollama' || true
+          ps -eo pid,comm,args 2>&1 | grep -Ei 'free.?llm|llama|vllm|ollama|llamacpp' | grep -v grep | head -n 40 || true
+          ss -ltnp 2>&1 | grep -E ':4000|:11434' || true
+          find /root -maxdepth 3 \\( -iname '*free*llm*' -o -iname '*freellm*' \\) -print 2>/dev/null | head -n 40 || true
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
