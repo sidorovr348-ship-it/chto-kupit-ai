@@ -16,8 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compare live gateway without changing the VPS
         env:
-          VPS_HOST: \${{ secrets.VPS_HOST }}
-          VPS_SSH_KEY: \${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
           python3 scripts/prepare-vps-key.py
