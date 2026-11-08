@@ -121,7 +121,7 @@ jobs:
           timeout 35 /opt/freelm-venv/bin/python - <<'PY'
           from freelm import FreeLLM
           data='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='
-          llm=FreeLLM.from_env()
+          llm=FreeLLM.from_env(keyless='auto')
           try:
               r=llm.chat([{'role':'user','content':[{'type':'text','text':'Look at the attached image. State its main colour in one word.'},{'type':'image_url','image_url':{'url':data}}]}],model='auto')
               print('FREELM_VISION_PROVIDER',getattr(r,'provider','unknown'))
