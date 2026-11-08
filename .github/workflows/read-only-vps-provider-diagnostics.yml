@@ -69,6 +69,22 @@ jobs:
           if [ -n "$unit" ] && [ -f "$unit" ]; then sed -E 's/(API_KEY|TOKEN|SECRET)=.*/\\1=[REDACTED]/I' "$unit"; fi
           command -v freelm 2>&1 || true
           echo '=== FREELM PACKAGE AND ENV SHAPE (NO VALUES) ==='
+          python3 - <<'PY'
+          from pathlib import Path
+          def env(path):
+              d={}
+              p=Path(path)
+              if p.exists():
+                  for line in p.read_text(errors='replace').splitlines():
+                      if '=' in line and not line.lstrip().startswith('#'):
+                          k,v=line.split('=',1); d[k.strip()]=v.strip().strip('"').strip("'")
+              return d
+          app=env('/root/my-ai-unified/.local-ai.env'); svc=env('/etc/freelm.env')
+          print('FREELM_APP_KEY_MATCHES_SERVER_KEY',bool(app.get('FREELM_API_KEY') and app.get('FREELM_API_KEY')==svc.get('FREELM_SERVER_KEY')))
+          print('FREELM_BASE_URL',app.get('FREELM_BASE_URL','(unset)'))
+          print('APP_PROVIDER_KEYS',sorted(k for k,v in app.items() if v and k.endswith('_API_KEY') and k!='FREELM_API_KEY'))
+          print('FREELM_KEYLESS_MODE',svc.get('FREELM_KEYLESS','auto'))
+          PY
           ls -l /opt/freelm-venv/bin/freelm /etc/freelm.env /etc/systemd/system/freelm.service 2>&1 || true
           /opt/freelm-venv/bin/freelm --help 2>&1 | head -n 60 || true
           /opt/freelm-venv/bin/python -m pip show freelm 2>&1 | head -n 50 || true
