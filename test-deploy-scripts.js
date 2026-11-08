@@ -65,3 +65,9 @@ test('deployment preserves the VPS legacy CloudRU module referenced by its legac
  assert.ok(preserve>=0&&liveCopy>preserve);
  assert.ok(deploy.includes("tar -czf '$BACKUP_ARCHIVE' local-gateway.js"));
 });
+
+const productionWorkflow=fs.readFileSync('.github/workflows/production-deploy-v2.yml','utf8');
+test('workflow-only edits do not trigger another production VPS deployment',()=>{
+ assert.ok(productionWorkflow.includes("paths-ignore:"));
+ for(const p of ['.github/workflows/authoritative-production-verify.yml','.github/workflows/mobile-e2e.yml','.github/workflows/production-deploy-v2.yml'])assert.ok(productionWorkflow.includes(p));
+});

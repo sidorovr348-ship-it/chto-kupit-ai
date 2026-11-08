@@ -5,6 +5,10 @@ name: My AI Unified — production deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/authoritative-production-verify.yml'
+      - '.github/workflows/mobile-e2e.yml'
+      - '.github/workflows/production-deploy-v2.yml'
   workflow_dispatch:
 
 concurrency:

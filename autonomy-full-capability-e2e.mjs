@@ -38,8 +38,14 @@ async function task(kind, input = {}, goal = '') {
 }
 
 (async () => {
-  const status = await req('/autonomy/status', undefined, { method: 'GET', timeout: 30000 });
-  assert(status.ok && status.autonomy?.mode === 'FULL_BOUNDED', 'autonomy is not FULL_BOUNDED');
+  const readyUntil = Date.now() + 10000;
+  let status;
+  do {
+    status = await req('/autonomy/status', undefined, { method: 'GET', timeout: 30000 });
+    if (status.ok && status.autonomy?.mode === 'FULL_BOUNDED' && status.autonomy?.connectedToCore === true) break;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  } while (Date.now() < readyUntil);
+  assert(status.ok && status.autonomy?.mode === 'FULL_BOUNDED', 'autonomy did not finish bounded initialization within 10 seconds');
   assert(status.autonomy?.connectedToCore === true, 'autonomy is not connected to core');
 
   const self = await req('/autonomy/self-check', {});
