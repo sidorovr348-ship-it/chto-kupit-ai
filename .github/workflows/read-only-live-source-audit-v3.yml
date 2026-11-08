@@ -1,0 +1,51 @@
+name: Read-only live VPS source audit v3
+
+on:
+  push:
+    branches:
+      - audit/live-source-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare all VPS-overwritten files without changing the VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "df -h /; df -Pi /; systemctl show my-ai-unified.service -p ActiveState -p SubState -p NRestarts"
+          mkdir -p /tmp/live-source/src
+          for file in local-gateway.js image-generation-fallback.js vision-runtime-hotfix.js src/cloudru-agent.js; do
+            ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" "cat /root/my-ai-unified/$file" > "/tmp/live-source/$file"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import difflib, hashlib, re
+          files=['local-gateway.js','image-generation-fallback.js','vision-runtime-hotfix.js','src/cloudru-agent.js']
+          patterns=[
+              (re.compile(r'(?i)([A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*[:=]\s*)[^,;\s]+'),r'\1[REDACTED]'),
+              (re.compile(r'(?i)(Bearer\s+)[A-Za-z0-9._~+/-]+'),r'\1[REDACTED]'),
+              (re.compile(r'(?i)(sk-[A-Za-z0-9_-]{12,}|gsk_[A-Za-z0-9_-]{12,})'),r'[REDACTED_KEY]')
+          ]
+          for name in files:
+              a=Path(name).read_text(errors='replace').splitlines()
+              b=Path('/tmp/live-source',name).read_text(errors='replace').splitlines()
+              print('FILE',name,'REPO_SHA',hashlib.sha256('\n'.join(a).encode()).hexdigest(),'LIVE_SHA',hashlib.sha256('\n'.join(b).encode()).hexdigest(),'REPO_LINES',len(a),'LIVE_LINES',len(b))
+              diff=list(difflib.unified_diff(a,b,fromfile='main/'+name,tofile='VPS/'+name,lineterm=''))
+              print('FILE_DIFF_LINES',name,len(diff))
+              for line in diff[:220]:
+                  for pattern,repl in patterns: line=pattern.sub(repl,line)
+                  print(line)
+              if len(diff)>220: print('FILE_DIFF_TRUNCATED',name,len(diff)-220)
+          PY
