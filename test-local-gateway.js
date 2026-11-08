@@ -104,7 +104,7 @@ assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversat
 
 assert.ok(src.includes("body.max_completion_tokens=vision?1024:512;"),'Qwen text output budget must allow complete text answers while preserving a bounded response');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
-assert.ok(src.includes("finish_reason:choice.finish_reason||null")&&src.includes("completion_tokens:d?.usage?.completion_tokens??null")&&src.includes("content_chars:String(content).length"),'provider success logs must expose safe quality and token metrics');
+assert.ok(src.includes("finish_reason:finishReason")&&src.includes("completion_tokens:d?.usage?.completion_tokens??null")&&src.includes("content_chars:String(content).length"),'provider success logs must expose safe quality and token metrics');
 assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
 
 // Vision provider cooldowns must prevent long retry waits after upstream 429 responses.
