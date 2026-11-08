@@ -62,12 +62,19 @@ jobs:
           systemctl list-units --type=service --all --no-legend 2>&1 | grep -Ei 'free|llm|vllm|ollama' || true
           ps -eo pid,comm,args 2>&1 | grep -Ei 'free.?llm|llama|vllm|ollama|llamacpp' | grep -v grep | head -n 40 || true
           ss -ltnp 2>&1 | grep -E ':4000|:11434' || true
-          find /root /opt /usr/local -maxdepth 3 -iname '*freellm*' -print 2>/dev/null | head -n 40 || true
+          find /root /opt /usr/local -maxdepth 3 -iname '*freelm*' -print 2>/dev/null | head -n 40 || true
           echo '=== FREELM UNIT PROPERTIES (NO ENV VALUES) ==='
           systemctl show freelm.service -p FragmentPath -p ExecStart -p WorkingDirectory -p User -p EnvironmentFiles -p MemoryMax -p MemoryHigh -p LoadState -p ActiveState -p SubState 2>&1 || true
           unit=$(systemctl show -p FragmentPath --value freelm.service 2>/dev/null || true)
           if [ -n "$unit" ] && [ -f "$unit" ]; then sed -E 's/(API_KEY|TOKEN|SECRET)=.*/\\1=[REDACTED]/I' "$unit"; fi
           command -v freelm 2>&1 || true
+          echo '=== FREELM PACKAGE AND ENV SHAPE (NO VALUES) ==='
+          ls -l /opt/freelm-venv/bin/freelm /etc/freelm.env /etc/systemd/system/freelm.service 2>&1 || true
+          /opt/freelm-venv/bin/freelm --help 2>&1 | head -n 60 || true
+          /opt/freelm-venv/bin/python -m pip show freelm 2>&1 | head -n 50 || true
+          awk -F= 'NF>1 {print $1}' /etc/freelm.env 2>/dev/null || true
+          python3 -c 'from pathlib import Path; p=Path("/etc/freelm.env"); keys={"FREELM_API_KEY","API_KEY","OPENAI_API_KEY","HF_TOKEN"}; [(print(k,"configured",bool(v.strip()))) for line in p.read_text(errors="replace").splitlines() if "=" in line for k,v in [line.split("=",1)] if k in keys]' 2>/dev/null || true
+          journalctl -u freelm.service -n 50 --no-pager 2>&1 | grep -Ei 'error|failed|memory|oom|bind|port|listen|model|started|stopped' | tail -n 30 || true
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
