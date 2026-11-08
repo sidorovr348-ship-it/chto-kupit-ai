@@ -78,6 +78,12 @@ jobs:
           echo '=== FREELM SYNTHETIC KEYLESS SMOKE TEST (NO USER DATA) ==='
           set -a; . /etc/freelm.env; set +a
           timeout 25 /opt/freelm-venv/bin/freelm chat 'Reply with exactly OK.' --model chat:fast 2>&1 | head -c 2500 || true
+          echo '=== FREELM HEALTH ==='
+          /opt/freelm-venv/bin/freelm health 2>&1 | head -c 2500 || true
+          echo '=== FREELM DOCTOR (LIVE KEY CHECK) ==='
+          timeout 25 /opt/freelm-venv/bin/freelm doctor --json 2>&1 | head -c 4000 || true
+          echo '=== FREELM CHAT AUTO SMOKE ==='
+          timeout 25 /opt/freelm-venv/bin/freelm chat 'Reply with exactly OK.' --model auto 2>&1 | head -c 2500 || true
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
