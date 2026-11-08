@@ -1,0 +1,46 @@
+name: Read-only VPS disk space audit
+
+on:
+  push:
+    branches:
+      - audit/live-source-2026-11-08
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect disk usage without deleting anything
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare-vps-key.py
+          chmod 600 /tmp/vps_key
+          trap 'rm -f /tmp/vps_key /tmp/vps_key.pub' EXIT
+          ssh-keygen -y -P "" -f /tmp/vps_key >/dev/null
+          ssh -i /tmp/vps_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o ConnectTimeout=15 "root@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set +e
+          echo '=== FILESYSTEM ==='
+          df -h /
+          df -Pi /
+          echo '=== TOP LEVEL ==='
+          du -xhd1 / 2>/dev/null | sort -h | tail -n 20
+          echo '=== ROOT DIRECTORIES ==='
+          du -xhd1 /root /var /usr/local /opt 2>/dev/null | sort -h | tail -n 35
+          echo '=== KNOWN CACHES AND BACKUPS ==='
+          du -sh /var/cache/apt/archives /root/.npm /root/.cache /tmp /root/my-ai-unified/backups /root/my-ai-unified-backups /root/my-ai-unified/node_modules 2>/dev/null
+          echo '=== JOURNAL SIZE ==='
+          journalctl --disk-usage 2>&1
+          echo '=== LARGEST LOG FILES ==='
+          find /var/log -xdev -type f -printf '%s %p\n' 2>/dev/null | sort -nr | head -n 20
+          echo '=== LARGEST BACKUP FILES ==='
+          find /root/my-ai-unified-backups /root/my-ai-unified/backups -xdev -type f -printf '%s %p\n' 2>/dev/null | sort -nr | head -n 25
+          echo '=== SERVICE STATE ==='
+          systemctl show my-ai-unified.service -p ActiveState -p SubState -p NRestarts
+          REMOTE
