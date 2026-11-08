@@ -135,6 +135,27 @@ jobs:
               print('FREELM_DOCTOR_OUTPUT',(r.stdout+'\\n'+r.stderr)[:5000])
           except Exception as e: print('FREELM_DOCTOR_ERROR',type(e).__name__,str(e)[:500])
           PY
+          echo '=== FREELM ZAI VISION SMOKE TEST (RED SQUARE; NO USER DATA) ==='
+          timeout 35 /opt/freelm-venv/bin/python - <<'PY'
+          from pathlib import Path
+          import os
+          for line in Path('/root/my-ai-unified/.local-ai.env').read_text(errors='replace').splitlines():
+              line=line.strip()
+              if not line or line.startswith('#') or '=' not in line: continue
+              if line.startswith('export '): line=line[7:]
+              k,v=line.split('=',1); os.environ[k.strip()]=v.strip().strip('"').strip("'")
+          from freelm import FreeLLM
+          data='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg=='
+          llm=FreeLLM.from_env(keyless='auto')
+          try:
+              r=llm.chat([{'role':'user','content':[{'type':'text','text':'Look at the attached image. State its main colour in one word.'},{'type':'image_url','image_url':{'url':data}}]}],model='glm-4.6v-flash')
+              print('FREELM_ZAI_VISION_PROVIDER',getattr(r,'provider','unknown'))
+              print('FREELM_ZAI_VISION_MODEL',getattr(r,'model','unknown'))
+              print('FREELM_ZAI_VISION_TEXT',str(getattr(r,'text',r))[:300])
+          except Exception as e:
+              print('FREELM_ZAI_VISION_ERROR',type(e).__name__,str(e)[:500])
+              raise
+          PY
           echo '=== FREELM SYNTHETIC VISION SMOKE TEST (RED SQUARE; NO USER DATA) ==='
           timeout 35 /opt/freelm-venv/bin/python - <<'PY'
           from freelm import FreeLLM
