@@ -1,4 +1,5 @@
 name: Read-only VPS provider diagnostics
+# Fresh post-deploy snapshot; remote commands are read-only.
 
 on:
   push:
