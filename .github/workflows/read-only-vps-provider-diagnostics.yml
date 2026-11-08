@@ -100,6 +100,23 @@ jobs:
           timeout 25 /opt/freelm-venv/bin/freelm doctor --json 2>&1 | head -c 4000 || true
           echo '=== FREELM CHAT AUTO SMOKE ==='
           timeout 25 /opt/freelm-venv/bin/freelm chat 'Reply with exactly OK.' --model auto 2>&1 | head -c 2500 || true
+          echo '=== PREVIOUS FREELM INTEGRATION ARTIFACTS (REDACTED) ==='
+          if [ -f /root/my-ai-unified-backups/freelm-gateway.patch ]; then grep -n -i 'freelm\|FREELM' /root/my-ai-unified-backups/freelm-gateway.patch | sed -E 's/(sk-|gsk_|Bearer )[A-Za-z0-9._-]{12,}/[REDACTED]/g' | head -n 100; fi
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['local-gateway.js.before-freelm-20261028-084401','local-ai.env.before-freelm-20261028-084401','local-ai.env.before-freelm-off-20261028-093611']:
+              p=Path('/root/my-ai-unified-backups')/name
+              if not p.exists(): continue
+              print('BACKUP',name)
+              lines=p.read_text(errors='replace').splitlines()
+              if name.endswith('.js'):
+                  ix=[i for i,x in enumerate(lines) if 'FREELM' in x or 'freelm' in x]
+                  for i in ix[:20]: print('\n'.join(lines[max(0,i-2):min(len(lines),i+3)]))
+              else:
+                  for line in lines:
+                      if line.startswith(('FREELM_ENABLED=','FREELM_MODEL=','FREELM_BASE_URL=')): print(line)
+                  print('FREELM_API_KEY_CONFIGURED',any(x.startswith('FREELM_API_KEY=') and bool(x.split('=',1)[1].strip()) for x in lines))
+          PY
           echo '=== OPTIONAL FREE LLM LOCAL ENDPOINT ==='
           curl --max-time 3 -sS http://127.0.0.1:4000/v1/models 2>&1 | head -c 1500
           echo
