@@ -14,6 +14,10 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - run: node --check local-gateway.js
+      - run: node --check image-generation-fallback.js
+      - run: node --check vision-runtime-hotfix.js
+      - run: node --check autonomy-full-capability-e2e.mjs
       - run: node --check server.js
       - run: node --check src/speech-text.js
       - run: node --check acceptance-100.mjs
