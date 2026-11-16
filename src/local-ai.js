@@ -15,7 +15,7 @@ async function callOllama(messages, options = {}) {
     if (!response.ok) throw Object.assign(new Error(`Local AI error (${response.status})`), { status: 502, details: data });
     const result = String(data?.message?.content || data?.response || '').trim(); if (!result) throw Object.assign(new Error('Local AI returned an empty response'), { status: 502, details: data });
     return result;
-  } catch (error) { if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abortFromParent); }
+  } catch (error) { if (options.signal?.aborted) throw error; if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abortFromParent); }
 }
 
 async function callVision(prompt, images, options = {}) {
