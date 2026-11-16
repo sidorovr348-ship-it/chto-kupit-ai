@@ -6,7 +6,7 @@ const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсаль
 
 async function callOllama(messages, options = {}) {
   const requestedTimeout = Number(options.timeoutMs || 0); const timeoutMs = requestedTimeout > 0 ? requestedTimeout : OLLAMA_TIMEOUT_MS;
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = new AbortController(); const abortFromParent = () => controller.abort(); if (options.signal?.aborted) controller.abort(); else options.signal?.addEventListener('abort', abortFromParent, { once: true }); const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
     const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, think: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 120) } };
@@ -15,7 +15,7 @@ async function callOllama(messages, options = {}) {
     if (!response.ok) throw Object.assign(new Error(`Local AI error (${response.status})`), { status: 502, details: data });
     const result = String(data?.message?.content || data?.response || '').trim(); if (!result) throw Object.assign(new Error('Local AI returned an empty response'), { status: 502, details: data });
     return result;
-  } catch (error) { if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { clearTimeout(timer); }
+  } catch (error) { if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abortFromParent); }
 }
 
 async function callVision(prompt, images, options = {}) {
