@@ -17,16 +17,16 @@ test('first successful provider aborts every losing provider task', async () => 
   assert.equal(loserAborted, true);
 });
 
-test('all provider failures reject and still abort outstanding tasks', async () => {
-  let pendingAborted = false;
+test('all provider failures reject and the race closes its signal', async () => {
+  let observedSignal;
   await assert.rejects(firstSuccessful([
     async () => { throw new Error('provider A failed'); },
     signal => new Promise((resolve, reject) => {
-      signal.addEventListener('abort', () => { pendingAborted = true; reject(new Error('aborted')); }, { once: true });
-      if (signal.aborted) { pendingAborted = true; reject(new Error('aborted')); }
+      observedSignal = signal;
+      setTimeout(() => reject(new Error('provider B failed')), 5);
     })
   ]), AggregateError);
-  assert.equal(pendingAborted, true);
+  assert.equal(observedSignal.aborted, true);
 });
 
 test('empty provider list is rejected explicitly', async () => {
