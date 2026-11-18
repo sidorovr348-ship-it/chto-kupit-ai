@@ -25,7 +25,7 @@ assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
 assert.ok(src.includes('body.max_completion_tokens=vision?1024:512;body.temperature=.55;'),'Groq Qwen text requests must allow up to 512 output tokens for complete answers; vision keeps its separate budget');
-assert.ok(src.includes("const zk=keyOf('ZHIPU_API_KEY','GLM_API_KEY')")&&src.includes("https://open.bigmodel.cn/api/paas/v4/chat/completions")&&src.includes("process.env.ZHIPU_VISION_MODEL||'glm-4.6v-flash'"),'Zhipu GLM-4.6V-Flash must be an optional multimodal vision fallback using the official API');
+assert.ok(src.includes("const zk=keyOf('ZHIPU_API_KEY','GLM_API_KEY')")&&src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZHIPU_VISION_MODEL||'glm-4.6v-flash'"),'Zhipu GLM-4.6V-Flash must be an optional multimodal vision fallback using the official API');
 assert.ok(src.includes("provider:'zhipu'")&&src.includes("zhipu:Boolean(keyOf('ZHIPU_API_KEY','GLM_API_KEY'))"),'health diagnostics must report Zhipu configuration without exposing the API key');
 assert.ok(!src.includes('GEMINI_API_KEY')&&!src.includes('GEMINI_FREE_TIER_DATA_USE_ALLOWED'),'Gemini must not be included in provider fallback configuration');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
