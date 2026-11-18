@@ -5,11 +5,9 @@ function parseAudioDataUrl(value, maxBytes = 25 * 1024 * 1024) {
   if (!match) throw Object.assign(new Error('Аудио передано в неверном формате.'), {
     status: 400, code: 'AUDIO_DATA_URL_INVALID'
   });
-  const header = match[1].split(';');
-  if (header.pop()?.toLowerCase() !== 'base64') throw Object.assign(new Error('Ожидался Base64-аудиофайл.'), {
-    status: 400, code: 'AUDIO_DATA_URL_INVALID'
-  });
-  const mime = String(header[0] || '').toLowerCase();
+  // The regex consumes the trailing ;base64 marker separately; preceding
+  // MIME parameters such as ;codecs=opus are allowed but are not part of MIME.
+  const mime = String(match[1].split(';')[0] || '').toLowerCase();
   if (!mime.startsWith('audio/')) throw Object.assign(new Error('Переданный файл не является аудио.'), {
     status: 400, code: 'AUDIO_DATA_URL_INVALID'
   });
