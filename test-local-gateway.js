@@ -25,6 +25,9 @@ assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
 assert.ok(src.includes('body.max_completion_tokens=vision?1024:512;body.temperature=.55;'),'Groq Qwen text requests must allow up to 512 output tokens for complete answers; vision keeps its separate budget');
+assert.ok(src.includes("const zk=keyOf('ZHIPU_API_KEY','GLM_API_KEY')")&&src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZHIPU_VISION_MODEL||'glm-4.6v-flash'"),'Zhipu GLM-4.6V-Flash must be an optional multimodal vision fallback using the official API');
+assert.ok(src.includes("provider:'zhipu'")&&src.includes("zhipu:Boolean(keyOf('ZHIPU_API_KEY','GLM_API_KEY'))"),'health diagnostics must report Zhipu configuration without exposing the API key');
+assert.ok(!src.includes('GEMINI_API_KEY')&&!src.includes('GEMINI_FREE_TIER_DATA_USE_ALLOWED'),'Gemini must not be included in provider fallback configuration');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
@@ -88,6 +91,7 @@ assert.ok(src.includes("process.env.ZVENOAI_FALLBACK_TEXT_MODEL||'cohere/north-m
 assert.ok(src.includes("if(typeof text==='string'&&text.trim())return{text,provider:'zvenoai',model}")&&src.includes("throw Error('Empty response content')"),'ZvenoAI empty content must trigger the fallback route instead of returning an empty answer');
 assert.ok(src.includes("provider:'zvenoai'")&&src.includes("ZVENOAI_ERROR_CONTINUE_FALLBACK_CHAIN"),'ZvenoAI failures must continue through the existing provider fallback chain');
 assert.ok(src.includes("zvenoai:!!keyOf('ZVENOAI_API_KEY')"),'health must report whether the ZvenoAI key is configured without exposing the key');
+assert.ok(src.includes("zhipuVision:!!keyOf('ZHIPU_API_KEY','GLM_API_KEY')"),'health must report whether the Zhipu vision key is configured without exposing the key');
 
 const {sanitizeSpeechText}=require('./src/speech-text');
 assert.equal(sanitizeSpeechText('**100 000 рублей**'),'100 000 рублей');
@@ -118,6 +122,5 @@ assert.ok(autonomyE2E.includes('const readyUntil = Date.now() + 10000')&&autonom
 assert.ok(acceptance100.includes("},'POST',50000);ok(x.ok&&textOf(x).length>0,'photo')"),'photo acceptance timeout must exceed the documented 45-second vision route deadline');
 
 
-for(const marker of ['GEMINI_FREE_TIER_DATA_USE_ALLOWED===\'1\'','gemini-3.8-flash','generativelanguage.googleapis.com/v1beta/openai/chat/completions','OPENROUTER_FREE_TIER_DATA_USE_ALLOWED===\'1\'','openrouter/free','openrouter.ai/api/v1/chat/completions'])assert.ok(src.includes(marker),`missing optional free provider integration: ${marker}`);
-assert.ok(src.includes("gemini:Boolean(keyOf('GEMINI_API_KEY'))&&process.env.GEMINI_FREE_TIER_DATA_USE_ALLOWED==='1'"),'Gemini must be reported enabled only after explicit free-tier data-use opt-in');
+for(const marker of ["OPENROUTER_FREE_TIER_DATA_USE_ALLOWED==='1'","openrouter/free","openrouter.ai/api/v1/chat/completions"])assert.ok(src.includes(marker),`missing optional free provider integration: ${marker}`);
 assert.ok(src.includes("openrouter:Boolean(keyOf('OPENROUTER_API_KEY'))&&process.env.OPENROUTER_FREE_TIER_DATA_USE_ALLOWED==='1'"),'OpenRouter must be reported enabled only after explicit upstream data-use opt-in');
