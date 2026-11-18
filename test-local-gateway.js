@@ -121,5 +121,5 @@ assert.ok(autonomyE2E.includes('const readyUntil = Date.now() + 10000')&&autonom
 assert.ok(acceptance100.includes("},'POST',50000);ok(x.ok&&textOf(x).length>0,'photo')"),'photo acceptance timeout must exceed the documented 45-second vision route deadline');
 
 
-for(const marker of ['OPENROUTER_FREE_TIER_DATA_USE_ALLOWED===\\'1\\'','openrouter/free','openrouter.ai/api/v1/chat/completions'])assert.ok(src.includes(marker),`missing optional free provider integration: ${marker}`);
+for(const marker of ["OPENROUTER_FREE_TIER_DATA_USE_ALLOWED==='1'","openrouter/free","openrouter.ai/api/v1/chat/completions"])assert.ok(src.includes(marker),`missing optional free provider integration: ${marker}`);
 assert.ok(src.includes("openrouter:Boolean(keyOf('OPENROUTER_API_KEY'))&&process.env.OPENROUTER_FREE_TIER_DATA_USE_ALLOWED==='1'"),'OpenRouter must be reported enabled only after explicit upstream data-use opt-in');
