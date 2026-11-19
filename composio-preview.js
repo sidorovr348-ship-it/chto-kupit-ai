@@ -44,7 +44,7 @@ module.exports = function registerComposioPreviewRoutes(app) {
     }
 
     try {
-      const composio = new Composio();
+      const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
       const session = await composio.sessions.create(OWNER_USER_ID);
       const connection = await session.authorize('github');
       const redirectUrl = connection?.redirectUrl || connection?.redirect_url || connection?.url;
