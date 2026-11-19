@@ -4,9 +4,6 @@ on:
   push:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,17 +13,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Regenerate and commit lockfile on the isolated Preview branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/unified-open-models-video'
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          if ! git diff --quiet -- package-lock.json; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add package-lock.json
-            git commit -m 'fix: sync lockfile for Composio dependency'
-            git push origin HEAD:feat/unified-open-models-video
-          fi
       - run: npm ci
       - run: node --check local-gateway.js
       - run: node --check image-generation-fallback.js
