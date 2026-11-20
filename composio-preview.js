@@ -20,7 +20,7 @@ function isAllowedPreview() {
 function ownerAuthorized(req) {
   const expected = process.env.COMPOSIO_OWNER_TOKEN;
   const header = req.get('authorization') || '';
-  const match = /^Bearer ([^\\s]+)$/.exec(header);
+  const match = /^Bearer ([^\s]+)$/.exec(header);
   return Boolean(expected && match && safeEqual(match[1], expected));
 }
 
@@ -51,7 +51,7 @@ module.exports = function registerComposioPreviewRoutes(app, options = {}) {
       const connection = await session.authorize('github');
       const redirectUrl = connection?.redirectUrl || connection?.redirect_url || connection?.url;
 
-      if (typeof redirectUrl !== 'string' || !/^https:\\/\\//i.test(redirectUrl)) {
+      if (typeof redirectUrl !== 'string' || !redirectUrl.startsWith('https://')) {
         console.error('COMPOSIO_GITHUB_CONNECT_INVALID_RESPONSE');
         return res.status(502).json({ ok: false, error: 'Composio не вернул ссылку подключения' });
       }
