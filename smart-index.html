@@ -236,7 +236,7 @@ async function voice(){
         try{
           tr=await fetch(API+'/transcribe',{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36))},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store',signal:sttController.signal});
           raw=await tr.text();try{j=JSON.parse(raw)}catch{}
-        }catch(e){if(e.name==='AbortError')throw Error('Сервер распознавания не ответил за 25 секунд. Повтори голосовой запрос.');throw Error('Не удалось связаться с сервером распознавания. Проверь соединение.')}
+        }catch(e){if(e.name==='AbortError')throw Error('Сервер распознавания не ответил за 65 секунд. Повтори голосовой запрос.');throw Error('Не удалось связаться с сервером распознавания. Проверь соединение.')}
         finally{clearTimeout(sttTimer)}
         if(!tr.ok){if((tr.status===404||tr.status===503)&&(window.SpeechRecognition||window.webkitSpeechRecognition)){add('🟡 Серверное распознавание недоступно. Переключаюсь на встроенное распознавание Safari…');const fallbackText=await browserSpeechOnce();input.value=fallbackText;await send();return}throw Error(j.error||'Ошибка распознавания')}
         const text=String(j.text||'').trim();if(!text)throw Error('Речь не распознана');
