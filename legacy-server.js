@@ -8,6 +8,8 @@ const { dispatch, getCapability } = require('./src/dispatcher');
 const { diagnostics } = require('./supervisor');
 const { extractDocumentText } = require('./src/document-tools');
 const cloudru = require('./src/cloudru-agent');
+const os = require('os');
+const { sanitizeSpeechText } = require('./src/speech-text');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3020);
@@ -75,13 +77,90 @@ async function callParalon(messages) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function searchWeb(query, location = 'Россия') {
-  if (!configured('serper')) throw Object.assign(new Error('SERPER_API_KEY is not configured'), { status: 503 });
-  const response = await fetchWithTimeout('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: `${query} ${location}`, gl: 'ru', hl: 'ru', num: 6 }) }, 15000);
-  const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-  if (!response.ok) throw Object.assign(new Error('Web search failed'), { status: response.status, details: data });
-  return Array.isArray(data.organic) ? data.organic.slice(0, 6).map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' })) : [];
+function decodeSearchHtml(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/\s+/g, ' ').trim();
 }
+async function publicSearch(query, num = 6) {
+  const q = String(query || '').slice(0, 500);
+  const providers = [
+    async () => {
+      const r = await fetchWithTimeout('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q) + '&kl=ru-ru', { headers: { 'User-Agent': 'Mozilla/5.0 MyAIUnified/1.0', 'Accept-Language': 'ru-RU,ru;q=0.9' } }, 9000);
+      if (!r.ok) throw Error('DuckDuckGo HTTP ' + r.status);
+      const html = await r.text(), out = [];
+      for (const part of html.split('result__a').slice(1)) {
+        if (out.length >= num) break;
+        const href = part.match(/href="([^"]+)"/i)?.[1] || '';
+        const title = decodeSearchHtml((part.match(/>([\s\S]*?)<\/a>/i) || [,''])[1]);
+        const snippet = decodeSearchHtml((part.match(/result__snippet[^>]*>([\s\S]*?)<\/[^>]+>/i) || [,''])[1]);
+        let link = href; try { const u = new URL(href, 'https://duckduckgo.com'); link = u.searchParams.get('uddg') || u.href; } catch {}
+        if (title && /^https?:\/\//i.test(link) && !/duckduckgo\.com/i.test(link)) out.push({ title, url: link, content: snippet });
+      }
+      if (!out.length) throw Error('DuckDuckGo returned no results');
+      return out;
+    },
+    async () => {
+      const r = await fetchWithTimeout('https://www.google.com/search?q=' + encodeURIComponent(q) + '&hl=ru&gl=ru', { headers: { 'User-Agent': 'Mozilla/5.0 MyAIUnified/1.0', 'Accept-Language': 'ru-RU,ru;q=0.9' } }, 9000);
+      if (!r.ok) throw Error('Google HTTP ' + r.status);
+      const html = await r.text(), out = [];
+      for (const part of html.split('<div').filter(x => x.includes('href="/url?q=')).slice(0, 80)) {
+        if (out.length >= num) break;
+        const href = part.match(/href="\/url\?q=([^&"]+)/i)?.[1] || '';
+        let link = ''; try { link = decodeURIComponent(href); } catch { link = href; }
+        const title = decodeSearchHtml((part.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i) || [,''])[1]);
+        const snippet = decodeSearchHtml(part.slice(0, 1800));
+        if (title && /^https?:\/\//i.test(link)) out.push({ title, url: link, content: snippet.slice(0, 500) });
+      }
+      if (!out.length) throw Error('Google returned no results');
+      return out;
+    }
+  ];
+  let last;
+  for (const provider of providers) { try { return await provider(); } catch (error) { last = error; } }
+  throw Object.assign(new Error('Не удалось получить результаты из открытых поисковых систем: ' + String(last?.message || 'нет результатов')), { status: 502 });
+}
+async function searchWeb(query, location = 'Россия') {
+  if (configured('serper')) {
+    try {
+      const response = await fetchWithTimeout('https://google.serper.dev/search', { method: 'POST', headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ q: String(query).slice(0, 500) + ' ' + location, gl: 'ru', hl: 'ru', num: 6 }) }, 12000);
+      const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (response.ok && Array.isArray(data.organic) && data.organic.length) return data.organic.slice(0, 6).map(item => ({ title: item.title || '', url: item.link || '', content: item.snippet || '' }));
+      console.error('SERPER_SEARCH_FAILED', response.status);
+    } catch (error) { console.error('SERPER_SEARCH_FAILED', String(error?.message || error).slice(0, 180)); }
+  }
+  return publicSearch(String(query).slice(0, 500) + ' ' + location, 6);
+}
+
+const WEATHER_CODES = {0:'ясно',1:'преимущественно ясно',2:'переменная облачность',3:'пасмурно',45:'туман',48:'изморозь',51:'слабая морось',53:'морось',55:'сильная морось',61:'слабый дождь',63:'дождь',65:'сильный дождь',71:'слабый снег',73:'снег',75:'сильный снег',80:'ливень',81:'сильные ливни',82:'очень сильные ливни',95:'гроза',96:'гроза с градом',99:'сильная гроза с градом'};
+function isWeatherQuery(value) { return /(погод|температур|за окном|на улице|дожд|снег|ветер|облачност)/iu.test(String(value || '')); }
+function isLocationQuery(value) { return /(?:мо[её] текущее местоположение|где я(?: сейчас)?|моя геолокаци|мо[её] местоположение)/iu.test(String(value || '')); }
+async function reverseGeocode(lat, lon) {
+  const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon) + '&zoom=14&accept-language=ru';
+  const r = await fetchWithTimeout(url, { headers: { 'User-Agent': 'MyAIUnified/1.0', 'Accept': 'application/json' } }, 6000);
+  if (!r.ok) throw Error('Reverse geocoding HTTP ' + r.status);
+  const data = await r.json(); return String(data.display_name || '').trim();
+}
+async function weatherAt(lat, lon, label = '') {
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + encodeURIComponent(lat) + '&longitude=' + encodeURIComponent(lon) + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m&timezone=auto';
+  const r = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 9000);
+  if (!r.ok) throw Object.assign(Error('Сервис погоды ответил HTTP ' + r.status), { status: 502 });
+  const data = await r.json(), c = data.current;
+  if (!c || !Number.isFinite(Number(c.temperature_2m))) throw Error('Сервис погоды не вернул текущие условия');
+  const place = label || (Number(lat).toFixed(3) + ', ' + Number(lon).toFixed(3));
+  return 'Погода сейчас: ' + place + '. ' + (WEATHER_CODES[c.weather_code] || 'условия не определены') + ', температура ' + c.temperature_2m + ' °C, ощущается как ' + c.apparent_temperature + ' °C, влажность ' + c.relative_humidity_2m + '%, ветер ' + c.wind_speed_10m + ' км/ч.';
+}
+async function weatherForPlace(place) {
+  const url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(String(place).slice(0, 100)) + '&count=5&language=ru&format=json';
+  const r = await fetchWithTimeout(url, { headers: { 'Accept': 'application/json' } }, 8000);
+  if (!r.ok) throw Object.assign(Error('Геокодер ответил HTTP ' + r.status), { status: 502 });
+  const data = await r.json(), item = (data.results || [])[0];
+  if (!item) throw Object.assign(Error('Не удалось найти населённый пункт «' + place + '». Уточни город и регион.'), { status: 404 });
+  return weatherAt(item.latitude, item.longitude, [item.name, item.admin1, item.country].filter(Boolean).join(', '));
+}
+function extractWeatherPlace(value) {
+  const m = String(value || '').match(/(?:погод[аыуе]?|температур[ауы]?)[^.!?]{0,50}?(?:в|для|по)\s+([\p{L}][\p{L} .'-]{1,70})/iu);
+  return m ? m[1].trim() : '';
+}
+
 function fallbackSearchAnswer(results) { const items = (Array.isArray(results) ? results : []).filter(x => x?.title || x?.content).slice(0, 5); if (!items.length) return 'Поиск не вернул подходящих результатов.'; return `Вот что нашёл в интернете:\n\n${items.map((x, i) => `${i + 1}. ${x.title || 'Источник'}\n${x.content || 'Без описания.'}${x.url ? `\nИсточник: ${x.url}` : ''}`).join('\n\n')}`; }
 async function answerFromSearch(query, results, location = 'Россия') { const items = (Array.isArray(results) ? results : []).slice(0, 5); const compact = items.map((x, i) => `[${i + 1}] ${x.title}\nURL: ${x.url}\nФрагмент: ${x.content}`).join('\n\n'); if (!compact) return 'Поиск не вернул подходящих результатов.'; const prompt = `Ответь пользователю по-русски только на основании результатов поиска. Не выдумывай. Для важных утверждений указывай [номер источника]. В конце дай раздел «Источники». Запрос: ${query}. Регион: ${location}.\n\n${compact}`; try { const synthesized = await Promise.race([callParalon([{ role: 'user', content: prompt }]), new Promise(resolve => setTimeout(() => resolve(null), 12000))]); return synthesized && String(synthesized).trim() ? String(synthesized).trim() : fallbackSearchAnswer(results); } catch { return fallbackSearchAnswer(results); } }
 async function serperRequest(endpoint, body, timeoutMs = 15000) { if (!configured('serper')) throw Object.assign(new Error('SERPER_API_KEY is not configured'), { status: 503 }); const response = await fetchWithTimeout(`https://google.serper.dev/${endpoint}`, { method: 'POST', headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, timeoutMs); const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; } if (!response.ok) throw Object.assign(new Error(`Serper ${endpoint} failed (${response.status})`), { status: response.status, details: data }); return data; }
@@ -96,6 +175,25 @@ function clampText(text, max = 120000) { return String(text || '').slice(0, max)
 async function analyzeExtractedFile(buffer, filename, prompt, kindHint) { const extracted = await extractDocumentText(buffer, filename); const kind = kindHint || extracted.kind; const instruction = prompt || (kind === 'table' ? 'Проанализируй таблицу: дай краткое резюме, ключевые показатели, аномалии и полезные выводы.' : 'Проанализируй документ: дай краткое резюме, ключевые факты и важные выводы.'); const content = `${instruction}\n\nФайл: ${filename}\nТип: ${kind}\n\nСодержимое:\n${clampText(extracted.text)}`; return { ...extracted, result: await callParalon([{ role: 'user', content }]) }; }
 
 app.get('/health', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ ok: true, service: 'my-ai-unified', dispatcher: true, adapters: { paralon: configured('paralon'), paralon_fallback: true, serper: configured('serper'), groq: configured('groq'), video: true, cloudru: configured('cloudru') }, capabilities: Object.keys({ chat: getCapability('chat'), vision: getCapability('vision'), image_generation: getCapability('image_generation'), video: getCapability('video'), web_search: getCapability('web_search'), documents: getCapability('documents'), tables: getCapability('tables'), shopping: getCapability('shopping'), voice: true, code: getCapability('code'), verification: getCapability('verification'), cloud_agent: true }) }); });
+
+
+app.post('/tts', async (req, res) => {
+  let file = '';
+  try {
+    const text = sanitizeSpeechText(String(req.body?.text || '')).slice(0, 3500);
+    if (!text) return res.status(400).json({ ok: false, error: 'Текст для озвучивания пуст.' });
+    const { EdgeTTS } = require('node-edge-tts');
+    file = path.join(os.tmpdir(), 'ey-tts-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.mp3');
+    const engine = new EdgeTTS({ voice: 'ru-RU-DmitryNeural', lang: 'ru-RU', outputFormat: 'audio-24khz-96kbitrate-mono-mp3', rate: '+0%', pitch: '+0Hz', volume: '+0%', timeout: 15000 });
+    await engine.ttsPromise(text, file);
+    const audio = await fs.promises.readFile(file);
+    if (audio.length <= 1000) throw Error('TTS вернул пустой аудиофайл');
+    res.set({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' }).send(audio);
+  } catch (error) {
+    console.error('TTS_ERROR', String(error?.message || error).slice(0, 240));
+    if (!res.headersSent) res.status(502).json({ ok: false, error: 'Не удалось создать русскую голосовую озвучку.' });
+  } finally { if (file) await fs.promises.rm(file, { force: true }).catch(() => {}); }
+});
 
 app.post('/transcribe', async (req, res) => {
   try {
@@ -126,7 +224,26 @@ app.post('/transcribe', async (req, res) => {
 app.post('/cloudru', async (req, res) => { try { const prompt = String(req.body?.prompt || '').trim(); if (!prompt) return res.status(400).json({ ok: false, error: 'prompt is required' }); const answer = await cloudru.ask(prompt, { contextId: req.body?.contextId }); res.json({ ok: true, route: 'cloud_agent', result: answer.result, raw: answer.raw }); } catch (error) { console.error('CLOUDRU ERROR:', error); res.status(error.status || 502).json({ ok: false, route: 'cloud_agent', error: error.message, details: error.details || undefined }); } });
 app.get('/cloudru/health', async (req, res) => { try { if (!configured('cloudru')) return res.status(503).json({ ok: false, configured: false, error: 'CLOUDRU_AGENT_URL is not configured' }); const card = await cloudru.getAgentCard(); res.json({ ok: true, configured: true, agent: { name: card.name || card.title || null, description: card.description || null, url: card.url || null, protocol: 'A2A' } }); } catch (error) { res.status(error.status || 502).json({ ok: false, configured: true, error: error.message }); } });
 app.get('/diagnostics', async (req, res) => { try { const result = await diagnostics(); res.set('Cache-Control', 'no-store'); res.json({ ok: result.ok, route: 'verification', result: result.ok ? 'Проверка завершена: сервер, интернет и тесты работают.' : 'Проверка завершена: обнаружена проблема.', diagnostics: result }); } catch (error) { res.status(500).json({ ok: false, route: 'verification', result: 'Диагностика завершилась ошибкой.', error: error.message }); } });
-app.post('/chat', async (req, res) => { try { const { prompt = '', messages, hasImage = false, hasFile = false, hasVideo = false, location = 'Россия' } = req.body || {}; const chatMessages = Array.isArray(messages) && messages.length ? messages : (prompt ? [{ role: 'user', content: prompt }] : []); const userPrompt = String(prompt || textFromMessages(chatMessages)).trim(); if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' }); if (configured('cloudru') && process.env.CLOUDRU_AGENT_AUTO === 'true' && /\bcloud\.ru\b|облачн.*агент|через cloudru|через cloud\.ru/iu.test(userPrompt)) { const answer = await cloudru.ask(userPrompt); return res.json({ ok: true, route: 'cloud_agent', result: answer.result, raw: answer.raw }); } const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo }); if (route === 'verification') { const result = await diagnostics(); return res.json({ ok: result.ok, route, result: result.ok ? 'Проверка завершена: критических проблем не обнаружено.' : 'Проверка завершена: обнаружена проблема.', diagnostics: result }); } if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(userPrompt, location, /дешевле|самый дешёвый|где дешевле/iu.test(userPrompt) ? 'cheaper' : 'find') }); if (route === 'web_search') { const results = await searchWeb(userPrompt, location); return res.json({ ok: true, route, result: await answerFromSearch(userPrompt, results, location), sources: results }); } if (route === 'image_generation') return res.json({ ok: true, route, imageUrl: makeImageUrl(userPrompt), result: 'Изображение подготовлено.' }); if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL }); if (route === 'video') return res.json({ ok: true, route, status: 'ready', message: 'Для анализа видео отправь видео через кнопку «Видео».' }); if (route === 'documents' || route === 'tables') return res.json({ ok: true, route, status: 'ready', message: 'Отправь файл — я извлеку его содержимое и проанализирую.' }); res.json({ ok: true, route: 'chat', result: await callParalon(chatMessages), model: configured('paralon') ? PARALON_MODEL : 'emergency-text-fallback' }); } catch (error) { console.error('CHAT ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'AI request failed', details: error.details || undefined }); } });
+app.post('/chat', async (req, res) => { try {
+  const { prompt = '', messages, hasImage = false, hasFile = false, hasVideo = false, location = 'Россия' } = req.body || {};
+  const chatMessages = Array.isArray(messages) && messages.length ? messages : (prompt ? [{ role: 'user', content: prompt }] : []);
+  const userPrompt = String(prompt || textFromMessages(chatMessages)).trim();
+  if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
+  if (isWeatherQuery(userPrompt) || req.body?.weatherLocation) {
+    const gps = req.body?.location, place = String(req.body?.weatherLocation || extractWeatherPlace(userPrompt) || '').trim();
+    if (gps && Number.isFinite(Number(gps.lat)) && Number.isFinite(Number(gps.lon))) {
+      let label = ''; try { label = await reverseGeocode(Number(gps.lat), Number(gps.lon)); } catch {}
+      return res.json({ ok: true, route: 'weather', result: await weatherAt(Number(gps.lat), Number(gps.lon), label), provider: 'open-meteo' });
+    }
+    if (place) return res.json({ ok: true, route: 'weather', result: await weatherForPlace(place), provider: 'open-meteo' });
+    return res.json({ ok: true, route: 'weather-location-required', result: 'Чтобы показать погоду именно за окном, разреши геолокацию для этого сайта в Safari или напиши город и регион.', provider: 'location-required' });
+  }
+  if (isLocationQuery(userPrompt)) {
+    const gps = req.body?.location;
+    if (!gps || !Number.isFinite(Number(gps.lat)) || !Number.isFinite(Number(gps.lon))) return res.json({ ok: true, route: 'location', result: 'Safari не передал координаты. Разреши доступ к геолокации в настройках сайта или проверь системное разрешение iPhone.', provider: 'location-required' });
+    const lat = Number(gps.lat), lon = Number(gps.lon); let address = ''; try { address = await reverseGeocode(lat, lon); } catch {}
+    return res.json({ ok: true, route: 'location', result: address || ('Координаты: ' + lat.toFixed(5) + ', ' + lon.toFixed(5)), provider: 'geolocation', coordinates: { lat, lon }, address });
+  } if (configured('cloudru') && process.env.CLOUDRU_AGENT_AUTO === 'true' && /\bcloud\.ru\b|облачн.*агент|через cloudru|через cloud\.ru/iu.test(userPrompt)) { const answer = await cloudru.ask(userPrompt); return res.json({ ok: true, route: 'cloud_agent', result: answer.result, raw: answer.raw }); } const route = dispatch({ prompt: userPrompt, hasImage, hasFile, hasVideo }); if (route === 'verification') { const result = await diagnostics(); return res.json({ ok: result.ok, route, result: result.ok ? 'Проверка завершена: критических проблем не обнаружено.' : 'Проверка завершена: обнаружена проблема.', diagnostics: result }); } if (route === 'shopping') return res.json({ ok: true, route, results: await searchShopping(userPrompt, location, /дешевле|самый дешёвый|где дешевле/iu.test(userPrompt) ? 'cheaper' : 'find') }); if (route === 'web_search') { const results = await searchWeb(userPrompt, location); return res.json({ ok: true, route, result: await answerFromSearch(userPrompt, results, location), sources: results }); } if (route === 'image_generation') return res.json({ ok: true, route, imageUrl: makeImageUrl(userPrompt), result: 'Изображение подготовлено.' }); if (route === 'code') return res.json({ ok: true, route, result: await callParalon(chatMessages), model: PARALON_MODEL }); if (route === 'video') return res.json({ ok: true, route, status: 'ready', message: 'Для анализа видео отправь видео через кнопку «Видео».' }); if (route === 'documents' || route === 'tables') return res.json({ ok: true, route, status: 'ready', message: 'Отправь файл — я извлеку его содержимое и проанализирую.' }); res.json({ ok: true, route: 'chat', result: await callParalon(chatMessages), model: configured('paralon') ? PARALON_MODEL : 'emergency-text-fallback' }); } catch (error) { console.error('CHAT ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'AI request failed', details: error.details || undefined }); } });
 app.post('/photo', async (req, res) => { try { const { prompt = 'Опиши изображение подробно.', image, images } = req.body || {}; const inputImages = Array.isArray(images) ? images : (image ? [image] : []); if (!inputImages.length) return res.status(400).json({ ok: false, error: 'image or images is required' }); if (!configured('paralon')) return res.status(503).json({ ok: false, error: 'Для анализа фото нужен основной AI-ключ Paralon; аварийный режим работает только для обычного текста.' }); const content = [{ type: 'text', text: prompt }]; for (const item of inputImages) content.push({ type: 'image_url', image_url: { url: String(item).startsWith('data:') ? item : `data:image/jpeg;base64,${item}` } }); res.json({ ok: true, route: 'vision', result: await callParalon([{ role: 'user', content }]), model: PARALON_MODEL }); } catch (error) { console.error('PHOTO ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Vision request failed' }); } });
 app.post('/document', async (req, res) => { try { const { filename = 'document', data, prompt = '', kind } = req.body || {}; if (!data) return res.status(400).json({ ok: false, error: 'data is required' }); const base64 = String(data).includes(',') ? String(data).slice(String(data).indexOf(',') + 1) : String(data); const buffer = Buffer.from(base64, 'base64'); if (!buffer.length) return res.status(400).json({ ok: false, error: 'empty file' }); const result = await analyzeExtractedFile(buffer, filename, prompt, kind); res.json({ ok: true, route: result.kind === 'table' ? 'tables' : 'documents', filename, result: result.result, extractedCharacters: result.text.length, model: PARALON_MODEL }); } catch (error) { console.error('DOCUMENT ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Document processing failed' }); } });
 app.post('/table', async (req, res) => { try { const { filename = 'table.csv', data, prompt = '' } = req.body || {}; if (!data) return res.status(400).json({ ok: false, error: 'data is required' }); const base64 = String(data).includes(',') ? String(data).slice(String(data).indexOf(',') + 1) : String(data); const result = await analyzeExtractedFile(Buffer.from(base64, 'base64'), filename, prompt, 'table'); res.json({ ok: true, route: 'tables', filename, result: result.result, extractedCharacters: result.text.length, model: PARALON_MODEL }); } catch (error) { console.error('TABLE ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Table processing failed' }); } });

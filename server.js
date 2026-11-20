@@ -1,5 +1,8 @@
 const app = require('./legacy-server');
 
+// Composio is isolated to the owner-authenticated Preview branch.
+require('./composio-preview')(app);
+
 const fetchWithTimeout = async (url, options = {}, timeoutMs = 60000) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
