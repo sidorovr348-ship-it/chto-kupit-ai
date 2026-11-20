@@ -21,7 +21,7 @@ function dispatch({ prompt = '', hasImage = false, hasFile = false, hasVideo = f
   // Shopping (товары) has priority over generic web search when the user clearly asks about buying.
   if (hasAny(text, [/(купи|купить|товар|цена|магазин|ozon|озон|wildberries|wb|яндекс.?маркет|dns|м\.видео|ситилинк|в наличии|дешевле|где купить|стоимость|сравни.*(цен|товар)|найди\s+(мне\s+)?(?:iphone|айфон|телефон|смартфон|телевизор|стиральн|ноутбук|карниз|товар))/u])) return 'shopping';
 
-  if (hasAny(text, [/(найди|поиск|новости|актуальн|сегодня|сейчас|интернет|сайт|последн.*информац|свеж.*информац)/u])) return 'web_search';
+  if (hasAny(text, [/(найди|поиск|новости|актуальн|сегодня|сейчас|интернет|сайт|последн.*информац|свеж.*информац|кто\s+такой|кто\s+такая|что\s+такое|где\s+находится|когда\s+(?:родился|умер|произош|создан|основан)|биограф|расскажи\s+(?:о|про))/u])) return 'web_search';
   if (hasAny(text, [/(код|программ|скрипт|javascript|python|html|css|github|ошибк.*в коде|проверь.*код)/u])) return 'code';
 
   return 'chat';
