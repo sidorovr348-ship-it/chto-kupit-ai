@@ -41,6 +41,7 @@ function normalizeTool(item) {
   const tool = item?.tool && typeof item.tool === 'object' ? item.tool : item || {};
   const schema = tool.inputParameters || tool.input_parameters || tool.inputSchema || tool.input_schema || tool.parameters || {};
   const tags = Array.isArray(tool.tags) ? tool.tags : Object.keys(tool.tags || {}).filter((key) => tool.tags[key]);
+  const schemaKnown = Array.isArray(schema.required) || Array.isArray(schema?.jsonSchema?.required);
   const required = Array.isArray(schema.required) ? schema.required : Array.isArray(schema?.jsonSchema?.required) ? schema.jsonSchema.required : [];
   return {
     slug: String(tool.slug || tool.toolSlug || tool.tool_slug || tool.name || ''),
@@ -48,6 +49,7 @@ function normalizeTool(item) {
     description: String(tool.description || '').slice(0, 500),
     tags,
     readOnly: tags.includes('readOnlyHint') || tool.readOnlyHint === true || tool.read_only_hint === true,
+    schemaKnown,
     required
   };
 }
@@ -56,6 +58,7 @@ function isSafeProfileTool(tool) {
   const identity = (tool.slug + ' ' + tool.name + ' ' + tool.description).toUpperCase();
   return /^GITHUB_[A-Z0-9_]+$/.test(tool.slug) &&
     tool.readOnly &&
+    tool.schemaKnown &&
     tool.required.length === 0 &&
     /(AUTHENTICATED|CURRENT|PROFILE|VIEWER)/.test(identity) &&
     !/(DELETE|CREATE|UPDATE|WRITE|PUSH|MERGE|COMMENT|EDIT|ADD|REMOVE|CLOSE)/.test(identity);
@@ -181,6 +184,7 @@ function registerComposioPreviewRoutes(app, options = {}) {
       if (result?.resultType === 'blocked') {
         return res.status(409).json({ ok: false, error: 'Composio заблокировал выполнение политикой сессии.', tool: candidate.slug });
       }
+      if (result?.resultType === 'error' || result?.error) return res.status(502).json({ ok: false, executed: false, error: 'GitHub-инструмент вернул ошибку.', tool: candidate.slug });
       return res.json({ ok: true, executed: true, toolkit: 'github', tool: candidate.slug, result: redact(result) });
     } catch (error) {
       reportFailure('COMPOSIO_GITHUB_SMOKE_FAILED', error, res);
