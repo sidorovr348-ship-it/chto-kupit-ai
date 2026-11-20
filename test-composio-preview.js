@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const express = require('express');
 
-function mockComposio(assertConfig = true, connected = true, candidate = true) {
+function mockComposio(assertConfig = true, connected = true, candidate = true, schemaKnown = true) {
   const calls = { execute: [], created: [] };
   return {
     calls,
@@ -34,7 +34,7 @@ function mockComposio(assertConfig = true, connected = true, candidate = true) {
                   name: 'Get Authenticated User',
                   description: 'Read the currently authenticated GitHub user profile',
                   tags: ['readOnlyHint'],
-                  inputParameters: { type: 'object', properties: {}, required: [] }
+                  inputParameters: schemaKnown ? { type: 'object', properties: {}, required: [] } : { type: 'object', properties: {} }
                 }] : [{
                   slug: 'GITHUB_DELETE_REPOSITORY',
                   name: 'Delete Repository',
@@ -156,4 +156,12 @@ test('Composio routes are hidden outside the intended Preview branch', async (t)
   process.env.VERCEL_ENV = 'preview';
   process.env.VERCEL_GIT_COMMIT_REF = 'another-branch';
   assert.equal((await call('/api/composio/github/tools')).status, 404);
+});
+
+test('Composio smoke fails closed when the tool schema is incomplete', async (t) => {
+  const mock = mockComposio(true, true, true, false);
+  const { call } = await setup(t, mock);
+  const response = await call('/api/composio/github/smoke','POST');
+  assert.equal(response.status, 409);
+  assert.equal(mock.calls.execute.length, 0);
 });
