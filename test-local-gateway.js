@@ -55,7 +55,7 @@ assert.ok(ui.includes('Math.min(300000,Math.max(10000,decoded.duration*1000+5000
 assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)"),'wake queue must abort a stalled chat request after a bounded deadline');
 assert.ok(ui.includes('finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}'),'wake queue must always clear its watchdog and release wake-owned state');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),65000)'),'manual voice transcription must have a finite timeout aligned with the server STT deadline');
-assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
+assert.ok(ui.includes('Сервер распознавания не ответил за 65 секунд.'),'manual voice timeout must show a clear recovery message');
 assert.ok(ui.includes('followupUntil=Date.now()+90000'),'wake listener must accept a direct follow-up question for 90 seconds after an answer');
 assert.ok(ui.includes('Date.now()<armedUntil||Date.now()<followupUntil'),'follow-up speech must be queued even when the wake word is omitted');
 assert.ok(ui.includes('if(!window.__wakeCommandActive)window.__wakeResponseReady?.();'),'wake-owned requests must leave listener recovery to the queue controller, avoiding competing resume loops');
