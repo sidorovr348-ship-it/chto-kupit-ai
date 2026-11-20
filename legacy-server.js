@@ -229,7 +229,7 @@ app.post('/chat', async (req, res) => { try {
   const chatMessages = Array.isArray(messages) && messages.length ? messages : (prompt ? [{ role: 'user', content: prompt }] : []);
   const userPrompt = String(prompt || textFromMessages(chatMessages)).trim();
   if (!userPrompt && !chatMessages.length) return res.status(400).json({ ok: false, error: 'prompt or messages is required' });
-  if (isWeatherQuery(userPrompt)) {
+  if (isWeatherQuery(userPrompt) || req.body?.weatherLocation) {
     const gps = req.body?.location, place = String(req.body?.weatherLocation || extractWeatherPlace(userPrompt) || '').trim();
     if (gps && Number.isFinite(Number(gps.lat)) && Number.isFinite(Number(gps.lon))) {
       let label = ''; try { label = await reverseGeocode(Number(gps.lat), Number(gps.lon)); } catch {}
