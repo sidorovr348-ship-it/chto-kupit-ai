@@ -1,0 +1,66 @@
+name: My AI Unified — scoped image search deploy
+on:
+  push:
+    branches:
+      - 'deploy/image-search-2026-11-22'
+concurrency:
+  group: my-ai-unified-acceptance-suite
+  cancel-in-progress: false
+permissions:
+  contents: read
+env:
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  VPS_USER: ${{ secrets.VPS_USER }}
+  VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      backup_archive: ${{ steps.deploy_backend.outputs.backup_archive }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Validate source and unit tests
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --check local-gateway.js
+          node --check production-acceptance.mjs
+          node --check image-search-acceptance.mjs
+          node validate-inline-scripts.cjs
+          bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
+          python3 -m py_compile scripts/prepare-vps-key.py
+          npm test
+      - name: Deploy backend with VPS backup
+        id: deploy_backend
+        shell: bash
+        run: bash scripts/deploy-vps.sh
+      - name: Verify existing production acceptance
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in 1 2; do
+            if node production-acceptance.mjs; then ok=1; break; fi
+            if [ "$attempt" = 1 ]; then echo 'WAIT_30S_FOR_PROVIDER_COOLDOWN'; sleep 30; fi
+          done
+          test "$ok" = 1
+      - name: Verify image search on live backend
+        run: node image-search-acceptance.mjs
+      - name: Verify image gallery in iPhone viewport
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+          node image-search-mobile-e2e.mjs
+      - name: Roll back VPS if scoped verification fails
+        if: ${{ failure() && steps.deploy_backend.outputs.backup_archive != '' && steps.deploy_backend.outputs.rolled_back != 'true' }}
+        shell: bash
+        env:
+          BACKUP_ARCHIVE: ${{ steps.deploy_backend.outputs.backup_archive }}
+        run: bash scripts/rollback-vps.sh
