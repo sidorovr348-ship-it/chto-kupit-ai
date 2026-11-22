@@ -166,6 +166,7 @@ async function send(queuedText=null){
     }else if(locationIntent||weatherIntent){body.locationError='GEOLOCATION_UNAVAILABLE'}
     let j=await api('/chat',body,48000,requestController.signal);
     w.remove();
+    if(j.warning)add('⚠️ Ответ сформирован резервной моделью. Он может быть менее подробным, чем обычно.');
     if(j.routeUrl){
       let d=add(j.result||'Маршрут построен.');
       let a=document.createElement('a');a.href=j.routeUrl;a.target='_blank';a.rel='noopener';a.textContent='🗺️ Открыть маршрут на карте';d.append(a);
