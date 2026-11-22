@@ -18,9 +18,9 @@ const selfCheckRoute=src.slice(src.indexOf("app.post('/autonomy/self-check'"),sr
 const selfCheckRunner=src.slice(src.indexOf("const runSelfCheck=createSingleFlight"),src.indexOf("app.post('/autonomy/self-check'"));
 assert.ok(selfCheckRoute.includes("createDeadline(8000")&&selfCheckRoute.includes("Promise.race([runSelfCheck(),deadline.promise])")&&selfCheckRunner.includes("await initAutonomy()")&&selfCheckRunner.includes("await a.selfCheck()"),'the same eight-second deadline must bound initialization and the diagnostic while single-flight prevents overlap');
 // Regression guard: allow the local model enough time to answer when external provider quotas are exhausted, without exceeding the global chat deadline.
-assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
-assert.ok(src.includes("if(vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'early Ollama fallback must also use a short answer and the remaining bounded deadline');
-assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'degraded-provider local fallback must use the bounded short-answer configuration');
+assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:160,timeoutMs:Math.min(14500,remaining())})"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
+assert.ok(src.includes("if(vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllamaIfReady(messages,{numPredict:160,timeoutMs:Math.min(14500,remaining())})"),'early Ollama fallback must also use a short answer and the remaining bounded deadline');
+assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:160,timeoutMs:Math.min(14500,remaining())})"),'degraded-provider local fallback must use the bounded 160-token fallback configuration');
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
@@ -79,7 +79,7 @@ const groqRateLimitStart=src.indexOf("if(e.status===429){");
 const groqRateLimitEnd=src.indexOf("break}",groqRateLimitStart);
 const groqRateLimitBlock=src.slice(groqRateLimitStart,groqRateLimitEnd>groqRateLimitStart?groqRateLimitEnd:undefined);
 assert.ok(groqRateLimitBlock.includes("firstSuccessful(alternate)"),'on Groq HTTP 429, configured alternate text providers must race concurrently and cancel losing requests within the remaining request deadline');
-assert.ok(groqRateLimitBlock.includes("numPredict:48,timeoutMs:Math.min(14500,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 14.5-second deadline and shorter output');
+assert.ok(groqRateLimitBlock.includes("numPredict:160,timeoutMs:Math.min(14500,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 14.5-second deadline and bounded 160-token output');
 assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.includes("deepseek-flash"),'DeepSeek must join the concurrent fallback race when Groq rate-limits');
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
