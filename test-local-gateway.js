@@ -3,6 +3,7 @@ const fs=require('node:fs');
 const src=fs.readFileSync('local-gateway.js','utf8');
 assert.doesNotMatch(src,/OPENAI_API_KEY\s*[:=]\s*["'][^"']+/i);
 for(const route of ['/chat','/photo','/search','/shopping','/document','/generate-image','/tts','/transcribe','/alice'])assert.ok(src.includes("app.post('"+route+"'"),`missing ${route}`);
+for(const marker of ["app.post('/image-search'","function wantsImageSearch(q)","async function searchOpenverseImages","https://api.openverse.org/v1/images/","translateImageSearchQuery","provider:'openverse'","IMAGE_SEARCH_FAILED"])assert.ok(src.includes(marker),`missing image-search capability: ${marker}`);
 assert.ok(src.includes("app.get('/health'"));
 assert.ok(src.includes("app.get('/health',(q,r)=>{return r.json({ok:true,service:'my-ai-unified',dispatcher:true,autonomy:{enabled:process.env.AUTONOMY_ENABLED!=='0',initialized:!!autonomyRuntime,initState:autonomyInitState}"),'health probe must not wait for laboratory initialization');
 assert.ok(src.includes("app.get('/autonomy/status',(q,r)=>{if(process.env.AUTONOMY_ENABLED==='0')"),'lab status must return immediately and initialize asynchronously');
@@ -38,6 +39,7 @@ assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fa
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
+for(const marker of ['image-gallery','image-result','Лицензия: ','item.licenseUrl','messages.push({role:\'user\',content:\'Пользователь прислал фотографию'])assert.ok(ui.includes(marker),`missing image gallery/context/attribution: ${marker}`);
 assert.ok(ui.includes("Версия интерфейса: 2026-11-08-voice-reliability-1")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
 assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
 assert.ok(ui.includes("messages:messages.slice(companionMode?-5:-6)"),'chat requests must include recent conversation history and reserve one context slot for companion instructions');

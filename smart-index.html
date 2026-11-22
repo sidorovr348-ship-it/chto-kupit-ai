@@ -174,7 +174,7 @@ async function send(queuedText=null){
         link.append(img);card.append(link);
         const meta=document.createElement('div');meta.className='image-meta';
         const title=document.createElement('div');title.textContent=String(item.title||'Фотография');meta.append(title);
-        const source=document.createElement('a');source.className='image-source';source.href=item.link||item.imageUrl;source.target='_blank';source.rel='noopener noreferrer';source.textContent=String(item.source||item.domain||'Открыть источник');meta.append(source);
+        const source=document.createElement('a');source.className='image-source';source.href=item.link||item.imageUrl;source.target='_blank';source.rel='noopener noreferrer';source.textContent=String(item.source||item.domain||'Открыть источник');meta.append(source);if(item.license){const license=document.createElement('a');license.className='image-source';license.href=item.licenseUrl||item.link||'#';license.target='_blank';license.rel='noopener noreferrer';license.textContent='Лицензия: '+String(item.license);meta.append(license)}
         card.append(meta);gallery.append(card);
       }
       heading.append(gallery);
