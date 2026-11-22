@@ -1,0 +1,12 @@
+const API=process.env.IMAGE_SEARCH_API||'https://ai.aliceq.ru';
+const APP=process.env.IMAGE_SEARCH_APP||'https://ai.aliceq.ru/';
+const assert=(v,m)=>{if(!v)throw Error(m)};
+async function req(path,body,method='POST'){const r=await fetch(API+path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store',signal:AbortSignal.timeout(30000)});const t=await r.text();let j={};try{j=JSON.parse(t)}catch{}if(!r.ok)throw Error(path+' HTTP '+r.status+' '+t.slice(0,400));return j}
+function checkImages(j,label){assert(j?.ok&&Array.isArray(j.images)&&j.images.length>0,label+': images missing');for(const x of j.images){assert(/^https?:\/\//i.test(String(x.imageUrl||'')),label+': invalid image URL');assert(/^https?:\/\//i.test(String(x.link||'')),label+': missing source link')}if(j.provider==='openverse')assert(j.images.some(x=>x.license&&x.licenseUrl),label+': Openverse license attribution missing');console.log('IMAGE_SEARCH_PASS',JSON.stringify({label,provider:j.provider,count:j.images.length,first:j.images[0].title,license:j.images[0].license||null}))}
+const health=await req('/health',undefined,'GET');assert(health.ok&&health.service==='my-ai-unified','backend health');
+checkImages(await req('/image-search',{query:'слон'}),'direct elephant');
+for(const prompt of ['найди фотографию слона','найди фотографию электрической бритвы']){const j=await req('/chat',{prompt});assert(j.route==='image-search','chat did not route to image search: '+prompt);checkImages(j,prompt)}
+const similar=await req('/chat',{messages:[{role:'user',content:'Пользователь прислал фотографию для анализа.'},{role:'assistant',content:'На присланном фото изображена электрическая бритва Philips Series 3000 с чёрным корпусом.'},{role:'user',content:'Найди фотографию похожую на ту, что я прислал.'}]});
+assert(similar.route==='image-search','similar-photo request did not route to image search');checkImages(similar,'similar to previous photo');
+const r=await fetch(APP+'?image-search-acceptance=1',{cache:'no-store',signal:AbortSignal.timeout(15000)});assert(r.ok,'app root unavailable');const html=await r.text();for(const marker of ['image-gallery','image-result','Лицензия: ','messages.push({role:\'user\',content:\'Пользователь прислал фотографию'])assert(html.includes(marker),'frontend missing '+marker);
+console.log('IMAGE_SEARCH_PRODUCTION_ACCEPTANCE_OK');
