@@ -10,6 +10,8 @@ const { extractDocumentText } = require('./src/document-tools');
 const cloudru = require('./src/cloudru-agent');
 const os = require('os');
 const { sanitizeSpeechText } = require('./src/speech-text');
+const { analyzeVideo: analyzeQwenOmniVideo } = require('./src/qwen-omni-video');
+const { createVideoRouteHandler } = require('./src/video-route');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3020);
@@ -248,7 +250,31 @@ app.post('/photo', async (req, res) => { try { const { prompt = 'Опиши из
 app.post('/document', async (req, res) => { try { const { filename = 'document', data, prompt = '', kind } = req.body || {}; if (!data) return res.status(400).json({ ok: false, error: 'data is required' }); const base64 = String(data).includes(',') ? String(data).slice(String(data).indexOf(',') + 1) : String(data); const buffer = Buffer.from(base64, 'base64'); if (!buffer.length) return res.status(400).json({ ok: false, error: 'empty file' }); const result = await analyzeExtractedFile(buffer, filename, prompt, kind); res.json({ ok: true, route: result.kind === 'table' ? 'tables' : 'documents', filename, result: result.result, extractedCharacters: result.text.length, model: PARALON_MODEL }); } catch (error) { console.error('DOCUMENT ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Document processing failed' }); } });
 app.post('/table', async (req, res) => { try { const { filename = 'table.csv', data, prompt = '' } = req.body || {}; if (!data) return res.status(400).json({ ok: false, error: 'data is required' }); const base64 = String(data).includes(',') ? String(data).slice(String(data).indexOf(',') + 1) : String(data); const result = await analyzeExtractedFile(Buffer.from(base64, 'base64'), filename, prompt, 'table'); res.json({ ok: true, route: 'tables', filename, result: result.result, extractedCharacters: result.text.length, model: PARALON_MODEL }); } catch (error) { console.error('TABLE ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Table processing failed' }); } });
 app.post('/image', async (req, res) => { try { res.json({ ok: true, route: 'image_generation', imageUrl: makeImageUrl(req.body?.prompt) }); } catch (error) { res.status(error.status || 400).json({ ok: false, error: error.message }); } });
-app.post('/video', async (req, res) => { let inputFile = null; const frameFiles = []; try { const raw = String(req.body?.video || req.body?.data || ''); if (!raw) return res.status(400).json({ ok: false, error: 'video or data is required' }); const base64 = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw; inputFile = path.join(TEMP_DIR, `video-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`); fs.writeFileSync(inputFile, Buffer.from(base64, 'base64')); frameFiles.push(...await extractVideoFrames(inputFile)); if (!frameFiles.length) return res.status(502).json({ ok: false, error: 'Не удалось извлечь кадры видео' }); const images = frameFiles.map(file => `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`); res.json({ ok: true, route: 'video', result: await analyzeVideo(images), frames: images.length, model: PARALON_MODEL }); } catch (error) { console.error('VIDEO ERROR:', error); res.status(error.status || 502).json({ ok: false, error: error.message || 'Ошибка обработки видео' }); } finally { if (inputFile) { try { fs.unlinkSync(inputFile); } catch {} } for (const file of frameFiles) { try { fs.unlinkSync(file); } catch {} } } });
+async function analyzeUploadedVideo(raw) {
+  const stamp = Date.now() + '-' + Math.random().toString(36).slice(2);
+  const inputFile = path.join(TEMP_DIR, 'video-' + stamp + '.mp4');
+  const frameFiles = [];
+  try {
+    const base64 = raw.includes(',') ? raw.slice(raw.indexOf(',') + 1) : raw;
+    const buffer = Buffer.from(base64, 'base64');
+    if (!buffer.length) throw Object.assign(new Error('Пустой видеофайл.'), { status: 400 });
+    fs.writeFileSync(inputFile, buffer);
+    frameFiles.push(...await extractVideoFrames(inputFile));
+    if (!frameFiles.length) throw Object.assign(new Error('Не удалось извлечь кадры видео.'), { status: 502 });
+    const images = frameFiles.map(file => 'data:image/jpeg;base64,' + fs.readFileSync(file).toString('base64'));
+    return { result: await analyzeVideo(images), frames: images.length, model: PARALON_MODEL };
+  } finally {
+    try { fs.unlinkSync(inputFile); } catch {}
+    for (const file of frameFiles) { try { fs.unlinkSync(file); } catch {} }
+  }
+}
+
+app.post('/video', createVideoRouteHandler({
+  env: process.env,
+  analyzeVideo: analyzeQwenOmniVideo,
+  analyzeFrames: analyzeUploadedVideo,
+  logger: console
+}));
 app.post('/shopping', async (req, res) => { try { const { query, location = 'Россия', mode = 'find' } = req.body || {}; if (!query) return res.status(400).json({ ok: false, error: 'query is required' }); res.json({ ok: true, route: 'shopping', mode, location, results: await searchShopping(query, location, mode) }); } catch (error) { console.error('SHOPPING ERROR:', error); res.status(error.status || 500).json({ ok: false, error: error.message || 'Shopping request failed', details: error.details || undefined }); } });
 app.use((req, res, next) => { if (req.method !== 'GET' || req.path.startsWith('/api/')) return next(); res.sendFile(path.join(__dirname, 'index.html')); });
 if (!process.env.VERCEL) app.listen(PORT, '127.0.0.1', () => console.log(`My AI Unified API started on 127.0.0.1:${PORT}`));
