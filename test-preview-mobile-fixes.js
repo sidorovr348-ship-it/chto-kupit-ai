@@ -13,3 +13,7 @@ test('ordinary factual questions are routed to web search',()=>{const dispatcher
 test('web search works without Serper key',()=>{assert.ok(server.includes('async function publicSearch'));assert.ok(server.includes('html.duckduckgo.com/html/'));assert.ok(server.includes('return publicSearch('))});
 test('chat uses page scrolling rather than nested fixed-height scroll',()=>{assert.ok(ui.includes('.chat{height:auto;min-height:240px;max-height:none;overflow:visible'));assert.ok(ui.includes("d.scrollIntoView({block:'end',behavior:'smooth'})"))});
 test('regression test is included in npm test',()=>assert.ok(pkg.scripts.test.includes('test-preview-mobile-fixes.js')));
+
+test('Vercel video upload stays below the 4.5 MB function body cap after Base64 encoding',()=>assert.ok(ui.includes("location.hostname.endsWith('.vercel.app')?3000000:7000000")));
+test('video UI consumes a valid server frame-analysis response instead of analyzing the same clip twice',()=>assert.ok(ui.includes("full?.available || (full?.ok&&full?.route==='video'&&String(full.result||'').trim())")));
+test('Preview video route uses the Qwen Omni adapter and reports analysis mode truthfully',()=>{const route=fs.readFileSync('src/video-route.js','utf8');assert.ok(server.includes('createVideoRouteHandler'));assert.ok(route.includes("analysisMode: 'video_and_audio'"));assert.ok(route.includes("analysisMode: 'sampled_frames'"));assert.ok(route.includes('audioAnalyzed: false'))});
