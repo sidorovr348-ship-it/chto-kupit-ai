@@ -25,13 +25,13 @@ assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfRead
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
-assert.ok(src.includes('body.max_completion_tokens=vision?1024:700;body.temperature=.55;'),'Groq Qwen text requests must allow up to 700 output tokens for complete answers; vision keeps its separate budget');
+assert.ok(src.includes('body.max_completion_tokens=4096;body.temperature=.55;'),'Qwen requests must allow a 4096-token output budget');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
-assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider chain must respect the 18-second absolute deadline');
-assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
-assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
+assert.ok(src.includes('const hardDeadline=Date.now()+55000;'),'text provider chain must respect the 55-second absolute deadline');
+assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),52000)'),'search/shopping dispatch must return a fallback within 52 seconds to allow longer model generation');
+assert.ok(src.includes("ms:55000}));const fallback=timeoutFallback();")&&src.includes("}},55000);res.once('finish'"),'whole /chat route must return a fallback within 55 seconds, including preprocessing and dispatch');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
@@ -87,7 +87,9 @@ console.log('SOURCE_SMOKE_OK');
 assert.ok(src.includes("const zai=keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY');if(zai&&canStart(1000))"),'Z.ai must be optional and skipped safely when no API key is configured');
 assert.ok(src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZAI_TEXT_MODEL||'glm-4.7-flash'")&&src.includes("process.env.ZAI_FALLBACK_TEXT_MODEL||'glm-4.5-flash'")&&src.includes("process.env.ZAI_VISION_MODEL||'glm-4.6v-flash'"),'Z.ai must use the OpenAI-compatible API and the free text/vision Flash models');
 assert.ok(src.includes("provider:'zai'")&&src.includes('ZAI_ERROR_CONTINUE_FALLBACK_CHAIN'),'Z.ai errors must continue through the fallback chain');
-assert.ok(src.includes("zai:!!keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY')"),'health must expose only Z.ai key presence, never the key');
+assert.ok(src.includes("amdRadeon:!!keyOf('AMD_RADEON_API_KEY','RADEON_API_KEY','AMD_API_KEY')")&&src.includes("modelScope:!!keyOf('MODELSCOPE_TOKEN','MODELSCOPE_API_KEY')"),'health must expose AMD Radeon and ModelScope key presence without exposing secrets');
+assert.ok(src.includes("https://developer.amd.com.cn/radeon/api/v1/chat/completions")&&src.includes("process.env.AMD_RADEON_TEXT_MODEL||'DeepSeek-V4.1-Flash'"),'AMD Radeon Cloud must use its OpenAI-compatible API and a current DeepSeek model');
+assert.ok(src.includes("https://api-inference.modelscope.cn/v1/chat/completions")&&src.includes("process.env.MODELSCOPE_TEXT_MODEL||'deepseek-ai/DeepSeek-V4.1-Flash'"),'ModelScope must use its API-Inference endpoint and a current model ID');
 assert.ok(src.includes("const openrouter=keyOf('OPENROUTER_API_KEY')")&&src.includes("https://openrouter.ai/api/v1/chat/completions")&&src.includes("process.env.OPENROUTER_FREE_MODEL||'openrouter/free'"),'OpenRouter must use its free-only model router');
 assert.ok(src.includes("provider:'openrouter'")&&src.includes('OPENROUTER_ERROR_CONTINUE_FALLBACK_CHAIN'),'OpenRouter errors must continue through the fallback chain');
 assert.ok(src.includes("openrouter:!!keyOf('OPENROUTER_API_KEY')"),'health must expose only OpenRouter key presence, never the key');
