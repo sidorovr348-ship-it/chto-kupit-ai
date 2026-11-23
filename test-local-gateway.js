@@ -40,7 +40,7 @@ assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fa
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
 for(const marker of ['image-gallery','image-result','Лицензия: ','item.licenseUrl','messages.push({role:\'user\',content:\'Пользователь прислал фотографию'])assert.ok(ui.includes(marker),`missing image gallery/context/attribution: ${marker}`);
-assert.ok(ui.includes("Версия интерфейса: 2026-11-08-voice-reliability-1")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
+assert.ok(ui.includes("Версия интерфейса: 2026-11-23-free-model-chain-2")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
 assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
 assert.ok(ui.includes("messages:messages.slice(companionMode?-5:-6)"),'chat requests must include recent conversation history and reserve one context slot for companion instructions');
 assert.ok(!ui.includes("let body={prompt:t,memoryId:MEMORY_ID,companionMode};"),'chat requests must not regress to sending only the latest prompt');
