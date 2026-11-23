@@ -85,6 +85,17 @@ assert.ok(groqRateLimitBlock.includes("Promise.any(alternate)"),'on Groq HTTP 42
 assert.ok(groqRateLimitBlock.includes("numPredict:48,timeoutMs:Math.min(14500,remaining())")&&groqRateLimitBlock.includes("provider:'ollama-local'"),'local Ollama must race configured external fallbacks after Groq rate limits, with a bounded 14.5-second deadline and shorter output');
 assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.includes("deepseek-flash"),'DeepSeek must join the concurrent fallback race when Groq rate-limits');
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
+
+// Free-only provider routing must use Cloudflare first, keep Requesty opt-in because free models permit provider training,
+// and prevent all legacy paid/Groq providers from being reached when AI_FREE_ONLY=1.
+assert.ok(src.includes("const AI_FREE_ONLY=process.env.AI_FREE_ONLY==='1'"),'free-only mode must be explicit and disabled until credentials are installed');
+assert.ok(src.includes("'@cf/zai-org/glm-4.7-flash'")&&src.includes("'@cf/meta/llama-4-scout-17b-16e-instruct'"),'Cloudflare must use the documented free-plan text and vision models');
+assert.ok(src.includes("if(requestyKey&&process.env.REQUESTY_ALLOW_TRAINING_DATA==='1'"),'Requesty free models must require explicit data-training consent');
+assert.ok(src.includes("'nvidia/nemotron-3.5-lightning-30b-a3b'")&&src.includes("'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'"),'Requesty must pin only documented free text and multimodal model IDs');
+assert.ok(src.includes("if(AI_FREE_ONLY){if(vision)throw")&&src.includes("paid providers disabled by настройкой AI_FREE_ONLY"),'free-only mode must stop before legacy paid provider fallbacks');
+assert.ok(src.includes("if(AI_FREE_ONLY){if(!cfAccount||!cfToken)throw")&&src.includes("@cf/openai/whisper-large-v3-turbo"),'free-only voice transcription must use Cloudflare Whisper, not Groq');
+assert.ok(src.includes("cloudflareWorkersAI:!!keyOf('CLOUDFLARE_ACCOUNT_ID')")&&src.includes("requestyFree:!!keyOf('REQUESTY_API_KEY')"),'health must expose free provider configuration without exposing credentials');
+
 console.log('SOURCE_SMOKE_OK');
 
 // ZvenoAI is an opt-in Russia-compatible text route; it must not require a key to boot.
