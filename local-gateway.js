@@ -111,15 +111,18 @@ async function readWebPage(url){
   const checked=await publicWebUrl(url);if(!checked)return '';
   const target=checked.href;
   const jina='https://r.jina.ai/'+target;
+  // One shared wall-clock budget covers both the reader proxy and direct-page fallback.
+  // This prevents a single slow site from consuming 18 seconds of the chat request.
+  const signal=AbortSignal.timeout(3500);
   try{
-    const r=await fetch(jina,{headers:{'Accept':'text/plain','User-Agent':'Mozilla/5.0 MyAIUnified/1.0'},signal:AbortSignal.timeout(9000)});
+    const r=await fetch(jina,{headers:{'Accept':'text/plain','User-Agent':'Mozilla/5.0 MyAIUnified/1.0'},signal});
     if(r.ok){
       const t=String(await r.text()).replace(/\s+/g,' ').trim();
       if(t.length>120)return t.slice(0,10000);
     }
   }catch{}
   try{
-    const r=await fetchPublicWebUrl(target,{headers:{'User-Agent':'Mozilla/5.0 MyAIUnified/1.0','Accept-Language':'ru-RU,ru;q=0.9'},signal:AbortSignal.timeout(9000)});
+    const r=await fetchPublicWebUrl(target,{headers:{'User-Agent':'Mozilla/5.0 MyAIUnified/1.0','Accept-Language':'ru-RU,ru;q=0.9'},signal});
     if(r.ok){
       const html=String(await r.text());
       const t=html.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<noscript[\s\S]*?<\/noscript>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/\\s+/g,' ').trim();
@@ -129,10 +132,13 @@ async function readWebPage(url){
   return '';
 }
 async function enrichSearchResults(items){
-  const list=Array.isArray(items)?items.slice(0,5):[];
-  const out=[];
-  for(const x of list){const page=await readWebPage(x.link);out.push(page?{...x,page}:x)}
-  return out;
+  // Open only the three strongest results, concurrently; sequential 9s+9s fetches
+  // across five results could exceed the entire /chat deadline before AI starts.
+  const list=Array.isArray(items)?items.slice(0,3):[];
+  return Promise.all(list.map(async x=>{
+    const page=await readWebPage(x.link);
+    return page?{...x,page}:x;
+  }));
 }
 const searchCache=new Map();
 async function searchWeb(query,num=10){const cacheKey=String(query||'').trim().toLowerCase();const cached=searchCache.get(cacheKey);if(cached&&Date.now()-cached.ts<60000)return cached.results.slice(0,num);const k=keyOf('SERPER_API_KEY','SERPER_KEY');if(k&&Date.now()>=searchBlockedUntil.serper){try{const r=await fetch('https://google.serper.dev/search',{method:'POST',headers:{'X-API-KEY':k,'Content-Type':'application/json'},body:JSON.stringify({q:String(query).slice(0,500),gl:'ru',hl:'ru',num}),signal:AbortSignal.timeout(8000)});const raw=await r.text();let d={};try{d=JSON.parse(raw)}catch{}if(r.ok){const out=(d.organic||[]).slice(0,num).map(x=>({title:String(x.title||''),link:String(x.link||''),snippet:String(x.snippet||'')})).filter(x=>x.link.startsWith('http://')||x.link.startsWith('https://'));if(out.length){boundedCacheSet(searchCache,String(query||'').trim().toLowerCase(),{ts:Date.now(),results:out},100);return out}}console.error('SERPER_SEARCH_FAILED',r.status,String(d.message||d.error||raw).slice(0,300));if(r.status===400&&/credit|balance|limit/i.test(String(d.message||d.error||raw)))searchBlockedUntil.serper=Date.now()+600000}catch(e){console.error('SERPER_SEARCH_FAILED',e.message)}}const out=await searchWebFallback(query,num);boundedCacheSet(searchCache,cacheKey,{ts:Date.now(),results:out},100);return out}
