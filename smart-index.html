@@ -73,7 +73,7 @@ window.__primeTtsAudio=()=>{try{const AC=window.AudioContext||window.webkitAudio
 function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{};try{ttsSource?.stop(0)}catch{};ttsSource=null;try{audio.pause();audio.currentTime=0}catch{};try{speechSynthesis?.cancel?.()}catch{};window.__ttsPromise=Promise.resolve()}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function runSelfDiagnostic(){
  const card=add('🔎 Самодиагностика Эй: проверяю компоненты параллельно…');
- const lines=['Версия интерфейса: 2026-11-08-voice-reliability-1'];
+ const lines=['Версия интерфейса: 2026-11-23-free-model-chain-2'];
  async function probe(label,path,method='GET',timeoutMs=5000){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
@@ -161,7 +161,7 @@ async function send(queuedText=null){
         body.location={lat:p.coords.latitude,lon:p.coords.longitude,address:'Текущее местоположение'};
       }catch{}
     }
-    let j=await api('/chat',body,48000,requestController.signal);
+    let j=await api('/chat',body,65000,requestController.signal);
     w.remove();
     if(j.images&&j.images.length){
       const heading=add(String(j.result||'Нашёл фотографии:'));
@@ -317,7 +317,7 @@ async function processQueue(){
    try{
     await Promise.race([
      Promise.resolve(window.send(q)),
-     new Promise((_,reject)=>{requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)})
+     new Promise((_,reject)=>{requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 65 секунд. Прерываю зависший запрос и восстанавливаю прослушивание.'))},65000)})
     ]);
    }catch(e){status('🔴 Не удалось выполнить вопрос: '+String(e?.message||e))}
    finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}

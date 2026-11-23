@@ -25,13 +25,13 @@ assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfRead
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
-assert.ok(src.includes('body.max_completion_tokens=vision?1024:64;body.temperature=.55;'),'Groq Qwen text requests must reserve 64 output tokens to balance answer length and OTPM limits; vision keeps its separate budget');
+assert.ok(src.includes('body.max_completion_tokens=4096;body.temperature=.55;'),'Qwen requests must allow a 4096-token output budget');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
-assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider chain must respect the 18-second absolute deadline');
-assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
-assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
+assert.ok(src.includes('const hardDeadline=Date.now()+55000;'),'text provider chain must respect the 55-second absolute deadline');
+assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),52000)'),'search/shopping dispatch must return a fallback within 52 seconds to allow longer model generation');
+assert.ok(src.includes("ms:55000}));const fallback=timeoutFallback();")&&src.includes("}},55000);res.once('finish'"),'whole /chat route must return a fallback within 55 seconds, including preprocessing and dispatch');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
@@ -40,7 +40,7 @@ assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fa
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
 for(const marker of ['image-gallery','image-result','Лицензия: ','item.licenseUrl','messages.push({role:\'user\',content:\'Пользователь прислал фотографию'])assert.ok(ui.includes(marker),`missing image gallery/context/attribution: ${marker}`);
-assert.ok(ui.includes("Версия интерфейса: 2026-11-08-voice-reliability-1")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
+assert.ok(ui.includes("Версия интерфейса: 2026-11-23-free-model-chain-2")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
 assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
 assert.ok(ui.includes("messages:messages.slice(companionMode?-5:-6)"),'chat requests must include recent conversation history and reserve one context slot for companion instructions');
 assert.ok(!ui.includes("let body={prompt:t,memoryId:MEMORY_ID,companionMode};"),'chat requests must not regress to sending only the latest prompt');
@@ -51,7 +51,7 @@ assert.ok(ui.includes('window.__ttsPromise=Promise.resolve();return window.__tts
 assert.ok(ui.includes('window.__ttsPromise=Promise.resolve()}'),'stopping speech must clear stale TTS wait so wake listening can resume promptly');
 assert.ok(ui.includes('wakeWaitTimer=setTimeout(()=>{if(generation===speechGeneration)interruptSpeech();resolve()},310000)'),'wake recovery must not wait forever for a stalled TTS task');
 assert.ok(ui.includes('Math.min(300000,Math.max(10000,decoded.duration*1000+5000))'),'wake listening must wait for the full answer audio instead of cutting it off at a fixed 25 seconds');
-assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 22 секунды. Прерываю зависший запрос и восстанавливаю прослушивание.'))},22000)"),'wake queue must abort a stalled chat request after a bounded deadline');
+assert.ok(ui.includes("requestTimer=setTimeout(()=>{try{window.__cancelActiveChat?.()}catch{}reject(new Error('Сервер не ответил за 65 секунд. Прерываю зависший запрос и восстанавливаю прослушивание.'))},65000)"),'wake queue must abort a stalled chat request after the expanded bounded deadline');
 assert.ok(ui.includes('finally{clearTimeout(requestTimer);window.__wakeCommandActive=false}'),'wake queue must always clear its watchdog and release wake-owned state');
 assert.ok(ui.includes('setTimeout(()=>sttController.abort(),25000)'),'manual voice transcription must have a finite timeout');
 assert.ok(ui.includes('Сервер распознавания не ответил за 25 секунд.'),'manual voice timeout must show a clear recovery message');
@@ -83,6 +83,17 @@ assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.in
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
 
+// Z.ai free Flash models: GLM-4.7-Flash for text and GLM-4.6V-Flash for vision.
+assert.ok(src.includes("const zai=keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY');if(zai&&canStart(1000))"),'Z.ai must be optional and skipped safely when no API key is configured');
+assert.ok(src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZAI_TEXT_MODEL||'glm-4.7-flash'")&&src.includes("process.env.ZAI_FALLBACK_TEXT_MODEL||'glm-4.5-flash'")&&src.includes("process.env.ZAI_VISION_MODEL||'glm-4.6v-flash'"),'Z.ai must use the OpenAI-compatible API and the free text/vision Flash models');
+assert.ok(src.includes("provider:'zai'")&&src.includes('ZAI_ERROR_CONTINUE_FALLBACK_CHAIN'),'Z.ai errors must continue through the fallback chain');
+assert.ok(src.includes("amdRadeon:!!keyOf('AMD_RADEON_API_KEY','RADEON_API_KEY','AMD_API_KEY')")&&src.includes("modelScope:!!keyOf('MODELSCOPE_TOKEN','MODELSCOPE_API_KEY')"),'health must expose AMD Radeon and ModelScope key presence without exposing secrets');
+assert.ok(src.includes("https://developer.amd.com.cn/radeon/api/v1/chat/completions")&&src.includes("process.env.AMD_RADEON_TEXT_MODEL||'DeepSeek-V4.1-Flash'"),'AMD Radeon Cloud must use its OpenAI-compatible API and a current DeepSeek model');
+assert.ok(src.includes("https://api-inference.modelscope.cn/v1/chat/completions")&&src.includes("process.env.MODELSCOPE_TEXT_MODEL||'deepseek-ai/DeepSeek-V4.1-Flash'"),'ModelScope must use its API-Inference endpoint and a current model ID');
+assert.ok(src.includes("const openrouter=keyOf('OPENROUTER_API_KEY')")&&src.includes("https://openrouter.ai/api/v1/chat/completions")&&src.includes("process.env.OPENROUTER_FREE_MODEL||'openrouter/free'"),'OpenRouter must use its free-only model router');
+assert.ok(src.includes("provider:'openrouter'")&&src.includes('OPENROUTER_ERROR_CONTINUE_FALLBACK_CHAIN'),'OpenRouter errors must continue through the fallback chain');
+assert.ok(src.includes("openrouter:!!keyOf('OPENROUTER_API_KEY')"),'health must expose only OpenRouter key presence, never the key');
+
 // ZvenoAI is an opt-in Russia-compatible text route; it must not require a key to boot.
 assert.ok(src.includes("const zvenoai=keyOf('ZVENOAI_API_KEY');if(!vision&&zvenoai&&canStart())"),'ZvenoAI must be optional and text-only in the initial integration');
 assert.ok(src.includes("https://api.zveno.ai/v1/chat/completions")&&src.includes("process.env.ZVENOAI_TEXT_MODEL||'nvidia/nemotron-3-ultra-550b-a55b:free'"),'ZvenoAI must use its documented endpoint and tested primary free model');
@@ -102,7 +113,9 @@ assert.ok(!ui.includes('speechSynthesis.speak('),'browser default voice fallback
 assert.ok(!ui.includes('for(let n=0;n<3;n++)'),'frontend API must not automatically retry a POST request');
 assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversation history must remain included');
 
-assert.ok(src.includes("body.max_completion_tokens=vision?1024:64;"),'Qwen text output budget must remain bounded at 64 tokens');
+assert.ok(src.includes("body.max_completion_tokens=4096;")&&src.includes("max_tokens:4096"),'Qwen and compatible provider calls must allow up to 4096 output tokens');
+assert.ok(src.includes('const textTimeout=45000,visionTimeout=45000')&&src.includes('const hardDeadline=Date.now()+55000;'),'provider timeout and absolute request deadline must permit long generations');
+assert.ok(ui.includes("api('/chat',body,65000")&&ui.includes('},65000)'),'mobile and wake clients must not abort a valid long model response at the old short timeout');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
 assert.ok(src.includes("finish_reason:choice.finish_reason||null")&&src.includes("completion_tokens:d?.usage?.completion_tokens??null")&&src.includes("content_chars:String(content).length"),'provider success logs must expose safe quality and token metrics');
 assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
