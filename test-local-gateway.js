@@ -92,7 +92,7 @@ assert.ok(src.includes("const AI_FREE_ONLY=process.env.AI_FREE_ONLY==='1'"),'fre
 assert.ok(src.includes("'@cf/zai-org/glm-4.7-flash'")&&src.includes("'@cf/meta/llama-4-scout-17b-16e-instruct'"),'Cloudflare must use the documented free-plan text and vision models');
 assert.ok(src.includes("if(requestyKey&&process.env.REQUESTY_ALLOW_TRAINING_DATA==='1'"),'Requesty free models must require explicit data-training consent');
 assert.ok(src.includes("'nvidia/nemotron-3.5-lightning-30b-a3b'")&&src.includes("'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'"),'Requesty must pin only documented free text and multimodal model IDs');
-assert.ok(src.includes("if(AI_FREE_ONLY){if(vision)throw")&&src.includes("paid providers disabled by настройкой AI_FREE_ONLY"),'free-only mode must stop before legacy paid provider fallbacks');
+assert.ok(src.includes("if(AI_FREE_ONLY){if(vision)throw")&&src.includes("платные провайдеры отключены настройкой AI_FREE_ONLY"),'free-only mode must stop before legacy paid provider fallbacks');
 assert.ok(src.includes("if(AI_FREE_ONLY){if(!cfAccount||!cfToken)throw")&&src.includes("@cf/openai/whisper-large-v3-turbo"),'free-only voice transcription must use Cloudflare Whisper, not Groq');
 assert.ok(src.includes("cloudflareWorkersAI:!!keyOf('CLOUDFLARE_ACCOUNT_ID')")&&src.includes("requestyFree:!!keyOf('REQUESTY_API_KEY')"),'health must expose free provider configuration without exposing credentials');
 
