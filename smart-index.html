@@ -169,11 +169,14 @@ async function send(queuedText=null){
   const requestController=new AbortController();activeChatController=requestController;
   try{
     let body={prompt:t,memoryId:MEMORY_ID,companionMode,messages:messages.slice(companionMode?-5:-6)};
-    if(/(?:мо[её]\s+)?текущ(?:ее|ую)\s+местоположение|где\s+я|мо[её]\s+местоположени(?:е|я)|моя\s+геолокаци|запомни\s+(?:мо[её]\s+)?местоположение/iu.test(t)&&navigator.geolocation){
+    const weatherIntent=/(?:погод|температур|дожд|снег|ветер|облач|за\\s+окном)/iu.test(t)&&!hasExplicitWeatherPlace(t);
+    const locationIntent=/(?:мо[её]\\s+)?текущ(?:ее|ую)\\s+местоположение|где\\s+я|мо[её]\\s+местоположени(?:е|я)|моя\\s+геолокаци|запомни\\s+(?:мо[её]\\s+)?местоположение/iu.test(t);
+    if((locationIntent||weatherIntent)&&navigator.geolocation){
       try{
-        let p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,{enableHighAccuracy:true,timeout:10000,maximumAge:60000}));
+        const options=weatherIntent?{enableHighAccuracy:false,timeout:7000,maximumAge:600000}:{enableHighAccuracy:true,timeout:10000,maximumAge:60000};
+        let p=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(ok,no,options));
         body.location={lat:p.coords.latitude,lon:p.coords.longitude,address:'Текущее местоположение'};
-      }catch{}
+      }catch(error){if(weatherIntent)body.locationError=String(error?.code||error?.message||'geolocation unavailable')}
     }
     let j=await api('/chat',body,48000,requestController.signal);
     w.remove();
