@@ -15,4 +15,5 @@ test('Free-only mode masks legacy paid providers in health status',()=>{
   assert.ok(src.includes("openai:!AI_FREE_ONLY&&!!keyOf('OPENAI_API_KEY')"));
   assert.ok(src.includes("mistral:!AI_FREE_ONLY&&!!keyOf('MISTRAL_API_KEY')"));
   assert.ok(src.includes("groq:!AI_FREE_ONLY&&!!keyOf('GROQ_API_KEY')"));
+  assert.ok(src.includes("if(AI_FREE_ONLY)throw Object.assign(Error('Генерация изображений отключена в бесплатном режиме"),'paid image generation must be blocked in free-only mode');
 });
