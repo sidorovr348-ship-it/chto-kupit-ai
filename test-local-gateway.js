@@ -83,6 +83,15 @@ assert.ok(groqRateLimitBlock.includes("DEEPSEEK_API_KEY")&&groqRateLimitBlock.in
 assert.ok(src.includes('DeepSeek text fallback:'),'DeepSeek must also be attempted in the ordinary text fallback chain');
 console.log('SOURCE_SMOKE_OK');
 
+// Z.ai free Flash models: GLM-4.7-Flash for text and GLM-4.6V-Flash for vision.
+assert.ok(src.includes("const zai=keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY');if(zai&&canStart(1000))"),'Z.ai must be optional and skipped safely when no API key is configured');
+assert.ok(src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZAI_TEXT_MODEL||'glm-4.7-flash'")&&src.includes("process.env.ZAI_VISION_MODEL||'glm-4.6v-flash'"),'Z.ai must use the OpenAI-compatible API and the free text/vision Flash models');
+assert.ok(src.includes("provider:'zai'")&&src.includes('ZAI_ERROR_CONTINUE_FALLBACK_CHAIN'),'Z.ai errors must continue through the fallback chain');
+assert.ok(src.includes("zai:!!keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY')"),'health must expose only Z.ai key presence, never the key');
+assert.ok(src.includes("const openrouter=keyOf('OPENROUTER_API_KEY')")&&src.includes("https://openrouter.ai/api/v1/chat/completions")&&src.includes("process.env.OPENROUTER_FREE_MODEL||'openrouter/free'"),'OpenRouter must use its free-only model router');
+assert.ok(src.includes("provider:'openrouter'")&&src.includes('OPENROUTER_ERROR_CONTINUE_FALLBACK_CHAIN'),'OpenRouter errors must continue through the fallback chain');
+assert.ok(src.includes("openrouter:!!keyOf('OPENROUTER_API_KEY')"),'health must expose only OpenRouter key presence, never the key');
+
 // ZvenoAI is an opt-in Russia-compatible text route; it must not require a key to boot.
 assert.ok(src.includes("const zvenoai=keyOf('ZVENOAI_API_KEY');if(!vision&&zvenoai&&canStart())"),'ZvenoAI must be optional and text-only in the initial integration');
 assert.ok(src.includes("https://api.zveno.ai/v1/chat/completions")&&src.includes("process.env.ZVENOAI_TEXT_MODEL||'nvidia/nemotron-3-ultra-550b-a55b:free'"),'ZvenoAI must use its documented endpoint and tested primary free model');
