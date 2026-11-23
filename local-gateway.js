@@ -169,8 +169,8 @@ async function moscowWeather(){
   }
 }
 const wantsMoscowWeather=q=>/москв/iu.test(String(q||''))&&/(погод|температур|дожд|снег|ветер|облач)/iu.test(String(q||''));
-function hasExplicitWeatherPlace(q){return /\\b(?:в|для)\\s+(?!данный|данную|данное|мо[её]м|вашем|вашей|окрестностях|районе|городе|стране|доме|квартире)[\\p{L}-]{3,}/iu.test(String(q||''))}
-function wantsLocalWeather(q){const s=String(q||'');return /(?:погод|температур|дожд|снег|ветер|облач|за\\s+окном)/iu.test(s)&&!hasExplicitWeatherPlace(s)}
+function hasExplicitWeatherPlace(q){return /\b(?:в|для)\s+(?!данный|данную|данное|мо[её]м|вашем|вашей|окрестностях|районе|городе|стране|доме|квартире)[\p{L}-]{3,}/iu.test(String(q||''))}
+function wantsLocalWeather(q){const s=String(q||'');return /(?:погод|температур|дожд|снег|ветер|облач|за\s+окном)/iu.test(s)&&!hasExplicitWeatherPlace(s)}
 async function currentWeather(lat,lon){
   const latitude=Number(lat),longitude=Number(lon);
   if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180)throw Error('Некорректные координаты для прогноза погоды');
