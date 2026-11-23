@@ -85,7 +85,7 @@ console.log('SOURCE_SMOKE_OK');
 
 // Z.ai free Flash models: GLM-4.7-Flash for text and GLM-4.6V-Flash for vision.
 assert.ok(src.includes("const zai=keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY');if(zai&&canStart(1000))"),'Z.ai must be optional and skipped safely when no API key is configured');
-assert.ok(src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZAI_TEXT_MODEL||'glm-4.7-flash'")&&src.includes("process.env.ZAI_VISION_MODEL||'glm-4.6v-flash'"),'Z.ai must use the OpenAI-compatible API and the free text/vision Flash models');
+assert.ok(src.includes("https://api.z.ai/api/paas/v4/chat/completions")&&src.includes("process.env.ZAI_TEXT_MODEL||'glm-4.7-flash'")&&src.includes("process.env.ZAI_FALLBACK_TEXT_MODEL||'glm-4.5-flash'")&&src.includes("process.env.ZAI_VISION_MODEL||'glm-4.6v-flash'"),'Z.ai must use the OpenAI-compatible API and the free text/vision Flash models');
 assert.ok(src.includes("provider:'zai'")&&src.includes('ZAI_ERROR_CONTINUE_FALLBACK_CHAIN'),'Z.ai errors must continue through the fallback chain');
 assert.ok(src.includes("zai:!!keyOf('ZAI_API_KEY','ZAI_GLM_API_KEY')"),'health must expose only Z.ai key presence, never the key');
 assert.ok(src.includes("const openrouter=keyOf('OPENROUTER_API_KEY')")&&src.includes("https://openrouter.ai/api/v1/chat/completions")&&src.includes("process.env.OPENROUTER_FREE_MODEL||'openrouter/free'"),'OpenRouter must use its free-only model router');
