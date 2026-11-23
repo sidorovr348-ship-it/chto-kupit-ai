@@ -169,7 +169,7 @@ async function send(queuedText=null){
   const requestController=new AbortController();activeChatController=requestController;
   try{
     let body={prompt:t,memoryId:MEMORY_ID,companionMode,messages:messages.slice(companionMode?-5:-6)};
-    const explicitWeatherPlace=/\b(?:в|для)\s+(?!данный|данную|данное|мо[её]м|вашем|вашей|окрестностях|районе|городе|стране|доме|квартире)[\p{L}-]{3,}/iu.test(t);
+    const explicitWeatherPlace=/(?:^|\s)(?:в|для)\s+(?!данный|данную|данное|мо[её]м|вашем|вашей|окрестностях|районе|городе|стране|доме|квартире)[\p{L}-]{3,}/iu.test(t);
     const weatherIntent=/(?:погод|температур|дожд|снег|ветер|облач|за\s+окном)/iu.test(t)&&!explicitWeatherPlace;
     const locationIntent=/(?:мо[её]\s+)?текущ(?:ее|ую)\s+местоположение|где\s+я|мо[её]\s+местоположени(?:е|я)|моя\s+геолокаци|запомни\s+(?:мо[её]\s+)?местоположение/iu.test(t);
     if((locationIntent||weatherIntent)&&navigator.geolocation){
