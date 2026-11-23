@@ -124,6 +124,20 @@ async function send(queuedText=null){
       }
     }
   }
+  if(/^(?:эй[\s,;:!?.-]*)?(?:сколько\s+(?:(?:сейчас\s+)?врем(?:я|ени)|врем(?:я|ени)\s+сейчас)|котор(?:ый|ое)\s+час|время\s+сейчас)[?!.,\s]*$/iu.test(t)){
+    const wakeOwned=!!window.__wakeCommandActive;
+    if(!wakeOwned)window.__pauseWake?.();
+    try{
+      const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'местному часовому поясу устройства';
+      const now=new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
+      add(t,'user');input.value='';
+      const r='Сейчас '+now+' по местному времени'+(zone==='местному часовому поясу устройства'?'':' ('+zone+')')+'.';
+      add(r,'ai');messages.push({role:'user',content:t},{role:'assistant',content:r});
+      void say(r);
+      if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
+      return;
+    }finally{if(!wakeOwned)window.__resumeWake?.()}
+  }
   if(/(?:сколько\s+(?:сейчас\s+)?времени|котор(?:ый|ое)\s+час|время)\s+(?:в\s+)?москв(?:е|а)|москва[\s,]*(?:сейчас\s+)?время/iu.test(t)){
     const wakeOwned=!!window.__wakeCommandActive;
     if(!wakeOwned)window.__pauseWake?.();
