@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Эй — проверка локального ИИ</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:20px 16px calc(24px + env(safe-area-inset-bottom));background:#0b0b0d;color:#f5f5f7;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:640px;margin:auto}h1{font-size:25px;margin:8px 0 12px}.muted{color:#b7b7c2;line-height:1.5}.panel{background:#19191e;border:1px solid #33333b;border-radius:16px;padding:15px;margin:14px 0}button{width:100%;min-height:50px;border:0;border-radius:14px;background:#e8e8ed;color:#111;font-weight:700;font-size:16px}button:disabled{opacity:.55}ul{padding-left:20px;line-height:1.65}.status{padding:10px 12px;border-radius:10px;background:#24242b;margin:8px 0;overflow-wrap:anywhere}.ok{border-left:4px solid #35b779}.bad{border-left:4px solid #e05b65}.wait{border-left:4px solid #d6a64a}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#c9c9d2}.small{font-size:13px;color:#aaaab5}
+</style>
+</head>
+<body>
+<main>
+<h1>Проверка локальных вычислений на iPhone</h1>
+<p class="muted">Эта страница проверяет, может ли Safari создать WebGPU-устройство и выполнить короткую вычислительную задачу на графическом процессоре. Модели не скачиваются, фото и видео не запрашиваются, данные никуда не отправляются.</p>
+<section class="panel">
+<strong>Что проверяем</strong>
+<ul>
+<li>доступность WebGPU в Safari;</li>
+<li>создание GPU-устройства;</li>
+<li>реальное выполнение короткой вычислительной программы;</li>
+<li>получение результата обратно в браузер.</li>
+</ul>
+</section>
+<button id="run">Начать проверку</button>
+<section class="panel" aria-live="polite">
+<strong>Результаты</strong>
+<div id="status" class="status wait">Проверка ещё не запускалась.</div>
+<div id="details" class="small"></div>
+</section>
+<p class="small">Важно: успешная проверка не доказывает, что конкретная языковая или зрительная модель поместится в память iPhone. Это только первый тест графического вычислительного интерфейса.</p>
+</main>
+<script>
+'use strict';
+const button=document.getElementById('run');
+const statusBox=document.getElementById('status');
+const details=document.getElementById('details');
+function show(message,kind){statusBox.textContent=message;statusBox.className='status '+kind}
+button.addEventListener('click',async()=>{
+ button.disabled=true;details.textContent='';
+ try{
+  if(!('gpu' in navigator)){show('НЕ ПОДДЕРЖИВАЕТСЯ: Safari не предоставляет navigator.gpu.','bad');return}
+  show('WebGPU найден. Запрашиваю графический адаптер…','wait');
+  const adapter=await navigator.gpu.requestAdapter();
+  if(!adapter){show('АДАПТЕР НЕ ПОЛУЧЕН: браузер не предоставил доступный GPU-адаптер.','bad');return}
+  show('Адаптер получен. Создаю GPU-устройство…','wait');
+  const device=await adapter.requestDevice();
+  device.pushErrorScope('validation');
+  const code='@group(0) @binding(0) var<storage, read_write> result: array<u32>; @compute @workgroup_size(1) fn main(){ result[0] = 42u; }';
+  const module=device.createShaderModule({code});
+  const pipeline=device.createComputePipeline({layout:'auto',compute:{module,entryPoint:'main'}});
+  const output=device.createBuffer({size:4,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+  const readback=device.createBuffer({size:4,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  const bindGroup=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:output}}]});
+  const encoder=device.createCommandEncoder();
+  const pass=encoder.beginComputePass();
+  pass.setPipeline(pipeline);pass.setBindGroup(0,bindGroup);pass.dispatchWorkgroups(1);pass.end();
+  encoder.copyBufferToBuffer(output,0,readback,0,4);
+  device.queue.submit([encoder.finish()]);
+  await readback.mapAsync(GPUMapMode.READ);
+  const value=new Uint32Array(readback.getMappedRange())[0];
+  readback.unmap();
+  const validationError=await device.popErrorScope();
+  output.destroy();readback.destroy();device.destroy();
+  if(validationError)throw new Error(validationError.message||'Ошибка проверки WebGPU');
+  if(value!==42)throw new Error('Неверный результат вычисления: '+value);
+  show('УСПЕШНО: Safari выполнил вычисление на GPU и вернул правильный результат (42).','ok');
+  details.textContent='WebGPU API: доступен\\nGPU-устройство: создано\\nВычислительный шейдер: выполнен\\nПроверка результата: пройдена\\nПередача данных GPU → браузер: пройдена';
+ }catch(error){
+  show('ОШИБКА: '+String(error&&error.message||error),'bad');
+  details.textContent='Тип ошибки: '+String(error&&error.name||'не определён');
+ }finally{button.disabled=false}
+});
+</script>
+</body>
+</html>
