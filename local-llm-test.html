@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Эй — тест локальной языковой модели</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:18px 14px calc(26px + env(safe-area-inset-bottom));background:#0b0b0d;color:#f5f5f7;font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:680px;margin:auto}h1{font-size:25px;line-height:1.2;margin:8px 0 12px}h2{font-size:18px;margin:0 0 10px}.muted{color:#b7b7c2;line-height:1.5}.panel{background:#19191e;border:1px solid #33333b;border-radius:16px;padding:15px;margin:14px 0}button{width:100%;min-height:49px;border:0;border-radius:13px;background:#e8e8ed;color:#111;font-weight:700;font-size:16px;padding:10px 14px}button.secondary{background:#303039;color:#fff}button:disabled{opacity:.48}textarea{width:100%;min-height:84px;resize:vertical;border:1px solid #454550;border-radius:12px;background:#111115;color:#fff;padding:12px;font:16px inherit}label{display:block;font-weight:600;margin:12px 0 7px}.status{padding:11px 12px;border-radius:10px;background:#24242b;margin:8px 0;overflow-wrap:anywhere;line-height:1.45}.ok{border-left:4px solid #35b779}.bad{border-left:4px solid #e05b65}.wait{border-left:4px solid #d6a64a}.answer{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;background:#111115;border-radius:10px;padding:11px;margin-top:8px;min-height:42px}.small{font-size:13px;color:#aaaab5;line-height:1.45}.progress{height:7px;background:#33333b;border-radius:10px;overflow:hidden;margin:10px 0}.progress>div{height:100%;width:0;background:#80b8ff;transition:width .2s}.warning{border-left:4px solid #d6a64a}.row{display:flex;gap:9px;align-items:center}.row button{flex:1}.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Тест локального ИИ на iPhone</h1>
+<p class="muted">Отдельный эксперимент. Модель Qwen2.5 0.5B будет работать в Safari через WebGPU. Вопросы обрабатываются на устройстве — они не отправляются на сервер приложения «Эй».</p>
+
+<section class="panel warning">
+<strong>Перед запуском — прочитай</strong>
+<p class="muted">Первая загрузка модели — примерно 290 МБ по данным хранилища модели. Дополнительно загрузится программный модуль WebLLM. Для работы модели браузеру потребуется около 945 МБ видеопамяти по оценке каталога; фактический расход может быть выше.</p>
+<p class="muted"><strong>Рекомендую Wi‑Fi.</strong> На мобильном интернете лучше пока не запускать. Нажатие кнопки ниже явно разрешает загрузку. Модель загружается с Hugging Face, библиотека — с esm.run. Вопросы остаются в браузере.</p>
+<p class="small">Это небольшая экспериментальная модель, качество ответов ограничено. Не закрывай вкладку во время загрузки и теста. Если Safari перезагрузит страницу или выдаст ошибку, пришли её текст.</p>
+</section>
+
+<section class="panel">
+<h2>Модель</h2>
+<div class="small">Qwen2.5 0.5B Instruct · q4f16_1 · контекст до 4K</div>
+<div id="status" class="status wait" aria-live="polite">Модель ещё не загружалась. Никаких файлов пока не скачано.</div>
+<div class="progress"><div id="bar"></div></div>
+<div id="progressText" class="small">Загрузка начнётся только после нажатия кнопки.</div>
+<button id="load">Загрузить модель и запустить</button>
+</section>
+
+<section class="panel">
+<h2>Проверка последовательных запросов</h2>
+<p class="muted">После загрузки нажми кнопку. Модель ответит на пять коротких вопросов подряд. Это проверит не только первый ответ, но и устойчивость нескольких запусков.</p>
+<button id="tests" class="secondary" disabled>Выполнить 5 тестов</button>
+<div id="testsOut"></div>
+</section>
+
+<section class="panel">
+<h2>Свой вопрос</h2>
+<label for="question">Вопрос модели</label>
+<textarea id="question" maxlength="500" placeholder="Напиши короткий вопрос по-русски…"></textarea>
+<button id="ask" class="secondary" disabled>Отправить вопрос локальной модели</button>
+<div id="answer" class="answer">Ответ появится здесь.</div>
+</section>
+
+<p class="small">Тестовая страница не подключена к чату «Эй», не использует его API, не запрашивает фото, видео, микрофон или геолокацию. Для остановки эксперимента закрой эту вкладку Safari. Файлы модели могут остаться в браузерном кэше.</p>
+</main>
+
+<script type="module">
+const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+const MODEL_DOWNLOAD_NOTE = "около 290 МБ";
+const $ = (id) => document.getElementById(id);
+const statusBox = $("status");
+const loadButton = $("load");
+const testsButton = $("tests");
+const askButton = $("ask");
+const bar = $("bar");
+const progressText = $("progressText");
+let engine = null;
+let busy = false;
+
+function status(message, kind = "wait") {
+  statusBox.textContent = message;
+  statusBox.className = "status " + kind;
+}
+function setBusy(value) {
+  busy = value;
+  loadButton.disabled = value || !!engine;
+  testsButton.disabled = value || !engine;
+  askButton.disabled = value || !engine;
+}
+function addTest(title, text, kind = "wait") {
+  const item = document.createElement("div");
+  item.className = "panel";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const body = document.createElement("div");
+  body.className = "answer";
+  body.textContent = text;
+  item.append(heading, body);
+  $("testsOut").append(item);
+  return body;
+}
+async function generate(messages, onText, maxTokens = 64) {
+  const stream = await engine.chat.completions.create({
+    messages,
+    temperature: 0.2,
+    max_tokens: maxTokens,
+    stream: true
+  });
+  let result = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta?.content || "";
+    if (delta) {
+      result += delta;
+      onText(result);
+    }
+  }
+  return result;
+}
+
+loadButton.addEventListener("click", async () => {
+  if (engine || busy) return;
+  if (!navigator.gpu) {
+    status("WebGPU недоступен в этой вкладке Safari. Модель не загружалась.", "bad");
+    return;
+  }
+  const confirmed = window.confirm("Разрешить первую загрузку модели размером примерно 290 МБ, а также загрузку WebLLM? Лучше использовать Wi‑Fi. Загрузка начнётся только после подтверждения.");
+  if (!confirmed) return;
+  setBusy(true);
+  status("Проверяю WebGPU и загружаю программный модуль…", "wait");
+  progressText.textContent = "Подключение к библиотеке WebLLM.";
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("Safari не выдал GPU-адаптер.");
+    const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.89");
+    status("Библиотека загружена. Начинается загрузка и подготовка модели…", "wait");
+    engine = await webllm.CreateMLCEngine(MODEL_ID, {
+      initProgressCallback: (p) => {
+        const fraction = Number.isFinite(p.progress) ? Math.max(0, Math.min(1, p.progress)) : 0;
+        bar.style.width = Math.round(fraction * 100) + "%";
+        progressText.textContent = p.text || ("Подготовка модели: " + Math.round(fraction * 100) + "%");
+        status("Модель загружается и подготавливается на устройстве…", "wait");
+      }
+    });
+    bar.style.width = "100%";
+    progressText.textContent = "Модель подготовлена. Можно задавать вопросы.";
+    status("МОДЕЛЬ ЗАПУЩЕНА. Теперь можно проверить пять последовательных запросов.", "ok");
+    loadButton.textContent = "Модель загружена";
+    setBusy(false);
+  } catch (error) {
+    engine = null;
+    setBusy(false);
+    status("Не удалось запустить локальную модель: " + (error?.message || String(error)), "bad");
+    progressText.textContent = "Ничего не отправлялось на сервер приложения. Скопируй или сфотографируй ошибку.";
+  }
+});
+
+testsButton.addEventListener("click", async () => {
+  if (!engine || busy) return;
+  setBusy(true);
+  $("testsOut").replaceChildren();
+  const tests = [
+    ["Тест 1/5 · русский язык", "Ответь по-русски одним коротким предложением: что такое искусственный интеллект?"],
+    ["Тест 2/5 · арифметика", "Сколько будет 17 умножить на 19? Напиши только число и короткую проверку."],
+    ["Тест 3/5 · логика", "У Маши 3 яблока, она купила ещё 2 и отдала 1. Сколько осталось?"],
+    ["Тест 4/5 · последовательный запрос", "Назови три простых способа экономить воду дома."],
+    ["Тест 5/5 · понимание инструкции", "Составь краткий список из трёх пунктов: как безопасно хранить пароль."]
+  ];
+  let passed = 0;
+  for (let i = 0; i < tests.length; i++) {
+    const output = addTest(tests[i][0], "Выполняется…");
+    try {
+      const result = await generate([{role:"user", content:tests[i][1]}], text => { output.textContent = text; }, 72);
+      if (result.trim()) passed++;
+      output.textContent = result || "Пустой ответ.";
+    } catch (error) {
+      output.textContent = "ОШИБКА: " + (error?.message || String(error));
+      status("Сбой на тесте " + (i + 1) + " из 5. Остальные тесты остановлены.", "bad");
+      break;
+    }
+  }
+  if (passed === 5) status("УСПЕШНО: модель выдала ответы на все 5 последовательных запросов.", "ok");
+  setBusy(false);
+});
+
+askButton.addEventListener("click", async () => {
+  if (!engine || busy) return;
+  const question = $("question").value.trim();
+  if (!question) {
+    $("answer").textContent = "Сначала введи вопрос.";
+    return;
+  }
+  setBusy(true);
+  $("answer").textContent = "Модель отвечает…";
+  try {
+    const result = await generate([{role:"user", content:question}], text => {$("answer").textContent = text;}, 128);
+    $("answer").textContent = result || "Модель вернула пустой ответ.";
+  } catch (error) {
+    $("answer").textContent = "ОШИБКА: " + (error?.message || String(error));
+    status("Ошибка во время генерации ответа. Сохрани текст ошибки.", "bad");
+  }
+  setBusy(false);
+});
+</script>
+</body>
+</html>
