@@ -27,6 +27,13 @@ global.fetch = async (input, init = {}) => {
   const id = ++providerCall;
   process.stdout.write('MOCK_PROVIDER_STARTED:' + id + '\n');
 
+  if (id === 1 && process.env.MOCK_FIRST_PROVIDER_TIMEOUT === '1') {
+    process.stdout.write('MOCK_PROVIDER_TIMEOUT:' + id + '\\n');
+    const error = new Error('mock provider timeout');
+    error.name = 'AbortError';
+    throw error;
+  }
+
   if (id <= 4) {
     await new Promise((resolve, reject) => {
       const signal = init.signal;
