@@ -20,4 +20,7 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /isModelLoaded\(800,options\.signal\|\|null\)/, 'local model readiness probe must also stop after client cancellation');
   const localSource = fs.readFileSync('src/local-ai.js', 'utf8');
   assert.match(localSource, /createProviderCancellation\(timeoutMs, options\.signal\)/, 'local Ollama fetch must combine its timeout with client cancellation');
+  assert.match(source, /async function askMistralVisionFirst\(messages,externalSignal=null\)/, 'Mistral vision fallback must accept client cancellation');
+  assert.match(source, /async function groqVisionResponses\(key,model,messages,timeout=30000,externalSignal=null\)/, 'Groq Responses vision fallback must accept client cancellation');
+  assert.match(source, /groqVisionResponses\(groq,model,messages,30000,externalSignal\)/, 'vision fallback must forward the client signal');
 });
