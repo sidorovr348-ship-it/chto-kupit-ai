@@ -239,7 +239,7 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
         const sttController=new AbortController();const sttTimer=setTimeout(()=>sttController.abort(),25000);
         let tr,raw,j={};
         try{
-          tr=await fetch(API+'/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36))},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store',signal:sttController.signal});
+          tr=await fetch(API+'/transcribe',{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36))},body:JSON.stringify({audio:await data(new File([b],'voice.'+ext,{type:b.type||'audio/mp4'})),mime:b.type,filename:'voice.'+ext}),cache:'no-store',signal:sttController.signal});
           raw=await tr.text();try{j=JSON.parse(raw)}catch{}
         }catch(e){if(e.name==='AbortError')throw Error('Сервер распознавания не ответил за 25 секунд. Повтори голосовой запрос.');throw Error('Не удалось связаться с сервером распознавания. Проверь соединение.')}
         finally{clearTimeout(sttTimer)}
