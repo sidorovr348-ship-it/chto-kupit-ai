@@ -20,6 +20,21 @@ global.fetch = async (input, init = {}) => {
       signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
+  if (String(url).startsWith('https://api.groq.com/openai/v1/responses') && process.env.MOCK_VISION_HANG === '1') {
+    process.stdout.write('MOCK_VISION_STARTED\\n');
+    await new Promise((resolve, reject) => {
+      const signal = init.signal;
+      const onAbort = () => {
+        signal?.removeEventListener('abort', onAbort);
+        process.stdout.write('MOCK_VISION_ABORTED\\n');
+        const error = new Error('mock vision request aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
   if (String(url).startsWith('https://api.groq.com/openai/v1/audio/transcriptions')) {
     process.stdout.write('MOCK_STT_STARTED\\n');
     await new Promise((resolve, reject) => {
