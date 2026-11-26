@@ -63,7 +63,7 @@ test('a timed-out model does not block the next model on the same provider', { t
 
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
-  assert.equal(payload.result, 'MOCK_PROVIDER_RETURNED_2');
+  assert.equal(payload.result, 'MOCK_OK_2');
   assert.match(output, /AI_PROVIDER_FAIL.*qwen\/qwen3\.8-27b/);
   assert.match(output, /MOCK_PROVIDER_STARTED:2/);
   assert.doesNotMatch(output, /Provider circuit open/);
