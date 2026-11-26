@@ -126,7 +126,6 @@ async function send(queuedText=null){
   }
   if(/^(?:эй[\s,;:!?.-]*)?(?:сколько\s+(?:(?:сейчас\s+)?врем(?:я|ени)|врем(?:я|ени)\s+сейчас)|котор(?:ый|ое)\s+час|время\s+сейчас)[?!.,\s]*$/iu.test(t)){
     const wakeOwned=!!window.__wakeCommandActive;
-    if(!wakeOwned)window.__pauseWake?.();
     try{
       const zone=Intl.DateTimeFormat().resolvedOptions().timeZone||'местному часовому поясу устройства';
       const now=new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
@@ -136,11 +135,10 @@ async function send(queuedText=null){
       void say(r);
       if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
       return;
-    }finally{if(!wakeOwned)window.__resumeWake?.()}
+    }finally{}
   }
   if(/(?:сколько\s+(?:сейчас\s+)?времени|котор(?:ый|ое)\s+час|время)\s+(?:в\s+)?москв(?:е|а)|москва[\s,]*(?:сейчас\s+)?время/iu.test(t)){
     const wakeOwned=!!window.__wakeCommandActive;
-    if(!wakeOwned)window.__pauseWake?.();
     try{
       const now=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());
       add(t,'user');input.value='';
@@ -149,7 +147,7 @@ async function send(queuedText=null){
       if(wakeOwned)void say(r);else void say(r);
       if(!window.__wakeCommandActive)window.__wakeResponseReady?.();
       return;
-    }finally{if(!wakeOwned)window.__resumeWake?.()}
+    }finally{}
   }
   if(/^(?:кто ты|ты кто|как тебя зовут|представься)[?!.,\s]*$/iu.test(t)){
     add(t,'user');input.value='';
@@ -223,6 +221,8 @@ async function send(queuedText=null){
 }
 window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{activeChatController?.abort()}catch{}};async function blobData(f){return await new Promise((ok,no)=>{const r=new FileReader;r.onload=()=>ok(String(r.result||''));r.onerror=()=>no(r.error||Error('Не удалось прочитать аудио'));r.readAsDataURL(f)})}async function data(f){if(String(f.type||'').toLowerCase().startsWith('image/')){try{const u=URL.createObjectURL(f),im=await new Promise((ok,no)=>{const x=new Image;x.onload=()=>ok(x);x.onerror=no;x.src=u}),max=1600,w=Math.min(max,im.naturalWidth||im.width),h=Math.max(1,Math.round(w*(im.naturalHeight||im.height)/(im.naturalWidth||im.width))),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);URL.revokeObjectURL(u);const b=await new Promise((ok,no)=>c.toBlob(x=>x?ok(x):no(Error('Не удалось подготовить изображение')),'image/jpeg',.86));return blobData(b)}catch{}}try{return await blobData(f)}catch{return new Promise((ok,no)=>{let r=new FileReader;r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(f)})}}async function photo(fs){let a=[...fs].slice(0,3);if(!a.length)return;let w=add('⏳ Анализирую фото…');try{const images=await Promise.all(a.map(data));if(images.some(x=>!String(x||'').toLowerCase().startsWith('data:image/')))throw Error('Не удалось подготовить одно из фото. Попробуй выбрать снимок в формате JPEG или PNG.');let j=await api('/photo',{images,prompt:'Подробно проанализируй изображение по-русски. Определи предмет, товар, бренд, модель и характеристики, если видимы. Не выдумывай неизвестное.'},180000);w.remove();const answer=String(j.result||'').trim();if(!answer)throw Error('Сервер анализа фото вернул пустой ответ. Попробуй ещё раз.');messages.push({role:'user',content:'Пользователь прислал фотографию для анализа.'},{role:'assistant',content:answer});links(answer);void say(answer)}catch(e){w.remove();try{console.error('PHOTO_CLIENT_ERROR',e)}catch{}add('🔴 Анализ фото: '+String(e?.message||e))}}function frame(v){let c=document.createElement('canvas'),w=Math.min(1280,v.videoWidth||1280),h=Math.round(w*(v.videoHeight||720)/(v.videoWidth||1280));c.width=w;c.height=h;c.getContext('2d').drawImage(v,0,0,w,h);return new Promise(ok=>c.toBlob(ok,'image/jpeg',.8))}async function video(f){let u=URL.createObjectURL(f),v=document.createElement('video');v.src=u;v.muted=true;v.preload='metadata';let w=add('⏳ Анализирую видео…');try{await new Promise((ok,no)=>{v.onloadedmetadata=ok;v.onerror=no});let ts=[4,7,10].filter(x=>x<v.duration-.1);if(!ts.length)ts=[Math.max(.1,v.duration/2)];let im=[];for(let t of ts){v.currentTime=t;await new Promise(ok=>v.onseeked=ok);im.push(await data(new File([await frame(v)],'frame.jpg',{type:'image/jpeg'})))}let j=await api('/photo',{images:im,prompt:`Проанализируй последовательные кадры видео в моменты ${ts.join(', ')} секунд. Опиши, что происходит и что меняется.`},180000);w.remove();links(j.result);say(j.result)}catch(e){w.remove();add('🔴 '+e.message)}finally{URL.revokeObjectURL(u)}}async function doc(f){let w=add('⏳ Читаю '+f.name+'…');try{let j=await api('/document',{name:f.name,mime:f.type,file:await data(f)},240000);w.remove();links(j.result);say(j.result)}catch(e){w.remove();add('🔴 '+e.message)}}async function cameraOn(){try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});$('#cam').srcObject=cameraStream;$('#cameraBox').style.display='block'}catch(e){add('🔴 Камера: '+e.message)}}function cameraOff(){cameraStream?.getTracks().forEach(t=>t.stop());cameraStream=null;const v=$('#cam');if(v)v.srcObject=null;$('#cameraBox').style.display='none'}async function cameraAnalyze(){if(!cameraStream)return cameraOn();let b=await frame($('#cam'));await photo([new File([b],'camera.jpg',{type:'image/jpeg'})])}async function voice(){
   if(recorder){try{recorder.stop()}catch{}return}
+  const iosSpeech=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(/Macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+  if(iosSpeech&&window.__startManualVoice){if(window.__manualVoiceActive?.()){window.__stopManualVoice?.();return}if(window.__startManualVoice())return}
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){add('🔴 Этот браузер не поддерживает запись голоса.');return}
   window.__pauseWake?.();
   try{
@@ -269,16 +269,39 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
 <script>(function(){'use strict';
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(/Macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
-let rec=null, enabled=true, paused=false, starting=false, processing=false, permissionBlocked=false, errorStreak=0;
-let restartTimer=null, silenceTimer=null, startWatchdog=null, resumeToken=0, armedUntil=0, followupUntil=0, queue=[], attempts=0;
-function status(message, listening=false){
+let rec=null,enabled=true,paused=false,starting=false,priming=false,processing=false,permissionBlocked=false,errorStreak=0;
+let restartTimer=null,silenceTimer=null,startWatchdog=null,speechStartTimer=null,resumeToken=0,armedUntil=0,followupUntil=0,queue=[],attempts=0,manualDictation=false,manualDictationTimer=null;
+const voiceButton=document.getElementById('voice');
+const voiceButtonLabel=voiceButton?.textContent||'🎙️ Голос';
+function status(message,listening=false){
  let el=document.getElementById('wakeStatus');
  if(!el){el=document.createElement('div');el.id='wakeStatus';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.style.cssText='position:fixed;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:99;padding:10px 12px;border-radius:14px;background:rgba(20,20,24,.96);color:#fff;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;pointer-events:none;backdrop-filter:blur(10px);box-shadow:0 2px 12px rgba(0,0,0,.35)';document.body.appendChild(el)}
  el.textContent=message;el.style.opacity=message?'1':'0';el.dataset.listening=listening?'true':'false';
 }
+function setManualVoiceButton(active){
+ if(!voiceButton)return;
+ voiceButton.classList.toggle('recording',!!active);
+ voiceButton.textContent=active?'⏹ Готово':voiceButtonLabel;
+}
 function isBusy(){return processing||!!window.__myAiBusy?.()||!!window.__myAiBusyState}
 function clearStartWatchdog(){clearTimeout(startWatchdog);startWatchdog=null}
-function clearTimers(){clearTimeout(restartTimer);clearTimeout(silenceTimer);restartTimer=null;silenceTimer=null}
+function clearTimers(){clearTimeout(restartTimer);clearTimeout(silenceTimer);clearTimeout(speechStartTimer);restartTimer=null;silenceTimer=null;speechStartTimer=null}
+function primeSpeechRecognition(){
+ if(!ios||!window.speechSynthesis||typeof window.SpeechSynthesisUtterance!=='function')return Promise.resolve();
+ return new Promise(resolve=>{
+  let finished=false,timer=null;
+  const finish=()=>{if(finished)return;finished=true;clearTimeout(timer);resolve()};
+  timer=setTimeout(()=>{try{window.speechSynthesis.cancel()}catch{}finish()},2500);
+  try{
+   const synth=window.speechSynthesis;
+   try{synth.cancel()}catch{}
+   const utterance=new SpeechSynthesisUtterance('Я слушаю.');
+   utterance.lang='ru-RU';utterance.rate=1;utterance.volume=0.01;
+   utterance.onend=finish;utterance.onerror=finish;
+   synth.speak(utterance);
+  }catch{finish()}
+ });
+}
 function extract(raw){
  const t=String(raw||'').trim();
  const m=t.match(/^\s*эй(?:[\s,;:!?.-]+|$)/iu);
@@ -290,7 +313,7 @@ function scheduleStart(delay=350){
  restartTimer=setTimeout(()=>{
   restartTimer=null;
   if(!enabled||paused||permissionBlocked)return;
-  if(isBusy()||starting){scheduleStart(350);return}
+  if(isBusy()||starting||priming){scheduleStart(350);return}
   start();
  },delay);
 }
@@ -304,9 +327,7 @@ async function resumeAfterAnswer(){
  if(token!==resumeToken||paused||!enabled)return;
  const tts=window.__ttsPromise;
  status('🟡 Ответ получен — завершаю озвучивание…');
- if(tts&&typeof tts.then==='function'){
-  await Promise.resolve(tts).catch(()=>{});
- }
+ if(tts&&typeof tts.then==='function')await Promise.resolve(tts).catch(()=>{});
  if(token!==resumeToken||paused||!enabled)return;
  await new Promise(ok=>setTimeout(ok,ios?900:350));
  if(token!==resumeToken||paused||!enabled)return;
@@ -315,8 +336,7 @@ async function resumeAfterAnswer(){
  if(!permissionBlocked){followupUntil=Date.now()+90000;status('🟡 Возобновляю слушание…');scheduleStart(150)}
 }
 function stopCurrent(abort=true){
- clearTimeout(silenceTimer);silenceTimer=null;
- clearStartWatchdog();
+ clearTimers();clearStartWatchdog();
  const old=rec;rec=null;starting=false;
  if(old){try{abort?old.abort():old.stop()}catch{}}
 }
@@ -324,12 +344,11 @@ function enqueue(command){
  const q=String(command||'').trim();
  if(!q)return;
  followupUntil=0;queue.push(q);
- stopCurrent(true);
- processQueue();
+ if(!rec&&!starting&&!priming)processQueue();
 }
 async function processQueue(){
- if(processing||paused||!enabled)return;
- processing=true;clearTimers();stopCurrent(true);
+ if(processing||paused||!enabled||rec||starting||priming)return;
+ processing=true;clearTimers();
  try{
   while(queue.length&&!paused&&enabled){
    const q=queue.shift();
@@ -353,99 +372,148 @@ async function processQueue(){
 }
 function createRecognition(){
  const x=new SR();x.lang='ru-RU';x.continuous=false;x.interimResults=false;x.maxAlternatives=3;
+ let heardSpeech=false;
  x.onstart=()=>{
   if(rec!==x)return;
   clearStartWatchdog();starting=false;attempts=0;errorStreak=0;
-  status('🟢 Эй слушает — скажи «Эй» и вопрос',true);
+  status('🟡 Микрофон запущен — ожидаю речь…',false);
+  clearTimeout(speechStartTimer);
+  speechStartTimer=setTimeout(()=>{if(rec===x&&!heardSpeech&&!paused&&!processing)status('🟡 Safari запустил микрофон, но ещё не обнаружил речь. Скажи «Эй».',false)},9000);
   clearTimeout(silenceTimer);
-  silenceTimer=setTimeout(()=>{
-   if(rec!==x||paused||processing)return;
-   status('🟡 Перезапускаю распознавание после тишины…');
-   stopCurrent(true);scheduleStart(Math.min(3500,700*(++attempts)));
-  },18000);
+  silenceTimer=setTimeout(()=>{if(rec===x&&!heardSpeech&&!paused&&!processing)status('🟡 Пока нет речи. Микрофон остаётся активным.',false)},18000);
+ };
+ x.onspeechstart=()=>{
+  if(rec!==x)return;
+  heardSpeech=true;clearTimeout(speechStartTimer);clearTimeout(silenceTimer);
+  status('🟢 Эй слушает — скажи «Эй» и вопрос',true);
  };
  x.onresult=e=>{
   if(rec!==x||paused)return;
-  clearTimeout(silenceTimer);
+  heardSpeech=true;clearTimeout(speechStartTimer);clearTimeout(silenceTimer);
   let spoken='';
   for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)spoken+=' '+String(e.results[i][0]?.transcript||'');
   spoken=spoken.trim();if(!spoken)return;
-  errorStreak=0;
+  errorStreak=0;status('🟢 Речь распознана',true);
+  if(manualDictation){
+   const parsed=extract(spoken),command=parsed.wake?parsed.command:spoken;
+   if(!command){status('🟡 Слово «Эй» услышано — скажи вопрос.',false);return}
+   manualDictation=false;clearTimeout(manualDictationTimer);manualDictationTimer=null;setManualVoiceButton(false);
+   armedUntil=0;followupUntil=0;enqueue(command);return;
+  }
   const parsed=extract(spoken);
   if(parsed.wake){
    if(parsed.command){armedUntil=0;enqueue(parsed.command)}
-   else{armedUntil=Date.now()+12000;status('🟡 Слово «Эй» услышано — запускаю распознавание вопроса…',false);/* SpeechRecognition with continuous=false ends itself after this final result. Let onend schedule the next instance; stopping and restarting here races Safari's native recognizer and can leave a false green listening state. */}
+   else{armedUntil=Date.now()+12000;status('🟡 Слово «Эй» услышано — запускаю распознавание вопроса…',false)}
    return;
   }
   if(Date.now()<armedUntil||Date.now()<followupUntil){armedUntil=0;followupUntil=0;enqueue(spoken)}
  };
  x.onerror=e=>{
   if(rec!==x)return;
-  clearStartWatchdog();starting=false;clearTimeout(silenceTimer);
+  clearStartWatchdog();starting=false;clearTimeout(silenceTimer);clearTimeout(speechStartTimer);
   const code=String(e?.error||'unknown');
   if(code==='not-allowed'||code==='service-not-allowed'){
-   permissionBlocked=true;status('🎙️ Safari не дал доступ к микрофону. Разреши микрофон и нажми экран, чтобы повторить.');stopCurrent(true);return;
+   permissionBlocked=true;manualDictation=false;clearTimeout(manualDictationTimer);setManualVoiceButton(false);
+   status('🎙️ Safari не дал доступ к микрофону. Разреши микрофон и перезагрузи вкладку.',false);return;
   }
   if(code==='audio-capture'){
-   permissionBlocked=true;status('🎙️ Микрофон недоступен. Проверь разрешение Safari и нажми экран для повтора.');stopCurrent(true);return;
+   permissionBlocked=true;manualDictation=false;clearTimeout(manualDictationTimer);setManualVoiceButton(false);
+   status('🎙️ Микрофон недоступен. Проверь разрешение Safari и перезагрузи вкладку.',false);return;
   }
   if(code!=='aborted'){
    errorStreak++;
-   if(errorStreak>=4){permissionBlocked=true;status('⚠️ Safari несколько раз прервал распознавание. Коснись экрана или нажми «🎙️ Голос», чтобы восстановить микрофон.');stopCurrent(true);return}
-   status('🟡 Распознавание прервано ('+code+'). Восстанавливаю…');
-   stopCurrent(true);scheduleStart([500,1200,2500][Math.min(errorStreak-1,2)]);
+   if(errorStreak>=4){permissionBlocked=true;status('⚠️ Safari несколько раз прервал распознавание. Перезагрузи вкладку, чтобы восстановить микрофон.',false);return}
+   status('🟡 Ошибка распознавания ('+code+'). Жду завершения сессии Safari…',false);
   }
  };
  x.onend=()=>{
   if(rec!==x)return;
-  clearTimeout(silenceTimer);clearStartWatchdog();
-  rec=null;starting=false;
+  clearTimers();clearStartWatchdog();rec=null;starting=false;
   if(!enabled||paused||processing||permissionBlocked)return;
-  status('🟡 Распознавание завершено — перезапускаю микрофон…');
+  if(queue.length){processQueue();return}
+  status(manualDictation?'🎙️ Продолжаю диктовку — говори вопрос…':'🟡 Распознавание завершено — подготавливаю микрофон…',false);
   scheduleStart(Math.min(3000,ios?650+attempts*450:300));
  };
  return x;
 }
-function start(){
- if(!SR){status('⚠️ В этом браузере нет распознавания речи. Используй кнопку «🎙️ Голос».');return}
+function startRecognition(){
  if(!enabled||paused||starting||rec||isBusy()||permissionBlocked)return;
  try{
   const current=createRecognition();rec=current;starting=true;clearStartWatchdog();
   startWatchdog=setTimeout(()=>{
    if(rec!==current||!starting)return;
-   starting=false;rec=null;attempts++;
-   try{current.abort()}catch{}
-   if(attempts<4){status('🟡 Safari не подтвердил запуск микрофона. Повтор '+attempts+'/4…');scheduleStart(Math.min(4000,500*attempts))}
-   else{permissionBlocked=true;status('🎙️ Safari не подтвердил запуск микрофона. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
-  },4000);
+   starting=false;permissionBlocked=true;
+   status('⚠️ Safari не подтвердил запуск распознавания. Сессию не прерываю; перезагрузи вкладку, если микрофон не заработает.',false);
+  },5000);
   current.start();
+ }catch(e){
+  clearStartWatchdog();rec=null;starting=false;attempts++;
+  status('🟡 Safari не запустил микрофон. Повтор '+attempts+'/4…',false);
+  if(attempts<4)scheduleStart(Math.min(4000,500*attempts));
+  else{permissionBlocked=true;status('🎙️ Safari остановил автоматическое распознавание. Проверь разрешение микрофона.',false)}
  }
- catch(e){clearStartWatchdog();rec=null;starting=false;attempts++;status('🟡 Safari не запустил микрофон. Повтор '+attempts+'/4…');if(attempts<4)scheduleStart(Math.min(4000,500*attempts));else status('🎙️ Safari остановил автоматический микрофон. Коснись экрана или нажми «🎙️ Голос», чтобы повторить.')}
+}
+function start(){
+ if(!SR){status('⚠️ В этом браузере нет распознавания речи. Используй кнопку «🎙️ Голос».');return}
+ if(!enabled||paused||starting||priming||rec||isBusy()||permissionBlocked)return;
+ if(!ios){startRecognition();return}
+ priming=true;status('🟡 Подготавливаю распознавание речи…',false);
+ primeSpeechRecognition().then(()=>new Promise(resolve=>setTimeout(resolve,350))).then(()=>{
+  priming=false;
+  if(!enabled||paused||permissionBlocked||rec||isBusy())return;
+  startRecognition();
+ },()=>{
+  priming=false;
+  if(!enabled||paused||permissionBlocked||rec||isBusy())return;
+  startRecognition();
+ });
 }
 window.__interruptSpeech=window.__interruptSpeech||(()=>{});
+window.__manualVoiceActive=()=>manualDictation;
+window.__startManualVoice=()=>{
+ if(!SR||processing||paused||permissionBlocked)return false;
+ if(manualDictation){window.__stopManualVoice?.();return true}
+ manualDictation=true;armedUntil=0;followupUntil=0;
+ setManualVoiceButton(true);status('🎙️ Говори — распознаю вопрос без слова «Эй».',false);
+ clearTimeout(manualDictationTimer);
+ manualDictationTimer=setTimeout(()=>{
+  if(!manualDictation)return;
+  manualDictation=false;manualDictationTimer=null;setManualVoiceButton(false);
+  status('🟡 Не услышал речь. Нажми «Голос» и попробуй ещё раз.',false);
+ },20000);
+ if(!rec&&!starting&&!priming)scheduleStart(100);
+ return true;
+};
+window.__stopManualVoice=()=>{
+ if(!manualDictation)return;
+ manualDictation=false;clearTimeout(manualDictationTimer);manualDictationTimer=null;setManualVoiceButton(false);
+ status('🟡 Диктовка отменена. Эй снова слушает.',false);
+};
 window.__pauseWake=()=>{
- paused=true;resumeToken++;clearTimers();armedUntil=0;queue=[];stopCurrent(true);
- status('🎙️ Голосовой режим временно приостановлен');
+ paused=true;resumeToken++;clearTimers();armedUntil=0;queue=[];
+ if(!ios)stopCurrent(true);
+ status('🎙️ Голосовой режим временно приостановлен',false);
 };
 window.__resumeWake=()=>{
  paused=false;permissionBlocked=false;errorStreak=0;armedUntil=0;
  if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
- status('🟡 Запускаю микрофон…');scheduleStart(250);
+ status('🟡 Запускаю микрофон…',false);scheduleStart(250);
 };
 window.__wakeStart=()=>{
  paused=false;enabled=true;permissionBlocked=false;attempts=0;errorStreak=0;
  if(!SR){status('⚠️ Автоматическое «Эй» недоступно. Используй кнопку «🎙️ Голос».');return}
- status('🟡 Запускаю микрофон…');scheduleStart(50);
+ status('🟡 Запускаю микрофон…',false);scheduleStart(50);
 };
 window.__wakeResponseReady=()=>{void resumeAfterAnswer()};
+window.__speechRecognitionPrimeCount=()=>window.__speechRecognitionPrimeCountValue||0;
 window.addEventListener('load',()=>scheduleStart(800));
 document.addEventListener('DOMContentLoaded',()=>scheduleStart(400));
 ['pointerdown','touchstart','click','keydown'].forEach(type=>document.addEventListener(type,()=>{
  try{window.__primeTtsAudio?.()}catch{}
- if(permissionBlocked){permissionBlocked=false;attempts=0;errorStreak=0;scheduleStart(100)}
- else if(!paused&&!processing&&!rec&&!starting&&!isBusy())scheduleStart(100);
+ if(permissionBlocked&&!rec){permissionBlocked=false;attempts=0;errorStreak=0;scheduleStart(100)}
+ else if(!paused&&!processing&&!rec&&!starting&&!priming&&!isBusy())scheduleStart(100);
 },{passive:true}));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!rec&&!isBusy())scheduleStart(250)});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!paused&&!processing&&!rec&&!starting&&!priming&&!isBusy())scheduleStart(250)});
 window.addEventListener('beforeunload',()=>{enabled=false;clearTimers();stopCurrent(true)});
 })();</script></main></html>
 <!-- MOBILE_WAKE_CORS_HARDENED_V1 -->
