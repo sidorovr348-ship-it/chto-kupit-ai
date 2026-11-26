@@ -57,13 +57,13 @@ test('a timed-out model does not block the next model on the same provider', { t
   const response = await fetch('http://127.0.0.1:' + port + '/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-request-id': 'model-timeout-fallback-test' },
-    body: JSON.stringify({ prompt: 'Кратко объясни, почему небо голубое.' })
+    body: JSON.stringify({ prompt: 'Объясни строение атома простыми словами, контрольный запрос' })
   });
   const payload = await response.json();
 
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
-  assert.equal(payload.result, 'MOCK_OK_2');
+  assert.equal(payload.result, 'MOCK_OK_2', output.slice(-6000));
   assert.match(output, /AI_PROVIDER_FAIL.*qwen\/qwen3\.8-27b/);
   assert.match(output, /MOCK_PROVIDER_STARTED:2/);
   assert.doesNotMatch(output, /Provider circuit open/);
