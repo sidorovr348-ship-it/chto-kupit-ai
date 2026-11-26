@@ -61,7 +61,7 @@ test('aborted chat requests cancel provider fetches and release queued text slot
     fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-request-id': 'cancel-test-' + index },
-      body: body('Проверка отмены запроса номер ' + index),
+      body: body('Объясни строение атома простыми словами, тест номер ' + index),
       signal: controller.signal
     }).then(async response => ({ response, payload: await response.json() }))
       .catch(error => ({ error }))
@@ -71,7 +71,7 @@ test('aborted chat requests cancel provider fetches and release queued text slot
   const fifthPromise = fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-request-id': 'cancel-test-queued' },
-    body: body('Проверка освобождения слота после отмены')
+    body: body('Объясни строение атома простыми словами, контрольный запрос')
   }).then(async response => ({ status: response.status, payload: await response.json() }));
 
   await waitFor(() => (output.match(/CHAT_REQUEST_START/g) || []).length >= 5, 'fifth request queued');
