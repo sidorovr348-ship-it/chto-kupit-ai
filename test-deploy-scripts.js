@@ -74,5 +74,5 @@ test('workflow-only edits do not trigger another production VPS deployment',()=>
 
 test('npm test includes the complete discovered test suite',()=>{
  const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
- assert.ok((pkg.scripts?.test||'').startsWith('node --test'),"npm test must run Node's full test discovery instead of a hand-picked subset");
+ assert.equal(pkg.scripts?.test,'node --test',"npm test must run the complete Node test discovery without a hand-picked file list");
 });
