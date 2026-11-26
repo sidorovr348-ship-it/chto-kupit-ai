@@ -35,8 +35,8 @@
 - [x] Surface degraded/fallback warnings before rendering chat content; timeout fallback now explicitly says no automatic retry was launched and no request was saved.
 - [x] Propagate client disconnect and route deadline through `/chat` → dispatcher → text-slot queue → provider fetch; cancelled waiters are removed and client abort does not trip provider cooldown.
 - [x] Verify cancellation and slot release with a local HTTP integration test: occupy all four text slots, queue a fifth request, abort the first four, and confirm the fifth starts on the same provider and returns `MOCK_OK_5`.
-- [x] Propagate cancellation through chat search provider/fallback fetches, opened-page reads, /search, document AI analysis, vision provider fallbacks, and STT/transcribe; search disconnect has a local HTTP integration test.
-- [ ] Finish cancellation for /photo shared vision single-flight, image search, shopping fetches, and document extraction itself.
+- [x] Propagate cancellation through chat search provider/fallback fetches, opened-page reads, /search, document AI analysis, vision provider fallbacks, STT/transcribe, and /photo shared vision single-flight; search and multi-subscriber photo disconnects have local HTTP integration tests.
+- [ ] Finish cancellation for image search, shopping fetches, and document extraction itself.
 - [x] Add mocked mobile UI E2E: fake microphone/recognition, `/transcribe`, valid silent TTS audio, five consecutive wake commands, degraded timeout warning, and exactly-one-request/no-auto-retry assertion. GitHub Actions run 45750863159: `MOBILE_E2E_OK`.
 - [x] Add regression coverage for sequential wake commands, overlapping text requests, client abort, provider timeout classification, degraded timeout fallback, and no duplicate retry; physical iPhone remains separate.
 - [ ] Fix only reproduced defects; preserve existing request/response contracts unless explicitly tested.
@@ -90,6 +90,7 @@
 - [ ] Run full unit/integration suite, syntax checks, browser E2E, and live read-only API probes.
 - [ ] Review exact diff independently against this design and plan.
 - [x] Verify the Vercel preview for commit c129b9515422ba824328e7d61cfb3aed0675792d; static HTML fetched. This preview is stale relative to the current branch HEAD and points at the production API, so it is not used for interactive acceptance. No API requests were sent from preview.
+- [ ] Create a preview for the exact current branch commit after the Vercel deployment API quota resets; current API creation is blocked with 402 `api-deployments-free-per-day` and a 24-hour retry window.
 - [ ] Prepare a user-operated iPhone Safari acceptance checklist.
 - [ ] Report PASS / FAIL / BLOCKED / NOT RUN, residual risks, and exact rollback point.
 - [ ] Stop before production merge/deploy pending an explicit release decision.
@@ -115,3 +116,6 @@
 - 2026-11-26: corrected provider circuit scope so one model timeout no longer blocks the whole provider host. Added an integration test that simulates a timeout on the first Groq model and verifies that the next model on the same provider returns a valid response.
 - 2026-11-26: propagated client cancellation through chat search, all six fallback search fetches, public-page reads, the standalone /search route, and document AI analysis. Added an HTTP integration test that disconnects during Serper search and confirms the provider fetch is aborted. /photo shared single-flight, image search, shopping fetches, and document extraction itself remain open.
 - 2026-11-26: checkpoint commit 6e982a338b927d21f818ea906a2a2a94f63c4c6a: GitHub CI 81/81 passed, Autonomy bridge verification SUCCESS, mocked mobile UI E2E MOBILE_E2E_OK. Physical iPhone Safari and live production-provider acceptance remain NOT RUN.
+
+- 2026-11-26: made /photo shared vision inference subscriber-aware. Identical photo requests share one provider call; a disconnected client no longer cancels inference needed by another subscriber, while the final disconnect aborts the provider fetch. Integration test covers both subscriber registration and final-client cancellation.
+- 2026-11-26: checkpoint commit e6530b1a37a2dde31d7fa323ce41d818b19af132: GitHub CI **82/82 passed**, Autonomy bridge verification SUCCESS, mocked mobile UI E2E **MOBILE_E2E_OK**. Real iPhone Safari and live provider acceptance remain NOT RUN.
