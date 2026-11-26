@@ -30,9 +30,10 @@
 - [x] Increase Qwen text output budget from 192 to 2048 tokens and allow 7 seconds for generation, bounded by the existing 18-second chat deadline; preserve Qwen vision at 1024 tokens / 15 seconds.
 - [x] Correct GPT-OSS model matching: the old `/20b$/` suffix check also matched `120b`, incorrectly applying the 20B budget to 120B.
 - [x] Full CI on commit `29767ddbb787215e5bbe2b32e7aca8ff7b331ad4`: 60 tests passed, 0 failed (GitHub Actions run 45750004257).
-- [ ] Verify actual provider completion and response rendering against live preview; iPhone Safari remains a separate acceptance step.
-- [ ] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
-- [ ] Verify absolute deadlines, abort propagation, disconnect handling, queue slot release, and timeout response semantics.
+- [ ] Verify actual provider completion and response rendering against a safe staging API; the Vercel preview HTML currently points to production `https://ai.aliceq.ru`, so no API requests were sent from preview.
+- [x] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
+- [x] Surface degraded/fallback warnings before rendering chat content; timeout fallback now explicitly says no automatic retry was launched and no request was saved.
+- [ ] Verify absolute deadlines, abort propagation, disconnect handling, and queue slot release; source review shows client disconnect is logged but not yet propagated into provider fetch cancellation.
 - [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
 - [ ] Fix only reproduced defects; preserve existing request/response contracts unless explicitly tested.
 
@@ -54,7 +55,7 @@
 - [x] Centralize model-specific output budgets and timeout selection; unit tests cover Qwen text/vision and GPT-OSS 20B/120B.
 - [ ] Map provider order, per-provider timeout, shared deadline, circuit-breaker, and concurrency behavior.
 - [ ] Test 401, 402, 429, 5xx, timeout, empty body, malformed JSON, and exhausted fallback.
-- [ ] Ensure degraded fallback is explicitly distinguishable from a normal successful AI answer.
+- [x] Ensure degraded fallback is explicitly distinguishable from a normal successful AI answer; UI warning and truthful timeout copy are covered by regression tests.
 - [ ] Check provider logs contain request correlation and safe metadata, never credentials or personal payloads.
 
 ## Phase 5 — Laboratory / autonomy contour
@@ -80,7 +81,7 @@
 
 - [ ] Run full unit/integration suite, syntax checks, browser E2E, and live read-only API probes.
 - [ ] Review exact diff independently against this design and plan.
-- [ ] Verify preview deployment uses the reviewed commit.
+- [x] Verify Vercel preview is built from the reviewed branch commit; HTML returns HTTP 200. Preview is not a safe end-to-end target because its API base points at production.
 - [ ] Prepare a user-operated iPhone Safari acceptance checklist.
 - [ ] Report PASS / FAIL / BLOCKED / NOT RUN, residual risks, and exact rollback point.
 - [ ] Stop before production merge/deploy pending an explicit release decision.
@@ -93,3 +94,5 @@
 - 2026-11-26: fixed autonomy self-check false-green when no core tools are bound; deployment and 35x acceptance now require `coreConnected:true`. CI: 55/55 tests passed. Live production self-check remains NOT RUN.
 
 - 2026-11-26: added tested provider policy: Qwen text 2048 tokens / 7 seconds, Qwen vision 1024 tokens / 15 seconds; corrected GPT-OSS 120B classification. RED was observed before adding the policy module. Full CI: 60/60 tests passed. Production and VPS remain untouched.
+
+- 2026-11-26: traced the full text UI/API/provider/renderer path. Added visible degraded-mode warnings and corrected timeout copy so it no longer claims a request was saved; regression tests observed RED before the UI change. Diagnostic frontend version now identifies this audited build. CI: 62/62 tests passed on commit `603df3958799f65443bea5a382c968c7ac7fa21e`. Vercel preview HTML uses the production API base; no preview API requests were made. Client-disconnect cancellation remains an open item.
