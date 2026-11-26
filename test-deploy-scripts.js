@@ -71,3 +71,8 @@ test('workflow-only edits do not trigger another production VPS deployment',()=>
  assert.ok(productionWorkflow.includes("paths-ignore:"));
  for(const p of ['.github/workflows/authoritative-production-verify.yml','.github/workflows/mobile-e2e.yml','.github/workflows/production-deploy-v2.yml'])assert.ok(productionWorkflow.includes(p));
 });
+
+test('npm test includes the complete discovered test suite',()=>{
+ const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+ assert.match(pkg.scripts?.test||'',/^node --test(?:\\s|$)/,'npm test must run Node\'s full test discovery instead of a hand-picked subset');
+});
