@@ -110,6 +110,8 @@ assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversat
 const voiceStart=ui.indexOf('async function voice(){'),voiceEnd=ui.indexOf('async function image(){',voiceStart),voiceHandler=ui.slice(voiceStart,voiceEnd);
 assert.ok(voiceStart>=0&&voiceEnd>voiceStart&&voiceHandler.includes("fetch(API+'/transcribe'"),'recorded voice must use the dedicated STT route, not the chat route with its shorter global deadline');
 assert.ok(!voiceHandler.includes("fetch(API+'/chat'"),'recorded voice transcription must not pass through the 18-second chat deadline');
+const voiceFinishStart=voiceHandler.indexOf('const finish=async()=>{'),voiceFinishEnd=voiceHandler.indexOf('recorder.onstop=finish',voiceFinishStart),voiceFinish=voiceHandler.slice(voiceFinishStart,voiceFinishEnd),voiceFinally=voiceFinish.slice(voiceFinish.lastIndexOf('finally{'));
+assert.ok(voiceFinally.includes('await Promise.resolve(window.__ttsPromise)')&&voiceFinally.indexOf('await Promise.resolve(window.__ttsPromise)')<voiceFinally.indexOf('window.__resumeWake?.()'),'recorded voice must not restart the microphone until its spoken answer has finished');
 
 assert.ok(src.includes("body.max_completion_tokens=vision?1024:192;"),'Qwen text output budget must allow up to 192 tokens for complete answers');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
