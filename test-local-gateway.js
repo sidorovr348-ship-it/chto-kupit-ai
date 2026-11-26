@@ -28,7 +28,7 @@ assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfRead
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
-assert.ok(src.includes('body.max_completion_tokens=vision?1024:192;body.temperature=.55;'),'Groq Qwen text requests must allow up to 192 output tokens so normal answers are not cut off; vision keeps its separate budget');
+assert.ok(src.includes("const {applyProviderPolicy,providerTimeoutMs}=require('./src/provider-policy');")&&src.includes('applyProviderPolicy({model,messages:vision?boundedMessages:')&&src.includes('timeoutFor=model=>Math.min(providerTimeoutMs(model,vision),remaining())'),'provider payload and timeout must use the tested model-specific policy');
 assert.ok(src.includes("const {extractChatCompletion}=require('./src/provider-response');")&&src.includes('const parsed=extractChatCompletion(d)'),'all OpenAI-compatible provider responses must pass through the shared completion validator');
 assert.ok(src.includes("if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000);"),'a token-limit truncation must trigger fallback without misclassifying a healthy provider as unavailable');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
@@ -113,7 +113,7 @@ assert.ok(!voiceHandler.includes("fetch(API+'/chat'"),'recorded voice transcript
 const voiceFinishStart=voiceHandler.indexOf('const finish=async()=>{'),voiceFinishEnd=voiceHandler.indexOf('recorder.onstop=finish',voiceFinishStart),voiceFinish=voiceHandler.slice(voiceFinishStart,voiceFinishEnd),voiceFinally=voiceFinish.slice(voiceFinish.lastIndexOf('finally{'));
 assert.ok(voiceFinally.includes('await Promise.resolve(window.__ttsPromise)')&&voiceFinally.indexOf('await Promise.resolve(window.__ttsPromise)')<voiceFinally.indexOf('window.__resumeWake?.()'),'recorded voice must not restart the microphone until its spoken answer has finished');
 
-assert.ok(src.includes("body.max_completion_tokens=vision?1024:192;"),'Qwen text output budget must allow up to 192 tokens for complete answers');
+assert.ok(src.includes('applyProviderPolicy('),'provider output limits must be applied through the tested policy module');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
 assert.ok(src.includes('finish_reason:parsed.finishReason')&&src.includes('completion_tokens:parsed.completionTokens')&&src.includes('content_chars:String(content).length'),'provider success logs must expose safe quality and token metrics');
 assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
