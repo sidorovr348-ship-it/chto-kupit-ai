@@ -54,6 +54,21 @@ global.fetch = async (input, init = {}) => {
     return originalFetch(input, init);
   }
 
+  if (String(url).startsWith('https://api.groq.com/openai/v1/chat/completions') && process.env.MOCK_VISION_HANG === '1' && String(init.body || '').includes('image_url')) {
+    process.stdout.write('MOCK_VISION_STARTED\\n');
+    await new Promise((resolve, reject) => {
+      const signal = init.signal;
+      const onAbort = () => {
+        signal?.removeEventListener('abort', onAbort);
+        process.stdout.write('MOCK_VISION_ABORTED\\n');
+        const error = new Error('mock vision request aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
   const id = ++providerCall;
   process.stdout.write('MOCK_PROVIDER_STARTED:' + id + '\n');
 
