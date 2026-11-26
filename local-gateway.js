@@ -313,7 +313,7 @@ app.post('/photo',async(req,res)=>{
    });
    visionInFlight.set(cacheKey,entry);
   }
-  subscription=entry;subscriber={};entry.subscribers.add(subscriber);
+  subscription=entry;subscriber={};entry.subscribers.add(subscriber);console.log('PHOTO_REQUEST_ATTACHED',JSON.stringify({subscribers:entry.subscribers.size}));
   const z=await entry.promise;
   if(clientController.signal.aborted||res.writableEnded)return;
   res.json({ok:true,...z});
