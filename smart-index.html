@@ -181,6 +181,12 @@ async function send(queuedText=null){
     }
     let j=await api('/chat',body,48000,requestController.signal);
     w.remove();
+    if(j.warning){
+      const warningText=j.provider==='bounded-timeout-fallback'||j.warning==='AI provider deadline exceeded'
+        ?'Основной AI-канал не ответил вовремя. Ниже — резервное сообщение, а не полноценный ответ.'
+        :'Ответ подготовлен резервным AI-каналом и может быть менее полным.';
+      add('⚠️ '+warningText);
+    }
     if(j.images&&j.images.length){
       const heading=add(String(j.result||'Нашёл фотографии:'));
       const gallery=document.createElement('div');gallery.className='image-gallery';
