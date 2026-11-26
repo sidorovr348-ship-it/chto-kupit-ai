@@ -1,0 +1,42 @@
+name: My AI Unified — mocked mobile UI E2E
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'smart-index.html'
+      - 'mobile-mock-e2e.mjs'
+      - 'mobile-e2e.mjs'
+      - 'local-gateway.js'
+      - 'src/**'
+      - '.github/workflows/mobile-mock-e2e.yml'
+  push:
+    branches:
+      - 'superpowers/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: my-ai-unified-mocked-mobile-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install project dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Playwright
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.55.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check mocked E2E script syntax
+        run: node --check mobile-mock-e2e.mjs
+      - name: Run mobile UI with isolated mock API
+        run: node mobile-mock-e2e.mjs
