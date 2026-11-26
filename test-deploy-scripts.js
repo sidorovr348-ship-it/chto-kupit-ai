@@ -76,3 +76,8 @@ test('npm test includes the complete discovered test suite',()=>{
  const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
  assert.equal(pkg.scripts?.test,'node --test',"npm test must run the complete Node test discovery without a hand-picked file list");
 });
+
+test('CI invokes the same npm test entry point used by deployment preflight',()=>{
+ const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');
+ assert.match(ci,/^\s+- run: npm test\s*$/m,'CI must exercise the npm test script used by deployment');
+});
