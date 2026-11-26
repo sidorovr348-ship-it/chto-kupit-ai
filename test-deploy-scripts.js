@@ -54,7 +54,7 @@ test('100-case acceptance checks the current chat timeout implementation',()=>{
  const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
  assert.ok(html.includes("api('/chat',body,48000,requestController.signal)"));
  assert.ok(html.includes('timer=setTimeout(()=>controller.abort(),to)'));
- assert.ok(acceptance.includes("api('/chat',body,48000,requestController.signal)"));
+ assert.ok(acceptance.includes('ok(x.ok&&x.coreConnected===true'),'100-case acceptance must not accept a disconnected autonomy runtime');
  assert.ok(acceptance.includes('timer=setTimeout(()=>controller.abort(),to)'));
  assert.ok(!acceptance.includes('const deadline=Date.now()+to'));
 });
