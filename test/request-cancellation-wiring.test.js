@@ -23,4 +23,7 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /async function askMistralVisionFirst\(messages,externalSignal=null\)/, 'Mistral vision fallback must accept client cancellation');
   assert.match(source, /async function groqVisionResponses\(key,model,messages,timeout=30000,externalSignal=null\)/, 'Groq Responses vision fallback must accept client cancellation');
   assert.match(source, /groqVisionResponses\(groq,model,messages,30000,externalSignal\)/, 'vision fallback must forward the client signal');
+  assert.match(source, /async function transcribe\(dataUrl,externalSignal=null\)/, 'STT provider must accept the request cancellation signal');
+  assert.match(source, /transcribe\(body\.audio,sttAbortController\.signal\)/, 'transcribe route must forward client disconnect cancellation');
+  assert.match(source, /transcribe\(String\(b\.audio\),requestAbortController\.signal\)/, 'chat audio transcription must share the chat request cancellation signal');
 });
