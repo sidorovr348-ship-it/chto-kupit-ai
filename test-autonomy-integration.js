@@ -71,3 +71,13 @@ test('autonomy runtime refuses unknown task kinds', async () => {
   const runtime = createAutonomyRuntime({ tools: {} });
   await assert.rejects(() => runtime.executeTask({ kind: 'production-deploy' }), /AUTONOMY_TASK_KIND_NOT_ALLOWED/);
 });
+
+test('self-check must not report healthy when no core tools are connected', async () => {
+  const { createAutonomyRuntime } = await import('./autonomy-lab/runtime.mjs');
+  const runtime = createAutonomyRuntime({ tools: {} });
+  const self = await runtime.selfCheck();
+  assert.equal(runtime.status().connectedToCore, false);
+  assert.equal(self.coreConnected, false);
+  assert.equal(self.ok, false);
+  assert.equal(self.reason, 'AUTONOMY_CORE_TOOLS_NOT_BOUND');
+});
