@@ -17,7 +17,7 @@ test('iOS Safari recognition sessions are primed and never cut during normal wak
   assert.match(wake, /x\.continuous=false/, 'Safari recognition sessions must remain single-shot');
   assert.match(wake, /x\.onend=\(\)=>[\s\S]*if\(queue\.length\)\{processQueue\(\);return\}/, 'queued commands must run after natural recognition end');
   assert.match(wake, /function enqueue\(command\)\{[\s\S]*queue\.push\(q\);[\s\S]*if\(!rec&&!starting&&!priming\)processQueue\(\)/, 'enqueue must wait for natural session end rather than aborting recognition');
-  assert.match(wake, /async function processQueue\(\)\{if\(processing\|\|paused\|\|!enabled\|\|rec\|\|starting\|\|priming\)return;processing=true;clearTimers\(\);/, 'chat processing must not stop an active recognizer');
+  assert.match(wake, /async function processQueue\(\)\{\s*if\(processing\|\|paused\|\|!enabled\|\|rec\|\|starting\|\|priming\)return;\s*processing=true;clearTimers\(\);/, 'chat processing must wait for natural recognizer completion');
   assert.match(wake, /window\.__startManualVoice=\(\)=>\{/, 'iOS manual dictation must reuse SpeechRecognition');
   assert.match(html, /iosSpeech&&window\.__startManualVoice/, 'iOS voice button must avoid a second getUserMedia capture while wake recognition is active');
   assert.doesNotMatch(wake, /status\([^;]*Перезапускаю распознавание после тишины[^;]*\);stopCurrent\(true\)/, 'silence watchdog must not abort a Safari recognition session');
