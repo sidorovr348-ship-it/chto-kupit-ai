@@ -29,6 +29,8 @@ assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
 assert.ok(src.includes('body.max_completion_tokens=vision?1024:192;body.temperature=.55;'),'Groq Qwen text requests must allow up to 192 output tokens so normal answers are not cut off; vision keeps its separate budget');
+assert.ok(src.includes("const {extractChatCompletion}=require('./src/provider-response');")&&src.includes('const parsed=extractChatCompletion(d)'),'all OpenAI-compatible provider responses must pass through the shared completion validator');
+assert.ok(src.includes("if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000);"),'a token-limit truncation must trigger fallback without misclassifying a healthy provider as unavailable');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
 assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
