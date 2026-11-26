@@ -16,4 +16,7 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /createProviderCancellation\(timeout,externalSignal\)/, 'provider fetch must combine client cancellation with its own timeout');
   assert.match(source, /cancellation\.source\(\)==='client'/, 'client cancellation must be distinguished from provider timeout');
   assert.ok(source.includes("catch(e){if(externalSignal?.aborted)throw createClientCancellationError();if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000)"), 'client cancellation must not trip the provider model circuit breaker');
+  assert.match(source, /callOllamaIfReady\(messages,\{numPredict:48,timeoutMs:Math\.min\(14500,remaining\(\)\),signal:externalSignal\}\)/, 'local fallback must receive the client signal');
+  const localSource = fs.readFileSync('src/local-ai.js', 'utf8');
+  assert.match(localSource, /createProviderCancellation\(timeoutMs, options\.signal\)/, 'local Ollama fetch must combine its timeout with client cancellation');
 });
