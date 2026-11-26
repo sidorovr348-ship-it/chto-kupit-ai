@@ -19,6 +19,8 @@ test('iOS Safari recognition sessions are primed and never cut during normal wak
   assert.match(wake, /function enqueue\(command\)\{[\s\S]*queue\.push\(q\);[\s\S]*if\(!rec&&!starting&&!priming\)processQueue\(\)/, 'enqueue must wait for natural session end rather than aborting recognition');
   assert.match(wake, /async function processQueue\(\)\{\s*if\(processing\|\|paused\|\|!enabled\|\|rec\|\|starting\|\|priming\)return;\s*processing=true;clearTimers\(\);/, 'chat processing must wait for natural recognizer completion');
   assert.match(wake, /window\.__startManualVoice=\(\)=>\{/, 'iOS manual dictation must reuse SpeechRecognition');
+  assert.ok(wake.includes('Распознавание не подтверждено'), 'idle microphone state must be described as unconfirmed until speechstart');
+  assert.ok(!wake.includes('Микрофон остаётся активным'), 'UI must not claim the microphone is active without a speech event');
   assert.match(html, /iosSpeech&&window\.__startManualVoice/, 'iOS voice button must avoid a second getUserMedia capture while wake recognition is active');
   assert.doesNotMatch(wake, /status\([^;]*Перезапускаю распознавание после тишины[^;]*\);stopCurrent\(true\)/, 'silence watchdog must not abort a Safari recognition session');
 });
