@@ -37,7 +37,7 @@
 - [x] Verify cancellation and slot release with a local HTTP integration test: occupy all four text slots, queue a fifth request, abort the first four, and confirm the fifth starts on the same provider and returns `MOCK_OK_5`.
 - [ ] Extend cancellation to secondary search HTTP fetches, vision helpers, STT/transcribe, document and photo routes.
 - [x] Add mocked mobile UI E2E: fake microphone/recognition, `/transcribe`, valid silent TTS audio, five consecutive wake commands, degraded timeout warning, and exactly-one-request/no-auto-retry assertion. GitHub Actions run 45750863159: `MOBILE_E2E_OK`.
-- [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
+- [x] Add regression coverage for sequential wake commands, overlapping text requests, client abort, provider timeout classification, degraded timeout fallback, and no duplicate retry; physical iPhone remains separate.
 - [ ] Fix only reproduced defects; preserve existing request/response contracts unless explicitly tested.
 
 ## Phase 3 — Voice and hands-free lifecycle
@@ -48,15 +48,15 @@
 - [x] Add regression guards for the STT endpoint and TTS-before-relisten ordering; CI: 53 passed, 0 failed (GitHub Actions run 45748953387).
 - [ ] Verify actual microphone permission, audio playback, and repeated commands on iPhone Safari; simulated Chromium is not a substitute.
 - [x] Trace source-level microphone permission, MediaRecorder/STT, wake recognition state machine, queue, TTS, and listening restart; browser-emulated mobile E2E passed, physical iPhone remains separate.
-- [ ] Verify a failed request cannot leave the UI permanently busy or listening state falsely green.
-- [ ] Verify one voice command produces one request; no automatic duplicate retry after disconnect.
+- [x] Verify simulated failed-request recovery: degraded timeout is shown, one request only, UI returns to listening. Physical iPhone remains unverified.
+- [x] Verify one command produces one request and no automatic duplicate retry in mocked mobile E2E; real Safari verification remains open.
 - [x] Add repeat-command and failure-recovery regression coverage in mocked mobile E2E: five consecutive wake commands, timeout fallback, no duplicate request, TTS completion, and wake restart.
 - [ ] Keep physical iPhone Safari permission/audio/wake tests separate from simulated Playwright checks.
 
 ## Phase 4 — Provider and fallback chain
 
 - [x] Centralize model-specific output budgets and timeout selection; unit tests cover Qwen text/vision and GPT-OSS 20B/120B.
-- [ ] Map provider order, per-provider timeout, shared deadline, circuit-breaker, and concurrency behavior.
+- [x] Map the normal text-chat provider order, per-model timeout/cooldown, shared 18-second deadline, concurrency slots, and client-cancellation path. Search/vision/STT routes remain to map.
 - [ ] Test 401, 402, 429, 5xx, timeout, empty body, malformed JSON, and exhausted fallback.
 - [x] Ensure degraded fallback is explicitly distinguishable from a normal successful AI answer; UI warning and truthful timeout copy are covered by regression tests.
 - [ ] Check provider logs contain request correlation and safe metadata, never credentials or personal payloads.
