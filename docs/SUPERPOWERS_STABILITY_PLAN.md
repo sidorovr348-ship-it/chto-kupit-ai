@@ -33,7 +33,9 @@
 - [ ] Verify actual provider completion and response rendering against a safe staging API; the Vercel preview HTML currently points to production `https://ai.aliceq.ru`, so no API requests were sent from preview.
 - [x] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
 - [x] Surface degraded/fallback warnings before rendering chat content; timeout fallback now explicitly says no automatic retry was launched and no request was saved.
-- [ ] Verify absolute deadlines, abort propagation, disconnect handling, and queue slot release; source review shows client disconnect is logged but not yet propagated into provider fetch cancellation.
+- [x] Propagate client disconnect and route deadline through `/chat` → dispatcher → text-slot queue → provider fetch; cancelled waiters are removed and client abort does not trip provider cooldown.
+- [x] Verify cancellation and slot release with a local HTTP integration test: occupy all four text slots, queue a fifth request, abort the first four, and confirm the fifth starts on the same provider and returns `MOCK_OK_5`.
+- [ ] Extend cancellation to secondary search HTTP fetches, vision helpers, STT/transcribe, document and photo routes.
 - [x] Add mocked mobile UI E2E: fake microphone/recognition, `/transcribe`, valid silent TTS audio, five consecutive wake commands, degraded timeout warning, and exactly-one-request/no-auto-retry assertion. GitHub Actions run 45750863159: `MOBILE_E2E_OK`.
 - [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
 - [ ] Fix only reproduced defects; preserve existing request/response contracts unless explicitly tested.
@@ -82,7 +84,7 @@
 
 - [ ] Run full unit/integration suite, syntax checks, browser E2E, and live read-only API probes.
 - [ ] Review exact diff independently against this design and plan.
-- [x] Verify Vercel preview for commit `cbf0b43bfa5ccc716a7fde7701bbe8cf624d2d0a`; static HTML fetched and diagnostic version marker matches. Preview is not a safe end-to-end target because its API base points at production.
+- [x] Verify Vercel preview for commit `54ab9a9aa3898ff28826b9caab41a790e43c0784`; static HTML fetched, diagnostic version marker and fallback-warning code match. Preview is not a safe end-to-end target because its API base points at production.
 - [ ] Prepare a user-operated iPhone Safari acceptance checklist.
 - [ ] Report PASS / FAIL / BLOCKED / NOT RUN, residual risks, and exact rollback point.
 - [ ] Stop before production merge/deploy pending an explicit release decision.
@@ -99,3 +101,7 @@
 - 2026-11-26: traced the full text UI/API/provider/renderer path. Added visible degraded-mode warnings and corrected timeout copy so it no longer claims a request was saved; regression tests observed RED before the UI change. Diagnostic frontend version now identifies this audited build. CI: 62/62 tests passed on commit `603df3958799f65443bea5a382c968c7ac7fa21e`. Vercel preview HTML uses the production API base; no preview API requests were made. Client-disconnect cancellation remains an open item.
 
 - 2026-11-26: isolated mocked mobile UI E2E passed (`MOBILE_E2E_OK`, run 45750863159). It exercises microphone recording/transcription, Web Audio decode/finish using silent mock audio, five sequential wake commands, timeout warning, no automatic duplicate request, and wake resumption. All API calls are intercepted in Playwright; no production API requests are sent. CI on the same commit: 62/62 tests passed. Real iPhone Safari remains NOT RUN.
+
+- 2026-11-26: fixed a cancellation/circuit-breaker defect. Previously, the Groq fallback chain added client-aborted requests to the 30-second per-model `textModelBlockedUntil` map; this could suppress the next request even though the provider was healthy. Client/route cancellation now exits before the cooldown is applied. Added a local HTTP integration test that occupies all four provider slots, queues a fifth request, aborts the first four, and verifies the fifth is admitted and succeeds. Test passed in 0.44 seconds.
+- 2026-11-26: latest branch commit `54ab9a9aa3898ff28826b9caab41a790e43c0784`: GitHub CI **70/70 passed** (run 45751863913); Autonomy bridge verification SUCCESS (run 45751863927); mocked mobile UI E2E **MOBILE_E2E_OK** (run 45751863872). E2E includes five sequential wake commands, manual mic recording and mocked transcription, silent TTS audio decode/finish, degraded timeout warning, no automatic duplicate request, and wake resumption. It is browser emulation with mock API, not physical iPhone Safari.
+- 2026-11-26: Vercel preview for the exact latest branch commit is READY; static HTML fetch confirms `2026-11-26-superpowers-stability-1`, fallback warning, and `/transcribe` path. The preview's API base remains production; no UI API calls were sent from preview. Production `main` remains at `d36dc3f7babaa46ac8140e7acfd1ec8b606f2f83`; no VPS, production deployment, secrets, DNS, or Cloudflare changes were made.
