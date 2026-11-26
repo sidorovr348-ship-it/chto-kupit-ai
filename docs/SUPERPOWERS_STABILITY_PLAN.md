@@ -26,6 +26,11 @@
 - [x] Add unit coverage for provider output truncation (`finish_reason: length`) and empty successful responses.
 - [x] Treat provider-declared truncation as an incomplete result and continue the fallback chain; do not mark the provider unavailable for this condition.
 - [x] Verify source integration and full suite: 53 passed, 0 failed (GitHub Actions run 45748721539).
+- [x] Add regression tests for model-specific provider output budgets and generation timeouts; observe RED when the policy module is absent (GitHub Actions run 45749934970).
+- [x] Increase Qwen text output budget from 192 to 2048 tokens and allow 7 seconds for generation, bounded by the existing 18-second chat deadline; preserve Qwen vision at 1024 tokens / 15 seconds.
+- [x] Correct GPT-OSS model matching: the old `/20b$/` suffix check also matched `120b`, incorrectly applying the 20B budget to 120B.
+- [x] Full CI on commit `29767ddbb787215e5bbe2b32e7aca8ff7b331ad4`: 60 tests passed, 0 failed (GitHub Actions run 45750004257).
+- [ ] Verify actual provider completion and response rendering against live preview; iPhone Safari remains a separate acceptance step.
 - [ ] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
 - [ ] Verify absolute deadlines, abort propagation, disconnect handling, queue slot release, and timeout response semantics.
 - [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
@@ -46,6 +51,7 @@
 
 ## Phase 4 — Provider and fallback chain
 
+- [x] Centralize model-specific output budgets and timeout selection; unit tests cover Qwen text/vision and GPT-OSS 20B/120B.
 - [ ] Map provider order, per-provider timeout, shared deadline, circuit-breaker, and concurrency behavior.
 - [ ] Test 401, 402, 429, 5xx, timeout, empty body, malformed JSON, and exhausted fallback.
 - [ ] Ensure degraded fallback is explicitly distinguishable from a normal successful AI answer.
@@ -85,3 +91,5 @@
 - 2026-11-26: added a shared provider-response validator. Provider-declared output truncation now enters the fallback chain rather than being returned as a complete answer; empty successful responses are rejected. CI: 53/53 tests passed. Live provider behavior and real iPhone journey remain unverified.
 - 2026-11-26: corrected recorded-voice routing to `/transcribe` and held wake listening until TTS completion. Regression guards passed in CI (53/53); physical iPhone Safari behavior remains NOT RUN.
 - 2026-11-26: fixed autonomy self-check false-green when no core tools are bound; deployment and 35x acceptance now require `coreConnected:true`. CI: 55/55 tests passed. Live production self-check remains NOT RUN.
+
+- 2026-11-26: added tested provider policy: Qwen text 2048 tokens / 7 seconds, Qwen vision 1024 tokens / 15 seconds; corrected GPT-OSS 120B classification. RED was observed before adding the policy module. Full CI: 60/60 tests passed. Production and VPS remain untouched.
