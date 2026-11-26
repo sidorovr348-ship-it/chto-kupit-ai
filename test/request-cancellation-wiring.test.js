@@ -26,4 +26,13 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /async function transcribe\(dataUrl,externalSignal=null\)/, 'STT provider must accept the request cancellation signal');
   assert.match(source, /transcribe\(body\.audio,sttAbortController\.signal\)/, 'transcribe route must forward client disconnect cancellation');
   assert.match(source, /transcribe\(String\(b\.audio\),requestAbortController\.signal\)/, 'chat audio transcription must share the chat request cancellation signal');
+  assert.match(source, /async function searchWeb\(query,num=10,externalSignal=null\)/, 'search cache and provider chain must accept client cancellation');
+  assert.match(source, /async function searchWebFallback\(query,num=10,externalSignal=null\)/, 'fallback search engines must accept client cancellation');
+  assert.match(source, /async function readWebPage\(url,externalSignal=null\)/, 'page reader must accept client cancellation');
+  assert.match(source, /async function enrichSearchResults\(items,externalSignal=null\)/, 'search result enrichment must forward cancellation');
+  assert.match(source, /searchWeb\(q,10,externalSignal\),enriched=await enrichSearchResults\(a,externalSignal\)/, 'chat search must propagate the request signal through search and page reads');
+  assert.match(source, /signal:signalWithTimeout\(8000,externalSignal\)/, 'fallback search fetches must combine provider timeout with client cancellation');
+  assert.match(source, /app\.post\('\/search',async\(req,res\)=>\{const controller=new AbortController\(\)/, 'standalone search route must cancel its provider request on disconnect');
+  assert.match(source, /app\.post\('\/document',async\(req,res\)=>\{const controller=new AbortController\(\)/, 'document route must own a cancellation controller');
+  assert.match(source, /\],false,controller\.signal\)/, 'document AI analysis must receive the client cancellation signal');
 });
