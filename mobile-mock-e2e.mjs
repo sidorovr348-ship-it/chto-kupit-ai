@@ -9,7 +9,8 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const APP='http://127.0.0.1:'+server.address().port+'/smart-index.html';
 const API='https://ai.aliceq.ru';
 const mockChatRequests=[];
-let mockTranscribeRequests=0,mockApiRequests=0;
+let mockTranscribeRequests=0,mockApiRequests=0,mockTtsRequests=0;
+function silentWav(){const sampleRate=8000,samples=1600,dataBytes=samples*2,b=Buffer.alloc(44+dataBytes);b.write('RIFF',0);b.writeUInt32LE(36+dataBytes,4);b.write('WAVE',8);b.write('fmt ',12);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(sampleRate,24);b.writeUInt32LE(sampleRate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(dataBytes,40);return b;}
 
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
 
@@ -40,7 +41,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     if(path==='/autonomy/self-check')return json({ok:true,coreConnected:true});
     if(path==='/transcribe'){mockTranscribeRequests++;return json({ok:true,text:'Кто такой Пётр Первый?'})}
     if(path==='/photo')return json({ok:true,result:'На тестовом изображении виден предмет. Это ответ имитированного сервера.'});
-    if(path==='/tts')return route.fulfill({status:200,headers:{...cors,'content-type':'audio/mpeg'},body:Buffer.from('ID3')});
+    if(path==='/tts'){mockTtsRequests++;return route.fulfill({status:200,headers:{...cors,'content-type':'audio/wav'},body:silentWav()})}
     if(path==='/chat'){
       let body={};try{body=request.postDataJSON()||{}}catch{}
       const prompt=String(body.prompt||body.messages?.filter(x=>x?.role==='user').at(-1)?.content||'').trim();
@@ -86,14 +87,6 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
 
   try{
     await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
-    await page.locator('#toolsToggle').tap();
-    const sound=page.locator('#sound');
-    if(await sound.count()){
-      const label=String(await sound.textContent()||'');
-      if(label.includes('🔊'))await sound.click();
-      await page.waitForFunction(()=>String(document.querySelector('#sound')?.textContent||'').includes('🔇'),null,{timeout:5000});
-    }
-    await page.locator('body').click({position:{x:196,y:400}});
     if(await page.title()!=='Эй') throw Error('wrong title');
     for(const id of ['send','voice','photo','camera','file','video','imagegen','sound','stop','clear']){
       if(await page.locator('#'+id).count()!==1) throw Error('missing control: '+id);
@@ -240,6 +233,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.waitForTimeout(300);
     if(!dialog) throw Error('image prompt did not open');
     if(mockApiRequests<8)throw Error('mock API was not used for all expected UI flows; intercepted='+mockApiRequests);
+    if(mockTtsRequests<1)throw Error('TTS response path was not exercised; wake resumption after audio playback is unverified');
     if(errors.length) throw Error(errors.join('\n'));
     await page.screenshot({path:'mobile-e2e.png',fullPage:true});
     console.log('MOBILE_E2E_OK');
