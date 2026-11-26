@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   applyProviderOutputBudget,
+  providerTimeoutMs,
   readProviderCompletion
 } = require('./src/provider-output');
 
@@ -36,6 +37,13 @@ test('unrelated models keep their original payload limits', () => {
   const payload = applyProviderOutputBudget(basePayload(), 'vendor/other-model', false);
   assert.equal(payload.max_tokens, 700);
   assert.equal(Object.hasOwn(payload, 'max_completion_tokens'), false);
+});
+
+
+test('Qwen text gets enough time for its expanded output budget', () => {
+  assert.equal(providerTimeoutMs('qwen/qwen3.8-27b', false), 6000);
+  assert.equal(providerTimeoutMs('qwen/qwen3.8-27b', true), 15000);
+  assert.equal(providerTimeoutMs('openai/gpt-oss-120b', false), 2200);
 });
 
 test('complete provider responses return their text', () => {
