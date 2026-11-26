@@ -12,7 +12,7 @@ assert.ok(src.includes("autonomyInitState='initializing'")&&src.includes("autono
 for(const marker of ['function hasExplicitWeatherPlace','function wantsLocalWeather','async function currentWeather','geolocation-required','LOCAL_WEATHER_FAILED','timezone=auto'])assert.ok(src.includes(marker),`missing nearby-weather capability: ${marker}`);
 // Public internet access: direct URLs, public-host validation, redirect revalidation, and broader page extraction.
 for(const marker of ['async function publicWebUrl','async function fetchPublicWebUrl','async function readWebPage','route:\'webpage\'','items.slice(0,3)','t.slice(0,10000)','dns.lookup(host,{all:true,verbatim:true})','redirect:\'manual\''])assert.ok(src.includes(marker),`missing public web access guard/capability: ${marker}`);
-assert.ok(src.includes('const signal=AbortSignal.timeout(3500);')&&src.includes('const list=Array.isArray(items)?items.slice(0,3):[];')&&src.includes('return Promise.all(list.map(async x=>{'),'public page extraction must run concurrently with a bounded shared timeout, not sequentially consume the full chat deadline');
+assert.ok(src.includes('async function readWebPage(url,externalSignal=null)')&&src.includes('const signal=signalWithTimeout(3500,externalSignal);')&&src.includes('const list=Array.isArray(items)?items.slice(0,3):[];')&&src.includes('return Promise.all(list.map(async x=>{'),'public page extraction must run concurrently with a bounded timeout and honor client cancellation');
 for(const marker of ['qwen/qwen3.8-27b','/openai/v1/responses','groqVisionResponses','mistralMessages','groqBlockedUntil','reverseGeocode','wantsMoscowTime','Europe/Moscow','WEATHER_PRIMARY_FAILED','WEATHER_FALLBACK_FAILED','api.met.no/weatherapi/locationforecast/2.0/compact','paraloncloud.com/v1/chat/completions','whisper-large-v3-turbo','Access-Control-Allow-Origin','wantsShopping','wantsSearch','.zip','initAutonomy','createAutonomyRuntime({tools:','AUTONOMY_TASK_KIND_NOT_ALLOWED'])assert.ok(src.includes(marker),`missing ${marker}`);
 for(const route of ['/autonomy/status','/autonomy/self-check','/autonomy/task'])assert.ok(src.includes(route),`missing ${route}`);
 assert.ok(src.includes("SELF_CHECK_TIMEOUT")&&src.includes("лимит 8 секунд")&&src.includes("finally{deadline.clear()}"),'laboratory self-check must fail clearly within an eight-second server-side deadline');
@@ -22,28 +22,30 @@ const selfCheckRoute=src.slice(src.indexOf("app.post('/autonomy/self-check'"),sr
 const selfCheckRunner=src.slice(src.indexOf("const runSelfCheck=createSingleFlight"),src.indexOf("app.post('/autonomy/self-check'"));
 assert.ok(selfCheckRoute.includes("createDeadline(8000")&&selfCheckRoute.includes("Promise.race([runSelfCheck(),deadline.promise])")&&selfCheckRunner.includes("await initAutonomy()")&&selfCheckRunner.includes("await a.selfCheck()"),'the same eight-second deadline must bound initialization and the diagnostic while single-flight prevents overlap');
 // Regression guard: allow the local model enough time to answer when external provider quotas are exhausted, without exceeding the global chat deadline.
-assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
-assert.ok(src.includes("if(vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'early Ollama fallback must also use a short answer and the remaining bounded deadline');
-assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining())})"),'degraded-provider local fallback must use the bounded short-answer configuration');
+assert.ok(src.includes("if(canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining()),signal:externalSignal});if(externalSignal?.aborted)throw createClientCancellationError();"),'final Ollama fallback must use a short answer and the remaining bounded deadline');
+assert.ok(src.includes("if(externalSignal?.aborted||vision||localFallbackAttempted||!canStart(1500))return null;localFallbackAttempted=true;try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining()),signal:externalSignal})"),'early Ollama fallback must also use a short answer, remaining deadline, and skip work after client cancellation');
+assert.ok(src.includes("&&canStart(1500)){try{const local=await callOllamaIfReady(messages,{numPredict:48,timeoutMs:Math.min(14500,remaining()),signal:externalSignal})"),'degraded-provider local fallback must use the bounded short-answer configuration');
 assert.ok(!src.includes("numPredict:300,timeoutMs:Math.min(60000,remaining())"),'local fallback must not inherit the unbounded 60-second default');
 // Regression guard: chat admission must fail fast under load and share one absolute deadline.
 assert.ok(src.includes("'qwen/qwen3.8-27b','openai/gpt-oss-120b','openai/gpt-oss-20b'"),'Groq must use current fallback text models when preferred models are quota-limited');
-assert.ok(src.includes('body.max_completion_tokens=vision?1024:64;body.temperature=.55;'),'Groq Qwen text requests must reserve 64 output tokens to balance answer length and OTPM limits; vision keeps its separate budget');
+assert.ok(src.includes("const {applyProviderPolicy,providerTimeoutMs}=require('./src/provider-policy');")&&src.includes('applyProviderPolicy({model,messages:vision?boundedMessages:')&&src.includes('timeoutFor=model=>Math.min(providerTimeoutMs(model,vision),remaining())'),'provider payload and timeout must use the tested model-specific policy');
+assert.ok(src.includes("const {extractChatCompletion}=require('./src/provider-response');")&&src.includes('const parsed=extractChatCompletion(d)'),'all OpenAI-compatible provider responses must pass through the shared completion validator');
+assert.ok(src.includes("if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000);"),'a token-limit truncation must trigger fallback without misclassifying a healthy provider as unavailable');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
-assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
+assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline,externalSignal);"),'provider chain must use the caller absolute deadline and client cancellation signal');
 assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider chain must respect the 18-second absolute deadline');
-assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
-assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
+assert.ok(src.includes("setTimeout(()=>{requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));resolve(timeoutFallback())},17000)"),'search/shopping dispatch must abort abandoned provider work and return a fallback within 17 seconds');
+assert.ok(src.includes("requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));console.error('CHAT_REQUEST_DEADLINE'")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must abort abandoned work and return a fallback within 18 seconds');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
-assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
+assert.ok(src.includes("if(requestAbortController.signal.reason?.message==='CHAT_CLIENT_DISCONNECTED'||res.headersSent||res.writableEnded)return res;"),'late async completion must not write after client disconnect or a completed response');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
 assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fallback.model,warning:fallback.warning"),'whole-route timeout response must use the frontend-compatible result field');
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
 assert.ok(src.includes('if(b.companionMode)m.unshift') && src.includes('Не превращай каждый обычный разговор в психологический анализ'),'companion mode must add the behavior instructions only when explicitly enabled');
 const ui=fs.readFileSync('smart-index.html','utf8');
 for(const marker of ['image-gallery','image-result','Лицензия: ','item.licenseUrl','messages.push({role:\'user\',content:\'Пользователь прислал фотографию'])assert.ok(ui.includes(marker),`missing image gallery/context/attribution: ${marker}`);
-assert.ok(ui.includes("Версия интерфейса: 2026-11-08-voice-reliability-1")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
+assert.ok(ui.includes("Версия интерфейса: 2026-11-26-superpowers-stability-2")&&ui.includes("Promise.all(["),'diagnostics must be versioned and probe independent components concurrently');
 assert.ok(ui.includes("resolvedOptions().timeZone")&&ui.includes("по местному времени")&&ui.includes("врем(?:я|ени)"),'generic time questions, including colloquial «Сколько время», must be answered immediately using the device timezone without geolocation or a server request');
 assert.ok(ui.includes("const match=normalized.match(/^(?:(?:эй[\\s,;:!?.-]*)?(?:сколько будет|посчитай|вычисли|сколько)\\s*)?(-?\\d+(?:\\.\\d+)?)\\s*([+\\-×xX*÷/])\\s*(-?\\d+(?:\\.\\d+)?)\\s*[?!.]*$/iu)"),'basic arithmetic must be answered locally without a server request');
 assert.ok(ui.includes("messages:messages.slice(companionMode?-5:-6)"),'chat requests must include recent conversation history and reserve one context slot for companion instructions');
@@ -105,11 +107,16 @@ assert.ok(ui.includes('function cleanSpeechText(value)')&&ui.includes('text:spee
 assert.ok(!ui.includes('speechSynthesis.speak('),'browser default voice fallback must not switch the speaker');
 assert.ok(!ui.includes('for(let n=0;n<3;n++)'),'frontend API must not automatically retry a POST request');
 assert.ok(ui.includes('messages:messages.slice(companionMode?-5:-6)'),'conversation history must remain included');
+const voiceStart=ui.indexOf('async function voice(){'),voiceEnd=ui.indexOf('async function image(){',voiceStart),voiceHandler=ui.slice(voiceStart,voiceEnd);
+assert.ok(voiceStart>=0&&voiceEnd>voiceStart&&voiceHandler.includes("fetch(API+'/transcribe'"),'recorded voice must use the dedicated STT route, not the chat route with its shorter global deadline');
+assert.ok(!voiceHandler.includes("fetch(API+'/chat'"),'recorded voice transcription must not pass through the 18-second chat deadline');
+const voiceFinishStart=voiceHandler.indexOf('const finish=async()=>{'),voiceFinishEnd=voiceHandler.indexOf('recorder.onstop=finish',voiceFinishStart),voiceFinish=voiceHandler.slice(voiceFinishStart,voiceFinishEnd),voiceFinally=voiceFinish.slice(voiceFinish.lastIndexOf('finally{'));
+assert.ok(voiceFinally.includes('await Promise.resolve(window.__ttsPromise)')&&voiceFinally.indexOf('await Promise.resolve(window.__ttsPromise)')<voiceFinally.indexOf('window.__resumeWake?.()'),'recorded voice must not restart the microphone until its spoken answer has finished');
 
-assert.ok(src.includes("body.max_completion_tokens=vision?1024:64;"),'Qwen text output budget must remain bounded at 64 tokens');
+assert.ok(src.includes('applyProviderPolicy('),'provider output limits must be applied through the tested policy module');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
-assert.ok(src.includes("finish_reason:choice.finish_reason||null")&&src.includes("completion_tokens:d?.usage?.completion_tokens??null")&&src.includes("content_chars:String(content).length"),'provider success logs must expose safe quality and token metrics');
-assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
+assert.ok(src.includes('finish_reason:parsed.finishReason')&&src.includes('completion_tokens:parsed.completionTokens')&&src.includes('content_chars:String(content).length'),'provider success logs must expose safe quality and token metrics');
+assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800,options.signal||null)"),'cold local Ollama models must be skipped while also honoring client cancellation');
 
 // Vision provider cooldowns must prevent long retry waits after upstream 429 responses.
 const imagePatch=fs.readFileSync('image-generation-fallback.js','utf8');

@@ -104,6 +104,7 @@ jobs:
           self=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{}' https://ai.aliceq.ru/autonomy/self-check)
           echo "$self"
           echo "$self" | grep -q '"ok":true'
+          echo "$self" | grep -q '"coreConnected":true'
           task=$(curl -fsS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"kind":"self-check","goal":"Публичная проверка лабораторного контура"}' https://ai.aliceq.ru/autonomy/task)
           echo "$task"
           echo "$task" | grep -q '"ok":true'

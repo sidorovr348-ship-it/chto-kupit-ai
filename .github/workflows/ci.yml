@@ -22,6 +22,6 @@ jobs:
       - run: node --check src/speech-text.js
       - run: node --check acceptance-100.mjs
       - run: node validate-inline-scripts.cjs
-      - run: node --test
+      - run: npm test
       - run: bash -n scripts/deploy-vps.sh scripts/rollback-vps.sh
       - run: python3 -m py_compile scripts/prepare-vps-key.py

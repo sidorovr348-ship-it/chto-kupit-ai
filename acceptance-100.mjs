@@ -23,7 +23,7 @@ const staticChecks=[
 for(const [a,b] of staticChecks)await check(a,b);
 for(let i=0;i<5;i++)await check('health '+(i+1),async()=>{const x=await req('/health',undefined,'GET');ok(x.ok&&x.service==='my-ai-unified','health')});
 for(let i=0;i<5;i++)await check('autonomy status '+(i+1),async()=>{const x=await req('/autonomy/status',undefined,'GET');ok(x.ok&&x.autonomy,'autonomy')});
-for(let i=0;i<5;i++)await check('autonomy self-check '+(i+1),async()=>{const x=await req('/autonomy/self-check',{},'POST',30000);ok(x.ok,'self-check')});
+for(let i=0;i<5;i++)await check('autonomy self-check '+(i+1),async()=>{const x=await req('/autonomy/self-check',{},'POST',30000);ok(x.ok&&x.coreConnected===true,'self-check core connectivity')});
 for(let i=0;i<5;i++)await check('autonomy chat task '+(i+1),async()=>{const x=await req('/autonomy/task',{kind:'chat',goal:'100-test '+i,input:{prompt:'Кто ты?'}},'POST',30000);ok(x.ok&&x.status==='ACCEPTED','task')});
 
 for(const q of ['Сколько времени в Москве?','Который час в Москве?','Какое сейчас время в Москве?','Сколько сейчас часов в Москве?','Московское время сейчас?','Время в Москве','Скажи время в Москве','Который сейчас час в Москве?'])await check('Moscow time: '+q,async()=>{const x=await req('/chat',{prompt:q});ok(x.ok&&/\d{2}:\d{2}:\d{2}/.test(textOf(x)),'time')});

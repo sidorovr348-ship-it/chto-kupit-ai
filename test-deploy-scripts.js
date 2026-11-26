@@ -54,7 +54,7 @@ test('100-case acceptance checks the current chat timeout implementation',()=>{
  const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
  assert.ok(html.includes("api('/chat',body,48000,requestController.signal)"));
  assert.ok(html.includes('timer=setTimeout(()=>controller.abort(),to)'));
- assert.ok(acceptance.includes("api('/chat',body,48000,requestController.signal)"));
+ assert.ok(acceptance.includes('ok(x.ok&&x.coreConnected===true'),'100-case acceptance must not accept a disconnected autonomy runtime');
  assert.ok(acceptance.includes('timer=setTimeout(()=>controller.abort(),to)'));
  assert.ok(!acceptance.includes('const deadline=Date.now()+to'));
 });
@@ -70,4 +70,28 @@ const productionWorkflow=fs.readFileSync('.github/workflows/production-deploy-v2
 test('workflow-only edits do not trigger another production VPS deployment',()=>{
  assert.ok(productionWorkflow.includes("paths-ignore:"));
  for(const p of ['.github/workflows/authoritative-production-verify.yml','.github/workflows/mobile-e2e.yml','.github/workflows/production-deploy-v2.yml'])assert.ok(productionWorkflow.includes(p));
+});
+
+test('npm test includes the complete discovered test suite',()=>{
+ const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+ assert.equal(pkg.scripts?.test,'node --test',"npm test must run the complete Node test discovery without a hand-picked file list");
+});
+
+test('CI invokes the same npm test entry point used by deployment preflight',()=>{
+ const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');
+ assert.match(ci,/^\s+- run: npm test\s*$/m,'CI must exercise the npm test script used by deployment');
+});
+
+test('production autonomy acceptance requires confirmed core connectivity',()=>{
+ for(const path of ['.github/workflows/production-deploy-v2.yml','.github/workflows/35x-full-acceptance.yml']){
+  const workflow=fs.readFileSync(path,'utf8');
+  assert.ok(workflow.includes("grep -q '\"coreConnected\":true'"),path+' must fail when autonomy tools are disconnected');
+  const indent = path.includes('35x-') ? '            ' : '          ';
+  assert.ok(workflow.split('\n').includes(indent+'echo "$self" | grep -q \'"coreConnected":true\''),path+' must keep the core-connectivity guard inside its shell block');
+ }
+});
+
+test('100-case acceptance verifies autonomy core connectivity',()=>{
+ const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
+ assert.match(acceptance,/ok\(x\.ok&&x\.coreConnected===true,/,'100-case acceptance must not accept a disconnected autonomy runtime');
 });
