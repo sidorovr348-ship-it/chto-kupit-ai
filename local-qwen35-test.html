@@ -153,7 +153,7 @@ testsButton.addEventListener("click", async () => {
   for (let i = 0; i < tests.length; i++) {
     const output = addTest(tests[i][0], "Выполняется…");
     try {
-      const result = await generate([{role:"user", content:tests[i][1]}], text => { output.textContent = text; }, 72);
+      const result = await generate([{role:"user", content:tests[i][1]}], text => { output.textContent = text; }, 160);
       if (result.trim()) passed++;
       output.textContent = result || "Пустой ответ.";
     } catch (error) {
@@ -176,7 +176,7 @@ askButton.addEventListener("click", async () => {
   setBusy(true);
   $("answer").textContent = "Модель отвечает…";
   try {
-    const result = await generate([{role:"user", content:question}], text => {$("answer").textContent = text;}, 128);
+    const result = await generate([{role:"user", content:question}], text => {$("answer").textContent = text;}, 160);
     $("answer").textContent = result || "Модель вернула пустой ответ.";
   } catch (error) {
     $("answer").textContent = "ОШИБКА: " + (error?.message || String(error));
