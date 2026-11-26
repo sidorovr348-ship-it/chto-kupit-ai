@@ -13,7 +13,7 @@ test('chat UI visibly marks degraded fallback responses before rendering their c
   assert.ok(warning > chatStart && warning < imageBranch, 'degraded response warning must be rendered before normal result branches');
   assert.ok(html.includes('Основной AI-канал не ответил вовремя'), 'timeout fallback must be clearly identified to the user');
   assert.ok(html.includes('Ответ подготовлен резервным AI-каналом'), 'provider fallback must be identified as degraded');
-  assert.ok(html.includes('Версия интерфейса: 2026-11-26-superpowers-stability-1'), 'diagnostic version must identify the current audited frontend build');
+  assert.ok(html.includes('Версия интерфейса: 2026-11-26-superpowers-stability-2'), 'diagnostic version must identify the current audited frontend build');
 });
 
 test('timeout fallback does not claim the request was saved or silently retried', () => {
