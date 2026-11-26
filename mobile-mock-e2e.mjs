@@ -247,7 +247,9 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').includes('Автоматический повтор не запускался')),degradedStart,{timeout:30000});
     if(!await page.locator('#chat .msg.ai').filter({hasText:'Основной AI-канал не ответил вовремя'}).count())throw Error('degraded timeout warning was not displayed');
     if(mockChatRequests.filter(x=>/проверь резервный ответ/i.test(x)).length!==1)throw Error('degraded timeout must not auto-retry the same request');
-    await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:30000});
+    await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:30000});
+    const idleWakeStatus=await page.evaluate(()=>({listening:document.querySelector('#wakeStatus')?.dataset.listening||null,message:document.querySelector('#wakeStatus')?.textContent||''}));
+    if(idleWakeStatus.listening==='true')throw Error('wake status must not claim speech is detected before an onspeechstart event: '+JSON.stringify(idleWakeStatus));
 
     const src=await page.content();
     for(const marker of ['interimResults=false','let rec=null','function processQueue()','/chat','navigator.geolocation','EY_WAKE_WORD_V2_STATE_MACHINE']) {
