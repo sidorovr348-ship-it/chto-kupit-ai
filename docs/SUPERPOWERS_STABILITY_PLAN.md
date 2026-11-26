@@ -53,6 +53,12 @@
 
 ## Phase 5 — Laboratory / autonomy contour
 
+- [x] Find and reproduce a false-green self-check: it returned `ok:true` even when `connectedToCore:false` and no core tools were bound.
+- [x] Make self-check healthy only when the bounded runtime passes and at least one core tool is actually connected; return an explicit `AUTONOMY_CORE_TOOLS_NOT_BOUND` reason otherwise.
+- [x] Add regression coverage for the disconnected-core case.
+- [x] Require `coreConnected:true` in production deployment and 35x acceptance workflows; the full-capability E2E already asserts core connectivity.
+- [x] CI: 55 passed, 0 failed (GitHub Actions run 45749263780).
+- [ ] Verify the live production self-check reports `coreConnected:true`; not run because no production deploy is authorized in this workstream.
 - [ ] Map async initialization, status, self-check, task admission, watchdog, and chat isolation.
 - [ ] Verify failed or slow lab initialization does not block normal chat or health.
 - [ ] Verify self-check deadlines and single-flight behavior.
@@ -78,3 +84,4 @@
 - 2026-11-26: isolated branch created from Qwen fix branch; test-first checks exposed the hand-picked test list and CI/deploy command mismatch. Updated `npm test` to full discovery and aligned CI to invoke it. Final CI: 49/49 tests passed.
 - 2026-11-26: added a shared provider-response validator. Provider-declared output truncation now enters the fallback chain rather than being returned as a complete answer; empty successful responses are rejected. CI: 53/53 tests passed. Live provider behavior and real iPhone journey remain unverified.
 - 2026-11-26: corrected recorded-voice routing to `/transcribe` and held wake listening until TTS completion. Regression guards passed in CI (53/53); physical iPhone Safari behavior remains NOT RUN.
+- 2026-11-26: fixed autonomy self-check false-green when no core tools are bound; deployment and 35x acceptance now require `coreConnected:true`. CI: 55/55 tests passed. Live production self-check remains NOT RUN.
