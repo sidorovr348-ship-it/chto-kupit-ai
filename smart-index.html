@@ -381,7 +381,7 @@ function createRecognition(){
   clearTimeout(speechStartTimer);
   speechStartTimer=setTimeout(()=>{if(rec===x&&!heardSpeech&&!paused&&!processing)status('🟡 Safari запустил микрофон, но ещё не обнаружил речь. Скажи «Эй».',false)},9000);
   clearTimeout(silenceTimer);
-  silenceTimer=setTimeout(()=>{if(rec===x&&!heardSpeech&&!paused&&!processing)status('🟡 Пока нет речи. Микрофон остаётся активным.',false)},18000);
+  silenceTimer=setTimeout(()=>{if(rec===x&&!heardSpeech&&!paused&&!processing)status('🟡 Safari пока не передал событие речи. Распознавание не подтверждено.',false)},18000);
  };
  x.onspeechstart=()=>{
   if(rec!==x)return;
