@@ -34,7 +34,7 @@ global.fetch = async (input, init = {}) => {
     throw error;
   }
 
-  if (id <= 4) {
+  if (id <= 4 && process.env.MOCK_FIRST_PROVIDER_TIMEOUT !== '1') {
     await new Promise((resolve, reject) => {
       const signal = init.signal;
       const onAbort = () => {
