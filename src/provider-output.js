@@ -9,7 +9,7 @@ const VISION_TIMEOUT_MS = 15000;
 function applyProviderOutputBudget(body, model, vision = false) {
   if (/^openai\/gpt-oss-/i.test(String(model || ''))) {
     body.reasoning_effort = 'low';
-    body.max_completion_tokens = /(?:^|\\/)gpt-oss-20b$/i.test(model) ? 256 : 512;
+    body.max_completion_tokens = /(?:^|\/)gpt-oss-20b$/i.test(model) ? 256 : 512;
     delete body.max_tokens;
     return body;
   }
