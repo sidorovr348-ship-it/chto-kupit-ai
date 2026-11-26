@@ -33,6 +33,11 @@
 
 ## Phase 3 — Voice and hands-free lifecycle
 
+- [x] Trace recorded-voice flow from MediaRecorder → STT → chat → TTS → wake restart.
+- [x] Route recorded audio to the dedicated `/transcribe` endpoint instead of `/chat`, avoiding the chat route's shorter 18-second global deadline.
+- [x] Keep wake recognition paused until the current TTS promise completes, preventing the microphone from listening to the assistant's own spoken answer.
+- [x] Add regression guards for the STT endpoint and TTS-before-relisten ordering; CI: 53 passed, 0 failed (GitHub Actions run 45748953387).
+- [ ] Verify actual microphone permission, audio playback, and repeated commands on iPhone Safari; simulated Chromium is not a substitute.
 - [ ] Trace microphone permission, MediaRecorder/STT, wake recognition state machine, queue, TTS, and listening restart.
 - [ ] Verify a failed request cannot leave the UI permanently busy or listening state falsely green.
 - [ ] Verify one voice command produces one request; no automatic duplicate retry after disconnect.
@@ -72,3 +77,4 @@
 
 - 2026-11-26: isolated branch created from Qwen fix branch; test-first checks exposed the hand-picked test list and CI/deploy command mismatch. Updated `npm test` to full discovery and aligned CI to invoke it. Final CI: 49/49 tests passed.
 - 2026-11-26: added a shared provider-response validator. Provider-declared output truncation now enters the fallback chain rather than being returned as a complete answer; empty successful responses are rejected. CI: 53/53 tests passed. Live provider behavior and real iPhone journey remain unverified.
+- 2026-11-26: corrected recorded-voice routing to `/transcribe` and held wake listening until TTS completion. Regression guards passed in CI (53/53); physical iPhone Safari behavior remains NOT RUN.
