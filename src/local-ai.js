@@ -1,3 +1,4 @@
+const { createProviderCancellation, createClientCancellationError } = require('./provider-cancellation');
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 // VPS currently has qwen3:0.6b installed. Keep this default aligned with the verified model.
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:0.6b';
@@ -6,16 +7,16 @@ const SYSTEM_PROMPT = `Ты — My AI Unified, единый универсаль
 
 async function callOllama(messages, options = {}) {
   const requestedTimeout = Number(options.timeoutMs || 0); const timeoutMs = requestedTimeout > 0 ? requestedTimeout : OLLAMA_TIMEOUT_MS;
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const cancellation = createProviderCancellation(timeoutMs, options.signal);
   try {
     const safeMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(messages) ? messages : [])];
     const body = { model: options.model || OLLAMA_MODEL, messages: safeMessages, stream: false, think: false, options: { temperature: 0.4, num_predict: Number(options.numPredict || 120) } };
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: cancellation.signal });
     const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!response.ok) throw Object.assign(new Error(`Local AI error (${response.status})`), { status: 502, details: data });
     const result = String(data?.message?.content || data?.response || '').trim(); if (!result) throw Object.assign(new Error('Local AI returned an empty response'), { status: 502, details: data });
     return result;
-  } catch (error) { if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { clearTimeout(timer); }
+  } catch (error) { if (cancellation.source() === 'client' || cancellation.source() === 'deadline') throw createClientCancellationError(); if (error.name === 'AbortError') throw Object.assign(new Error('Локальный AI не успел ответить'), { status: 504 }); throw error; } finally { cancellation.clear(); }
 }
 
 async function callVision(prompt, images, options = {}) {
@@ -25,9 +26,11 @@ async function callVision(prompt, images, options = {}) {
   throw Object.assign(new Error('На VPS установлен текстовый локальный AI без поддержки изображений'), { status: 501 });
 }
 
-async function isModelLoaded(timeoutMs = 800) {
+async function isModelLoaded(timeoutMs = 800, externalSignal = null) {
   try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/ps`, { signal: AbortSignal.timeout(timeoutMs) });
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const signal = externalSignal ? AbortSignal.any([timeoutSignal, externalSignal]) : timeoutSignal;
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/ps`, { signal });
     if (!response.ok) return false;
     const data = await response.json();
     const loaded = Array.isArray(data.models) ? data.models : [];
