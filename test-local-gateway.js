@@ -38,7 +38,7 @@ assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider ch
 assert.ok(src.includes("setTimeout(()=>{requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));resolve(timeoutFallback())},17000)"),'search/shopping dispatch must abort abandoned provider work and return a fallback within 17 seconds');
 assert.ok(src.includes("requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));console.error('CHAT_REQUEST_DEADLINE'")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must abort abandoned work and return a fallback within 18 seconds');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
-assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
+assert.ok(src.includes("if(requestAbortController.signal.reason?.message==='CHAT_CLIENT_DISCONNECTED'||res.headersSent||res.writableEnded)return res;"),'late async completion must not write after client disconnect or a completed response');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
 assert.ok(src.includes("result:fallback.text,provider:fallback.provider,model:fallback.model,warning:fallback.warning"),'whole-route timeout response must use the frontend-compatible result field');
 // Companion mode is opt-in and must be wired from the mobile UI through the chat request.
