@@ -9,7 +9,8 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const APP='http://127.0.0.1:'+server.address().port+'/smart-index.html';
 const API='https://ai.aliceq.ru';
 const mockChatRequests=[];
-let mockTranscribeRequests=0;
+let mockTranscribeRequests=0,mockApiRequests=0;
+
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4nO3PQQ0AIBDAMMC/50MEj4ZkVbDtmVk/OzrgVQNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgPaBXKqA31N0fbGAAAAAElFTkSuQmCC','base64');
 
 (async()=>{
@@ -30,6 +31,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
   const page=await context.newPage();
   await page.route('https://ai.aliceq.ru/**',async route=>{
     const request=route.request(),url=new URL(request.url()),path=url.pathname,method=request.method();
+    mockApiRequests++;
     const cors={'access-control-allow-origin':'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'Content-Type,Authorization,X-Request-Id','cache-control':'no-store'};
     if(method==='OPTIONS')return route.fulfill({status:204,headers:cors});
     const json=value=>route.fulfill({status:200,headers:{...cors,'content-type':'application/json'},body:JSON.stringify(value)});
@@ -80,7 +82,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
   page.on('pageerror',e=>errors.push('pageerror: '+e.message));
   // 5xx may be transient provider retries; UI operations below must still succeed.
   page.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource: the server responded with a status of 5\d\d/i.test(m.text()))errors.push('console: '+m.text())});
-  page.on('requestfailed',r=>{const u=r.url();if(!/ai\.aliceq\.ru\/(photo|chat|tts|voice|transcribe|generate-image)/i.test(u))errors.push('requestfailed: '+u+' '+(r.failure()?.errorText||''))});
+  page.on('requestfailed',r=>errors.push('requestfailed: '+r.url()+' '+(r.failure()?.errorText||'')));
 
   try{
     await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
@@ -229,6 +231,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await tapTool('imagegen');
     await page.waitForTimeout(300);
     if(!dialog) throw Error('image prompt did not open');
+    if(mockApiRequests<8)throw Error('mock API was not used for all expected UI flows; intercepted='+mockApiRequests);
     if(errors.length) throw Error(errors.join('\n'));
     await page.screenshot({path:'mobile-e2e.png',fullPage:true});
     console.log('MOBILE_E2E_OK');
