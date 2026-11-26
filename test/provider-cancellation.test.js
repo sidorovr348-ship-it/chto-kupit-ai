@@ -24,6 +24,15 @@ test('provider timeout is distinguished from a client disconnect', async () => {
   request.clear();
 });
 
+test('server route deadline is classified separately from a client disconnect', () => {
+  const external = new AbortController();
+  external.abort(new Error('CHAT_ROUTE_DEADLINE'));
+  const request = createProviderCancellation(1000, external.signal);
+  assert.equal(request.signal.aborted, true);
+  assert.equal(request.source(), 'deadline');
+  request.clear();
+});
+
 test('an already-aborted client signal aborts immediately', () => {
   const external = new AbortController();
   external.abort();
