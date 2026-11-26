@@ -22,6 +22,10 @@
 
 ## Phase 2 — Chat request lifecycle
 
+- [x] Trace UI send → API wrapper → gateway → provider response parsing for the normal text path.
+- [x] Add unit coverage for provider output truncation (`finish_reason: length`) and empty successful responses.
+- [x] Treat provider-declared truncation as an incomplete result and continue the fallback chain; do not mark the provider unavailable for this condition.
+- [x] Verify source integration and full suite: 53 passed, 0 failed (GitHub Actions run 45748721539).
 - [ ] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
 - [ ] Verify absolute deadlines, abort propagation, disconnect handling, queue slot release, and timeout response semantics.
 - [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
@@ -67,3 +71,4 @@
 ## Change log
 
 - 2026-11-26: isolated branch created from Qwen fix branch; test-first checks exposed the hand-picked test list and CI/deploy command mismatch. Updated `npm test` to full discovery and aligned CI to invoke it. Final CI: 49/49 tests passed.
+- 2026-11-26: added a shared provider-response validator. Provider-declared output truncation now enters the fallback chain rather than being returned as a complete answer; empty successful responses are rejected. CI: 53/53 tests passed. Live provider behavior and real iPhone journey remain unverified.
