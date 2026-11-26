@@ -7,7 +7,7 @@ function createProviderCancellation(timeoutMs, externalSignal = null) {
 
   const abortFromClient = () => {
     if (abortSource !== null) return;
-    abortSource = 'client';
+    abortSource = externalSignal?.reason?.message === 'CHAT_ROUTE_DEADLINE' ? 'deadline' : 'client';
     controller.abort(externalSignal?.reason || new Error('Client disconnected'));
   };
 
