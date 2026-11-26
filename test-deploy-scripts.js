@@ -81,3 +81,10 @@ test('CI invokes the same npm test entry point used by deployment preflight',()=
  const ci=fs.readFileSync('.github/workflows/ci.yml','utf8');
  assert.match(ci,/^\s+- run: npm test\s*$/m,'CI must exercise the npm test script used by deployment');
 });
+
+test('production autonomy acceptance requires confirmed core connectivity',()=>{
+ for(const path of ['.github/workflows/production-deploy-v2.yml','.github/workflows/35x-full-acceptance.yml']){
+  const workflow=fs.readFileSync(path,'utf8');
+  assert.ok(workflow.includes("grep -q '\"coreConnected\":true'"),path+' must fail when autonomy tools are disconnected');
+ }
+});
