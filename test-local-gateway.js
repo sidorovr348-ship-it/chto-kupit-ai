@@ -116,7 +116,7 @@ assert.ok(voiceFinally.includes('await Promise.resolve(window.__ttsPromise)')&&v
 assert.ok(src.includes('applyProviderPolicy('),'provider output limits must be applied through the tested policy module');
 assert.ok(src.includes("if(status===401)cooldown=10*60*1000;"),'invalid provider credentials must be circuit-broken for 10 minutes');
 assert.ok(src.includes('finish_reason:parsed.finishReason')&&src.includes('completion_tokens:parsed.completionTokens')&&src.includes('content_chars:String(content).length'),'provider success logs must expose safe quality and token metrics');
-assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800)"),'cold local Ollama models must be skipped instead of consuming the chat deadline');
+assert.ok(src.includes("async function callOllamaIfReady")&&src.includes("isModelLoaded(800,options.signal||null)"),'cold local Ollama models must be skipped while also honoring client cancellation');
 
 // Vision provider cooldowns must prevent long retry waits after upstream 429 responses.
 const imagePatch=fs.readFileSync('image-generation-fallback.js','utf8');
