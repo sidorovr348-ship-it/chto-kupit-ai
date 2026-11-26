@@ -5,6 +5,21 @@ let providerCall = 0;
 
 global.fetch = async (input, init = {}) => {
   const url = typeof input === 'string' ? input : input?.url || '';
+  if (String(url).startsWith('https://api.groq.com/openai/v1/audio/transcriptions')) {
+    process.stdout.write('MOCK_STT_STARTED\\n');
+    await new Promise((resolve, reject) => {
+      const signal = init.signal;
+      const onAbort = () => {
+        signal?.removeEventListener('abort', onAbort);
+        process.stdout.write('MOCK_STT_ABORTED\\n');
+        const error = new Error('mock STT request aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
   if (!String(url).startsWith('https://api.groq.com/openai/v1/chat/completions')) {
     return originalFetch(input, init);
   }
