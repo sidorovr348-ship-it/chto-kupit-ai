@@ -35,4 +35,7 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /app\.post\('\/search',async\(req,res\)=>\{const controller=new AbortController\(\)/, 'standalone search route must cancel its provider request on disconnect');
   assert.match(source, /app\.post\('\/document',async\(req,res\)=>\{const controller=new AbortController\(\)/, 'document route must own a cancellation controller');
   assert.match(source, /\],false,controller\.signal\)/, 'document AI analysis must receive the client cancellation signal');
+  assert.match(source, /const clientController=new AbortController\(\)/, 'photo route must track each client connection');
+  assert.match(source, /subscription\.subscribers\.size===0&&!subscription\.settled/, 'shared photo inference must abort only after its final subscriber disconnects');
+  assert.match(source, /\],true,controller\.signal\)/, 'shared photo inference must forward its ref-counted cancellation signal');
 });
