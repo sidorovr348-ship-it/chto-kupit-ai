@@ -183,8 +183,10 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await fc.setFiles({name:'mobile.png',mimeType:'image/png',buffer:png});
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:120000});
 
+    await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:30000});
     await tapTool('voice');
     await page.waitForFunction(()=>window.__manualVoiceActive?.()===true,null,{timeout:15000});
+    await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
     await page.evaluate(()=>window.__fakeSpeak('Кто такой Пётр Первый?'));
     await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].some(x=>/П[её]тр Первый/i.test(x.textContent||'')),null,{timeout:30000});
     if(mockTranscribeRequests!==0)throw Error('iOS manual dictation must use the active SpeechRecognition session, not a second getUserMedia capture; /transcribe calls='+mockTranscribeRequests);
