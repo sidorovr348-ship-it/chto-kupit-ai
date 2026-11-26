@@ -89,8 +89,8 @@
 
 - [ ] Run full unit/integration suite, syntax checks, browser E2E, and live read-only API probes.
 - [ ] Review exact diff independently against this design and plan.
-- [x] Verify the Vercel preview for commit c129b9515422ba824328e7d61cfb3aed0675792d; static HTML fetched. This preview is stale relative to the current branch HEAD and points at the production API, so it is not used for interactive acceptance. No API requests were sent from preview.
-- [ ] Create a preview for the exact current branch commit after the Vercel deployment API quota resets; current API creation is blocked with 402 `api-deployments-free-per-day` and a 24-hour retry window.
+- [x] Verify the READY Vercel preview for app-source commit 457d80f1591c500f9a955405bdd409ea25972a63. Comparing it with branch HEAD `a8de6313dd6d14612b4a9cd28ca54e4afef1cfcc` shows only documentation and mock test-fixture changes after that deployment; application source is identical. Preview URL: https://chto-kupit-e5pg7apmr-sidorovr348-ship-it.vercel.app.
+- [ ] Deploy the exact latest SHA when the Vercel deployment API quota resets; creation is currently blocked with 402 `api-deployments-free-per-day` and a 24-hour retry window. The existing preview uses `API='https://ai.aliceq.ru'` (production API), so no interactive API requests were sent from preview.
 - [ ] Prepare a user-operated iPhone Safari acceptance checklist.
 - [ ] Report PASS / FAIL / BLOCKED / NOT RUN, residual risks, and exact rollback point.
 - [ ] Stop before production merge/deploy pending an explicit release decision.
@@ -119,3 +119,5 @@
 
 - 2026-11-26: made /photo shared vision inference subscriber-aware. Identical photo requests share one provider call; a disconnected client no longer cancels inference needed by another subscriber, while the final disconnect aborts the provider fetch. Integration test covers both subscriber registration and final-client cancellation.
 - 2026-11-26: checkpoint commit e6530b1a37a2dde31d7fa323ce41d818b19af132: GitHub CI **82/82 passed**, Autonomy bridge verification SUCCESS, mocked mobile UI E2E **MOBILE_E2E_OK**. Real iPhone Safari and live provider acceptance remain NOT RUN.
+
+- 2026-11-26: Vercel auto-generated a READY preview for commit 457d80f. A Git diff against current HEAD confirms only docs and mock-provider test fixture changed afterward; application source matches current branch. The preview API base points to production, so it is suitable for UI inspection only; no interactive API requests were made. Manual exact-SHA deployment is blocked by the Vercel daily deployment API quota.
