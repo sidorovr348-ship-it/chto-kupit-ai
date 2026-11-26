@@ -87,6 +87,6 @@ test('production autonomy acceptance requires confirmed core connectivity',()=>{
   const workflow=fs.readFileSync(path,'utf8');
   assert.ok(workflow.includes("grep -q '\"coreConnected\":true'"),path+' must fail when autonomy tools are disconnected');
   const indent = path.includes('35x-') ? '            ' : '          ';
-  assert.ok(workflow.split('\\n').includes(indent+'echo "$self" | grep -q \'"coreConnected":true\''),path+' must keep the core-connectivity guard inside its shell block');
+  assert.ok(workflow.split('\n').includes(indent+'echo "$self" | grep -q \'"coreConnected":true\''),path+' must keep the core-connectivity guard inside its shell block');
  }
 });
