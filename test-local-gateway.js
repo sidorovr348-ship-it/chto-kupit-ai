@@ -33,10 +33,10 @@ assert.ok(src.includes("const {extractChatCompletion}=require('./src/provider-re
 assert.ok(src.includes("if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000);"),'a token-limit truncation must trigger fallback without misclassifying a healthy provider as unavailable');
 assert.ok(src.includes("const MAX_TEXT_CONCURRENCY=4;"),'chat concurrency must support overlapping verification requests');
 assert.ok(src.includes("Math.min(2500,Math.max(0,deadline-Date.now()))"),'chat queue wait must be bounded to 2.5 seconds');
-assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline);"),'provider chain must use the caller absolute deadline');
+assert.ok(src.includes("const task=askInternalCore(messages,false,hardDeadline,externalSignal);"),'provider chain must use the caller absolute deadline and client cancellation signal');
 assert.ok(src.includes('const hardDeadline=Date.now()+18000;'),'text provider chain must respect the 18-second absolute deadline');
-assert.ok(src.includes('setTimeout(()=>resolve(timeoutFallback()),17000)'),'search/shopping dispatch must return a fallback within 17 seconds so voice follow-ups are not blocked by slow secondary actions');
-assert.ok(src.includes("ms:18000}));const fallback=timeoutFallback();")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must return a fallback within 18 seconds, including preprocessing and dispatch');
+assert.ok(src.includes("setTimeout(()=>{requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));resolve(timeoutFallback())},17000)"),'search/shopping dispatch must abort abandoned provider work and return a fallback within 17 seconds');
+assert.ok(src.includes("requestAbortController.abort(new Error('CHAT_ROUTE_DEADLINE'));console.error('CHAT_REQUEST_DEADLINE'")&&src.includes("}},18000);res.once('finish'"),'whole /chat route must abort abandoned work and return a fallback within 18 seconds');
 assert.ok(src.includes("chatDeadlineTimer=setTimeout(()=>{if(!res.headersSent&&!res.writableEnded)"),'whole /chat route must have a deadline, including preprocessing and transcription');
 assert.ok(src.includes("if(res.headersSent||res.writableEnded)return res;"),'late async completion must not attempt a second response after the request deadline');
 assert.ok(src.includes("'CHAT_REQUEST_DEADLINE'"),'whole-route deadline must be logged for diagnosis');
