@@ -27,7 +27,7 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     deviceScaleFactor:3,
     isMobile:true,
     hasTouch:true,
-    userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/18.7 Mobile/15E148 Safari/604.1'
+    userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 Version/27.2 Mobile/15E148 Safari/604.1'
   });
   const page=await context.newPage();
   await page.route('https://ai.aliceq.ru/**',async route=>{
@@ -61,24 +61,48 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
   // wake controller and repeated handoffs without pretending Chromium has real iOS speech.
   await page.addInitScript(() => {
     const instances=[];
+    let primeArmed=false, permanentlyDeaf=false, primeCalls=0, synthSpeaking=false;
+    class FakeUtterance {
+      constructor(text){this.text=String(text||'');this.lang='';this.rate=1;this.pitch=1;this.volume=1;this.onend=null;this.onerror=null}
+    }
+    Object.defineProperty(window,'SpeechSynthesisUtterance',{configurable:true,value:FakeUtterance});
+    Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{
+      get speaking(){return synthSpeaking},
+      get pending(){return false},
+      getVoices(){return[]},
+      cancel(){synthSpeaking=false},
+      speak(utterance){
+        primeCalls++;primeArmed=true;synthSpeaking=true;
+        setTimeout(()=>{synthSpeaking=false;utterance.onend?.({type:'end'})},15);
+      }
+    }});
     class FakeRecognition {
-      constructor(){this.started=false;this.lang='';this.continuous=false;this.interimResults=false;this.maxAlternatives=1;instances.push(this)}
-      start(){if(this.started)throw new Error('recognizer already started');this.started=true;setTimeout(()=>this.onstart?.(),0)}
-      stop(){this.started=false;setTimeout(()=>this.onend?.(),0)}
-      abort(){this.started=false;setTimeout(()=>this.onend?.(),0)}
+      constructor(){this.started=false;this.lang='';this.continuous=false;this.interimResults=false;this.maxAlternatives=1;this.deaf=false;this.stopCalls=0;this.abortCalls=0;instances.push(this)}
+      start(){
+        if(this.started)throw new Error('recognizer already started');
+        this.deaf=permanentlyDeaf||(instances.length>1&&!primeArmed);
+        primeArmed=false;this.started=true;
+        setTimeout(()=>this.onstart?.(),0);
+      }
+      stop(){this.stopCalls++;permanentlyDeaf=true;this.started=false;setTimeout(()=>this.onend?.(),0)}
+      abort(){this.abortCalls++;permanentlyDeaf=true;this.started=false;setTimeout(()=>this.onend?.(),0)}
     }
     Object.defineProperty(window,'SpeechRecognition',{configurable:true,value:FakeRecognition});
     Object.defineProperty(window,'webkitSpeechRecognition',{configurable:true,value:FakeRecognition});
     window.__fakeRecognitionInstances=instances;
+    window.__fakeRecognitionState=()=>({primeCalls,permanentlyDeaf,stopCalls:instances.reduce((n,x)=>n+x.stopCalls,0),abortCalls:instances.reduce((n,x)=>n+x.abortCalls,0)});
     window.__fakeSpeak=(text)=>{
       const x=[...instances].reverse().find(v=>v.started);
       if(!x)throw new Error('no active simulated recognizer');
+      if(x.deaf)return {deaf:true};
+      x.onspeechstart?.({type:'speechstart'});
       const result={isFinal:true,0:{transcript:String(text)}};
       x.onresult?.({resultIndex:0,results:[result]});
       x.started=false;
       setTimeout(()=>x.onend?.(),0);
+      return {deaf:false};
     };
-  });
+  });;
   const errors=[];
   page.on('pageerror',e=>errors.push('pageerror: '+e.message));
   // 5xx may be transient provider retries; UI operations below must still succeed.
@@ -159,22 +183,20 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
     await fc.setFiles({name:'mobile.png',mimeType:'image/png',buffer:png});
     await page.waitForFunction(n=>[...document.querySelectorAll('#chat .m.a,#chat .msg.ai')].slice(n).some(x=>(x.textContent||'').trim()&&!x.textContent.includes('⏳')),n,{timeout:120000});
 
-    const voice=page.locator('#voice');
     await tapTool('voice');
-    await page.waitForFunction(()=>document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
-    await tapTool('voice');
-    await page.waitForFunction(()=>!document.querySelector('#voice')?.classList.contains('recording'),null,{timeout:15000});
+    await page.waitForFunction(()=>window.__manualVoiceActive?.()===true,null,{timeout:15000});
+    await page.evaluate(()=>window.__fakeSpeak('Кто такой Пётр Первый?'));
     await page.waitForFunction(()=>[...document.querySelectorAll('#chat .msg.user')].some(x=>/П[её]тр Первый/i.test(x.textContent||'')),null,{timeout:30000});
-    if(mockTranscribeRequests!==1)throw Error('recorded voice must use exactly one mocked /transcribe request; got '+mockTranscribeRequests);
+    if(mockTranscribeRequests!==0)throw Error('iOS manual dictation must use the active SpeechRecognition session, not a second getUserMedia capture; /transcribe calls='+mockTranscribeRequests);
     await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:30000});
+    await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
 
     // A standalone wake word ends the current non-continuous recognizer. Do not claim
     // that the microphone is listening until a new recognizer actually starts.
-    await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+    await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+    const wakeInstanceCount=await page.evaluate(()=>window.__fakeRecognitionInstances.length);
     await page.evaluate(()=>window.__fakeSpeak('Эй'));
-    const wakeOnlyState=await page.evaluate(()=>({listening:document.querySelector('#wakeStatus')?.dataset.listening||null,message:document.querySelector('#wakeStatus')?.textContent||'',active:window.__fakeRecognitionInstances?.some(x=>x.started)||false}));
-    if(wakeOnlyState.listening==='true') throw Error('wake-only result falsely reports active listening before recognizer restart: '+JSON.stringify(wakeOnlyState));
-    await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:20000});
+    await page.waitForFunction(n=>window.__fakeRecognitionInstances?.length>n&&window.__fakeRecognitionInstances.some(x=>x.started),wakeInstanceCount,{timeout:20000});
 
     // Critical regression test: three consecutive wake questions, with the listener
     // required to return to a real started state after every answer.
@@ -205,12 +227,15 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
       const actualReply=await page.locator('#chat .msg.ai').evaluateAll((els,n)=>els.slice(n).map(x=>(x.textContent||'').trim()).filter(Boolean).at(-1)||'',nAi);
       if(!new RegExp(item.answer.source,item.answer.flags).test(actualReply)) throw Error('wake question '+(i+1)+' answer mismatch; expected /'+item.answer.source+'/; actual='+actualReply.slice(0,800));
       await page.waitForFunction(()=>window.__myAiBusy?.()===false,null,{timeout:45000});
-      await page.waitForFunction(()=>document.querySelector('#wakeStatus')?.dataset.listening==='true'&&window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
+      await page.waitForFunction(()=>window.__fakeRecognitionInstances?.some(x=>x.started),null,{timeout:50000});
     }
 
     const serverPrompts=mockChatRequests.slice();
     if(serverPrompts.filter(x=>/п[её]тр.*перв/i.test(x)).length!==1)throw Error('one wake question must produce exactly one Peter-I chat request: '+JSON.stringify(serverPrompts));
     if(serverPrompts.filter(x=>/фотосинтез/i.test(x)).length!==1)throw Error('one wake question must produce exactly one photosynthesis chat request: '+JSON.stringify(serverPrompts));
+    const speechState=await page.evaluate(()=>window.__fakeRecognitionState());
+    if(speechState.stopCalls||speechState.abortCalls||speechState.permanentlyDeaf)throw Error('iOS recognizer must end naturally; stop/abort permanently poisons later sessions: '+JSON.stringify(speechState));
+    if(speechState.primeCalls<5)throw Error('each iOS recognition session must be primed with speechSynthesis before start: '+JSON.stringify(speechState));
 
     // A degraded response must be labelled, must not trigger a duplicate retry,
     // and must not prevent the next hands-free command from running.
