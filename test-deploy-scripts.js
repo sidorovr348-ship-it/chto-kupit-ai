@@ -93,5 +93,5 @@ test('production autonomy acceptance requires confirmed core connectivity',()=>{
 
 test('100-case acceptance verifies autonomy core connectivity',()=>{
  const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
- assert.ok(acceptance.includes("ok(x.ok&&x.coreConnected===true,'self-check')"),'100-case acceptance must not accept a disconnected autonomy runtime');
+ assert.match(acceptance,/ok\(x\.ok&&x\.coreConnected===true,/,'100-case acceptance must not accept a disconnected autonomy runtime');
 });
