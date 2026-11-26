@@ -9,16 +9,16 @@
 - [x] Record production/main SHA and isolated starting branch.
 - [x] Preserve the existing Qwen working branch.
 - [x] Confirm no production mutation is required for this audit.
-- [ ] Capture exact current CI and preview status for the audit branch.
-- [ ] Inventory all test files and map them to CI, deploy preflight, and acceptance workflows.
+- [x] Capture exact current CI status; preview status tracked separately by exact commit.
+- [x] Inventory test files: CI and deploy preflight now share full Node test discovery; live acceptance workflows remain separate.
 
 ## Phase 1 — Make deployment preflight run the complete test suite
 
 - [x] Add a regression assertion that `npm test` must use Node's full test discovery.
-- [ ] Observe the regression test fail against the current package script.
-- [ ] Change `package.json` test script to `node --test`.
-- [ ] Run the complete test suite and verify the discovered test inventory.
-- [ ] Confirm deploy preflight now executes the same test discovery as CI.
+- [x] Observe the exact regression assertion fail against the hand-picked npm test script (GitHub Actions run 45748351451).
+- [x] Change `package.json` test script to `node --test`.
+- [x] Run complete suite through `npm test`: 49 passed, 0 failed (GitHub Actions run 45748448495).
+- [x] Confirm CI and deploy preflight both invoke `npm test`; a regression test enforces this.
 
 ## Phase 2 — Chat request lifecycle
 
@@ -66,4 +66,4 @@
 
 ## Change log
 
-- 2026-11-26: isolated branch created from Qwen fix branch; first regression assertion added for full test discovery.
+- 2026-11-26: isolated branch created from Qwen fix branch; test-first checks exposed the hand-picked test list and CI/deploy command mismatch. Updated `npm test` to full discovery and aligned CI to invoke it. Final CI: 49/49 tests passed.
