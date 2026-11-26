@@ -86,6 +86,14 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYElEQVR4n
 
   try{
     await page.goto(APP+'?e2e='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
+    await page.locator('#toolsToggle').tap();
+    const sound=page.locator('#sound');
+    if(await sound.count()){
+      const label=String(await sound.textContent()||'');
+      if(label.includes('🔊'))await sound.click();
+      await page.waitForFunction(()=>String(document.querySelector('#sound')?.textContent||'').includes('🔇'),null,{timeout:5000});
+    }
+    await page.locator('body').click({position:{x:196,y:400}});
     if(await page.title()!=='Эй') throw Error('wrong title');
     for(const id of ['send','voice','photo','camera','file','video','imagegen','sound','stop','clear']){
       if(await page.locator('#'+id).count()!==1) throw Error('missing control: '+id);
