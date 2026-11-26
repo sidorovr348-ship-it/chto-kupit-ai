@@ -90,3 +90,8 @@ test('production autonomy acceptance requires confirmed core connectivity',()=>{
   assert.ok(workflow.split('\n').includes(indent+'echo "$self" | grep -q \'"coreConnected":true\''),path+' must keep the core-connectivity guard inside its shell block');
  }
 });
+
+test('100-case acceptance verifies autonomy core connectivity',()=>{
+ const acceptance=fs.readFileSync('acceptance-100.mjs','utf8');
+ assert.ok(acceptance.includes("ok(x.ok&&x.coreConnected===true,'self-check')"),'100-case acceptance must not accept a disconnected autonomy runtime');
+});
