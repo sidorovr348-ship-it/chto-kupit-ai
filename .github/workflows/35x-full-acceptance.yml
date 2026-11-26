@@ -38,6 +38,7 @@ jobs:
             self=$(curl -fsS --max-time 45 -X POST -H 'Content-Type: application/json' -d '{}' https://ai.aliceq.ru/autonomy/self-check)
             echo "$self"
             echo "$self" | grep -q '"ok":true'
+          echo "$self" | grep -q '"coreConnected":true'
             run_id="acceptance-35x-$i-$(date +%s)"
             task=$(curl -fsS --max-time 45 -X POST -H 'Content-Type: application/json' -d "{\"runId\":\"$run_id\",\"taskId\":\"acceptance-cycle-$i\",\"kind\":\"self-check\",\"goal\":\"Полный приёмочный цикл лабораторного контура $i из 35\"}" https://ai.aliceq.ru/autonomy/task)
             echo "$task"
