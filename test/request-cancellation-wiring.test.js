@@ -15,4 +15,5 @@ test('chat client disconnect is propagated through dispatch, slot admission, and
   assert.match(source, /acquireTextSlot\(hardDeadline,externalSignal\)/, 'queued requests must be removable when the client disconnects');
   assert.match(source, /createProviderCancellation\(timeout,externalSignal\)/, 'provider fetch must combine client cancellation with its own timeout');
   assert.match(source, /cancellation\.source\(\)==='client'/, 'client cancellation must be distinguished from provider timeout');
+  assert.ok(source.includes("catch(e){if(externalSignal?.aborted)throw createClientCancellationError();if(!vision&&e?.code!=='AI_PROVIDER_OUTPUT_TRUNCATED')textModelBlockedUntil.set(model,Date.now()+30000)"), 'client cancellation must not trip the provider model circuit breaker');
 });
