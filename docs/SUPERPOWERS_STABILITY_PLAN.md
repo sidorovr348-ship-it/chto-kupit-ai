@@ -34,6 +34,7 @@
 - [x] Trace UI send → API wrapper → gateway route → provider chain → response renderer.
 - [x] Surface degraded/fallback warnings before rendering chat content; timeout fallback now explicitly says no automatic retry was launched and no request was saved.
 - [ ] Verify absolute deadlines, abort propagation, disconnect handling, and queue slot release; source review shows client disconnect is logged but not yet propagated into provider fetch cancellation.
+- [x] Add mocked mobile UI E2E: fake microphone/recognition, `/transcribe`, valid silent TTS audio, five consecutive wake commands, degraded timeout warning, and exactly-one-request/no-auto-retry assertion. GitHub Actions run 45750863159: `MOBILE_E2E_OK`.
 - [ ] Add regression tests for second/third sequential requests, overlapping requests, abort, and provider timeout.
 - [ ] Fix only reproduced defects; preserve existing request/response contracts unless explicitly tested.
 
@@ -44,10 +45,10 @@
 - [x] Keep wake recognition paused until the current TTS promise completes, preventing the microphone from listening to the assistant's own spoken answer.
 - [x] Add regression guards for the STT endpoint and TTS-before-relisten ordering; CI: 53 passed, 0 failed (GitHub Actions run 45748953387).
 - [ ] Verify actual microphone permission, audio playback, and repeated commands on iPhone Safari; simulated Chromium is not a substitute.
-- [ ] Trace microphone permission, MediaRecorder/STT, wake recognition state machine, queue, TTS, and listening restart.
+- [x] Trace source-level microphone permission, MediaRecorder/STT, wake recognition state machine, queue, TTS, and listening restart; browser-emulated mobile E2E passed, physical iPhone remains separate.
 - [ ] Verify a failed request cannot leave the UI permanently busy or listening state falsely green.
 - [ ] Verify one voice command produces one request; no automatic duplicate retry after disconnect.
-- [ ] Add repeat-command and failure-recovery regression coverage.
+- [x] Add repeat-command and failure-recovery regression coverage in mocked mobile E2E: five consecutive wake commands, timeout fallback, no duplicate request, TTS completion, and wake restart.
 - [ ] Keep physical iPhone Safari permission/audio/wake tests separate from simulated Playwright checks.
 
 ## Phase 4 — Provider and fallback chain
@@ -81,7 +82,7 @@
 
 - [ ] Run full unit/integration suite, syntax checks, browser E2E, and live read-only API probes.
 - [ ] Review exact diff independently against this design and plan.
-- [x] Verify Vercel preview is built from the reviewed branch commit; HTML returns HTTP 200. Preview is not a safe end-to-end target because its API base points at production.
+- [x] Verify Vercel preview for commit `cbf0b43bfa5ccc716a7fde7701bbe8cf624d2d0a`; static HTML fetched and diagnostic version marker matches. Preview is not a safe end-to-end target because its API base points at production.
 - [ ] Prepare a user-operated iPhone Safari acceptance checklist.
 - [ ] Report PASS / FAIL / BLOCKED / NOT RUN, residual risks, and exact rollback point.
 - [ ] Stop before production merge/deploy pending an explicit release decision.
@@ -96,3 +97,5 @@
 - 2026-11-26: added tested provider policy: Qwen text 2048 tokens / 7 seconds, Qwen vision 1024 tokens / 15 seconds; corrected GPT-OSS 120B classification. RED was observed before adding the policy module. Full CI: 60/60 tests passed. Production and VPS remain untouched.
 
 - 2026-11-26: traced the full text UI/API/provider/renderer path. Added visible degraded-mode warnings and corrected timeout copy so it no longer claims a request was saved; regression tests observed RED before the UI change. Diagnostic frontend version now identifies this audited build. CI: 62/62 tests passed on commit `603df3958799f65443bea5a382c968c7ac7fa21e`. Vercel preview HTML uses the production API base; no preview API requests were made. Client-disconnect cancellation remains an open item.
+
+- 2026-11-26: isolated mocked mobile UI E2E passed (`MOBILE_E2E_OK`, run 45750863159). It exercises microphone recording/transcription, Web Audio decode/finish using silent mock audio, five sequential wake commands, timeout warning, no automatic duplicate request, and wake resumption. All API calls are intercepted in Playwright; no production API requests are sent. CI on the same commit: 62/62 tests passed. Real iPhone Safari remains NOT RUN.
