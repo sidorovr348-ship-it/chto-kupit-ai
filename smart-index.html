@@ -73,7 +73,7 @@ window.__primeTtsAudio=()=>{try{const AC=window.AudioContext||window.webkitAudio
 function interruptSpeech(){speechGeneration++;try{ttsController?.abort()}catch{};try{ttsSource?.stop(0)}catch{};ttsSource=null;try{audio.pause();audio.currentTime=0}catch{};try{speechSynthesis?.cancel?.()}catch{};window.__ttsPromise=Promise.resolve()}
 function stop(){interruptSpeech();if(recorder){try{recorder.stop()}catch{}return}}async function runSelfDiagnostic(){
  const card=add('🔎 Самодиагностика Эй: проверяю компоненты параллельно…');
- const lines=['Версия интерфейса: 2026-11-08-voice-reliability-1'];
+ const lines=['Версия интерфейса: 2026-11-26-superpowers-stability-1'];
  async function probe(label,path,method='GET',timeoutMs=5000){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
