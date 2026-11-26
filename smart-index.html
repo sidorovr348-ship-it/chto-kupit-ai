@@ -248,7 +248,7 @@ window.send=send;window.__myAiBusy=()=>busy;window.__cancelActiveChat=()=>{try{a
         input.value=text;
         await send();
       }catch(e){add('🔴 Голос: '+e.message)}
-      finally{window.__resumeWake?.()}
+      finally{await Promise.resolve(window.__ttsPromise).catch(()=>{});window.__resumeWake?.()}
     };
     recorder.onstop=finish;
     recorder.start();
